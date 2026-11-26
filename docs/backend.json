@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Staff and client identity records.",
+      "type": "object",
+      "properties": {
+        "displayName": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["ADMIN", "MANAGER", "SUPERVISOR", "CASHIER", "STOREKEEPER", "ATTENDANT", "KITCHEN", "CLIENT"] },
+        "assignedUnits": { 
+          "type": "array", 
+          "items": { "type": "string", "enum": ["LOUNGE", "STORE", "CARWASH"] } 
+        },
+        "createdAt": { "type": "number" },
+        "pin": { "type": "string", "description": "4-digit numeric station access code" },
+        "loyaltyPoints": { "type": "number" },
+        "totalSpent": { "type": "number" }
+      }
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Stock items and detailing services.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "stockLevel": { "type": "number" },
+        "minStock": { "type": "number" },
+        "unit": { "type": "string", "enum": ["LOUNGE", "STORE", "CARWASH"] }
+      }
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Unified POS Transaction record linked to inventory.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "enum": ["LOUNGE", "STORE", "CARWASH"] },
+        "status": { "type": "string", "enum": ["PENDING", "PAID", "VOIDED", "REFUNDED", "CANCELLED"] },
+        "total": { "type": "number" },
+        "tax": { "type": "number", "description": "Calculated VAT portion" },
+        "paymentMethod": { "type": "string" },
+        "cashierId": { "type": "string" },
+        "timestamp": { "type": "number" },
+        "items": { "type": "array" }
+      }
+    },
+    "CarwashJob": {
+      "title": "CarwashJob",
+      "description": "Service record in the detailing queue.",
+      "type": "object",
+      "properties": {
+        "plateNumber": { "type": "string" },
+        "service": { "type": "string" },
+        "status": { "type": "string", "enum": ["QUEUED", "IN_PROGRESS", "COMPLETED", "CANCELLED"] },
+        "attendantId": { "type": "string" },
+        "price": { "type": "number" },
+        "timestamp": { "type": "number" }
+      }
+    },
+    "Review": {
+      "title": "Review",
+      "description": "Customer feedback and ratings for services.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "rating": { "type": "number" },
+        "comment": { "type": "string" },
+        "timestamp": { "type": "number" }
+      }
+    }
+  },
+  "firestore": {
+    "/users/{userId}": { "schema": "UserProfile" },
+    "/inventory/{productId}": { "schema": "Product" },
+    "/orders/{orderId}": { "schema": "Order" },
+    "/carwash_jobs/{jobId}": { "schema": "CarwashJob" },
+    "/audit_logs/{logId}": { "schema": "AuditLog" },
+    "/pos_terminals/{terminalId}": { "schema": "POSTerminal" },
+    "/register_sessions/{sessionId}": { "schema": "RegisterSession" },
+    "/reviews/{reviewId}": { "schema": "Review" }
+  }
+}

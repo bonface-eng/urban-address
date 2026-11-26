@@ -1,0 +1,63 @@
+
+{
+  "hero": {
+    "url": "/assets/hero.jpeg",
+    "width": 1920,
+    "height": 1080,
+    "hint": "luxury automotive"
+  },
+  "hero1": {
+    "url": "/assets/hero1.jpeg",
+    "width": 1920,
+    "height": 1080,
+    "hint": "automotive excellence"
+  },
+  "hero2": {
+    "url": "/assets/hero2.jpeg",
+    "width": 1920,
+    "height": 1080,
+    "hint": "premium detailing"
+  },
+  "hero3": {
+    "url": "/assets/hero3.png",
+    "width": 1920,
+    "height": 1080,
+    "hint": "luxury detailing"
+  },
+  "hero4": {
+    "url": "/assets/hero4.png",
+    "width": 1920,
+    "height": 1080,
+    "hint": "premium automotive"
+  },
+  "lounge": {
+    "url": "/assets/lounge.jpg",
+    "width": 800,
+    "height": 600,
+    "hint": "luxury lounge bar interior"
+  },
+  "store": {
+    "url": "/assets/auto.png",
+    "width": 800,
+    "height": 600,
+    "hint": "modern car accessories shop"
+  },
+  "carwash": {
+    "url": "/assets/hero.jpeg",
+    "width": 1920,
+    "height": 1080,
+    "hint": "modern professional car wash"
+  },
+  "security": {
+    "url": "/assets/security.png",
+    "width": 800,
+    "height": 600,
+    "hint": "cyber security data room"
+  },
+  "auth": {
+    "url": "/assets/hero.jpeg",
+    "width": 1920,
+    "height": 1080,
+    "hint": "luxury automotive flagship"
+  }
+}

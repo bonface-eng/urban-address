@@ -1,0 +1,88 @@
+/**
+ * URBAN EXPRESS | Master Vehicle Registry & Metadata
+ * A comprehensive list of makes and models common in the Kenyan market,
+ * plus vector brand logo mappings for crisp rendering across the POS.
+ */
+
+export const VEHICLE_MAKES = [
+  "TOYOTA", "NISSAN", "HONDA", "MAZDA", "SUBARU", "MITSUBISHI", "ISUZU", 
+  "MERCEDES-BENZ", "BMW", "AUDI", "VOLKSWAGEN", "LAND ROVER", "FORD", 
+  "HYUNDAI", "KIA", "SUZUKI", "PEUGEOT", "VOLVO", "RENAULT", "LEXUS", 
+  "JEEP", "CHEVROLET", "PORSCHE", "JAGUAR", "HAVAL", "MAHINDRA", "TATA", 
+  "SCANIA", "MAN", "HINO", "FUSO", "HOWO", "FAW", "BAJAJ", "TVS", "OTHER"
+];
+
+// High-definition brand logos via reliable open-source CDN (verified 200 OK)
+export const MAKE_LOGOS: Record<string, string> = {
+  "TOYOTA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/toyota.png",
+  "NISSAN": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/nissan.png",
+  "HONDA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/honda.png",
+  "MAZDA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mazda.png",
+  "SUBARU": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/subaru.png",
+  "MITSUBISHI": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mitsubishi.png",
+  "ISUZU": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/isuzu.png",
+  "MERCEDES-BENZ": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mercedes-benz.png",
+  "BMW": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/bmw.png",
+  "AUDI": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/audi.png",
+  "VOLKSWAGEN": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/volkswagen.png",
+  "LAND ROVER": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/land-rover.png",
+  "FORD": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/ford.png",
+  "HYUNDAI": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/hyundai.png",
+  "KIA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/kia.png",
+  "SUZUKI": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/suzuki.png",
+  "PEUGEOT": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/peugeot.png",
+  "VOLVO": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/volvo.png",
+  "RENAULT": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/renault.png",
+  "LEXUS": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/lexus.png",
+  "JEEP": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/jeep.png",
+  "CHEVROLET": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/chevrolet.png",
+  "PORSCHE": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/porsche.png",
+  "JAGUAR": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/jaguar.png",
+  "HAVAL": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/haval.png",
+  "MAHINDRA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/mahindra.png",
+  "TATA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/tata.png",
+  "SCANIA": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/scania.png",
+  "MAN": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/man.png",
+  "HINO": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/hino.png",
+  "HOWO": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/sinotruk.png",
+  "FAW": "https://raw.githubusercontent.com/filippofilip95/car-logos-dataset/master/logos/optimized/faw.png",
+};
+
+export const VEHICLE_MODELS: Record<string, string[]> = {
+  "TOYOTA": ["PRADO", "LAND CRUISER", "COROLLA", "VITZ", "FIELDER", "HARRIER", "RAV4", "AXIO", "NOAH", "PREMIO", "ALLION", "WISH", "MARK X", "PASSO", "RUSH", "HILUX", "PROBOX", "SUCCEED", "HIACE", "FORTUNER", "CAMRY", "AURIS", "AVENSIS", "BELTA", "ESTIMA", "IST", "ISIS", "PROGRES", "RAUM", "SIENTA", "VANGUARD", "VOXY", "YARIS"],
+  "NISSAN": ["X-TRAIL", "NOTE", "TIIDA", "JUKE", "SERENA", "TEANA", "SYLPHY", "MURANO", "NAVARA", "PATROL", "CARAVAN", "NV200", "WINGROAD", "DUALIS", "AD VAN", "BLUEBIRD", "ELGRAND", "LAFESTA", "MARCH", "PRESAGE", "SKYLINE", "SUNNY"],
+  "HONDA": ["FIT", "CR-V", "ACCORD", "CIVIC", "STREAM", "INSIGHT", "VEZEL", "FREED", "STEPWGN", "SHUTTLE", "AIRWAVE", "CROSSROAD", "INSPIRE", "MOBILIO", "ODYSSEY"],
+  "MAZDA": ["DEMIO", "AXELA", "ATENZA", "CX-5", "CX-3", "PREMACY", "VERISA", "BIANTE", "FAMILIA", "MPV", "TRIBUTE"],
+  "SUBARU": ["IMPREZA", "FORESTER", "LEGACY", "OUTBACK", "XV", "LEVORG", "EXIGA", "TREZIA"],
+  "MITSUBISHI": ["PAJERO", "OUTLANDER", "LANCER", "GALANT", "COLT", "ECLIPSE CROSS", "CANTER", "FUSO", "ASX", "DELICA", "RVR", "TRITON"],
+  "ISUZU": ["D-MAX", "NPR", "NQR", "FRR", "FSR", "GIGA", "FORWARD", "ELF", "MU-X", "TROOPER"],
+  "MERCEDES-BENZ": ["C-CLASS", "E-CLASS", "S-CLASS", "GLE", "GLC", "G-WAGON", "SPRINTER", "VITO", "A-CLASS", "B-CLASS", "CLA", "CLS", "GLA", "GLS", "ML", "SLK"],
+  "BMW": ["3 SERIES", "5 SERIES", "X1", "X3", "X5", "X6", "7 SERIES", "1 SERIES", "X4", "Z4"],
+  "AUDI": ["A3", "A4", "A6", "Q3", "Q5", "Q7", "A1", "A5", "A7", "A8", "Q2"],
+  "VOLKSWAGEN": ["GOLF", "PASSAT", "POLO", "TIGUAN", "TOUAREG", "AMAROK", "TRANSPORTER", "BEETLE", "JETTA", "SHARAN", "TOURAN", "CADDY"],
+  "LAND ROVER": ["RANGE ROVER", "RANGE ROVER SPORT", "RANGE ROVER VELAR", "EVOQUE", "DISCOVERY", "DISCOVERY SPORT", "DEFENDER", "FREELANDER"],
+  "FORD": ["RANGER", "EVEREST", "FOCUS", "FUSION", "F-150", "ECOSPORT", "ESCAPE", "EXPLORER", "FIGO", "MUSTANG", "TRANSIT"],
+  "HYUNDAI": ["TUCSON", "SANTA FE", "ELANTRA", "ACCENT", "I30", "H1", "CRETA", "GETZ", "IONIQ", "KONA", "SONATA", "STARIA"],
+  "KIA": ["SPORTAGE", "SORENTO", "RIO", "CERATO", "PICANTO", "K2500", "K2700", "OPTIMA", "SELTOS", "SOUL", "CARNIVAL"],
+  "SUZUKI": ["VITARA", "SWIFT", "JIMNY", "ALTO", "ERTIGA", "ESCUDO", "LAPIN", "SOLIO", "SX4", "BALENO", "CIAZ"],
+  "PEUGEOT": ["3008", "5008", "308", "508", "2008", "208", "PARTNER", "BOXER"],
+  "VOLVO": ["XC90", "XC60", "V40", "S60", "S90", "V60", "XC40"],
+  "RENAULT": ["KWID", "DUSTER", "KANGOO", "KOLEOS", "MEGANE", "TRAFIC"],
+  "LEXUS": ["RX", "LX", "NX", "IS", "ES", "GS", "GX", "LS", "UX"],
+  "JEEP": ["GRAND CHEROKEE", "WRANGLER", "COMPASS", "CHEROKEE", "RENEGADE", "GLADIATOR"],
+  "CHEVROLET": ["CRUZE", "TRAILBLAZER", "CAPTIVA", "AVEO", "COLORADO", "SUBURBAN"],
+  "PORSCHE": ["CAYENNE", "MACAN", "PANAMERA", "911", "TAYCAN", "BOXSTER"],
+  "JAGUAR": ["F-PACE", "E-PACE", "XF", "XE", "XJ", "I-PACE"],
+  "HAVAL": ["JOLION", "H6", "H9", "DARGO"],
+  "MAHINDRA": ["SCORPIO", "XUV500", "XUV700", "BOLERO", "PIK-UP"],
+  "TATA": ["PRIMA", "SIGNA", "LPT", "XENON", "SUPER ACE", "ULTRA"],
+  "SCANIA": ["R-SERIES", "G-SERIES", "P-SERIES", "TOURING"],
+  "MAN": ["TGS", "TGX", "TGM", "TGL"],
+  "HINO": ["500", "700", "300", "DUTRO", "RANGER", "PROFIA"],
+  "FUSO": ["CANTER", "FIGHTER", "SUPER GREAT", "FJ"],
+  "HOWO": ["A7", "371", "SINOTRUK", "TX"],
+  "FAW": ["J6P", "TIGER V", "JIEFANG"],
+  "BAJAJ": ["BOXER BM150", "BOXER 100", "RE COMPACT TUK-TUK", "MAXIMA"],
+  "TVS": ["HLX 125", "HLX 150", "KING TUK-TUK", "APACHE"],
+  "OTHER": ["OTHER / MANUAL"]
+};
