@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Loader2,
   AlertTriangle,
+  KeyRound,
+  X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { BusinessUnit, UserProfile } from '@/lib/types';
@@ -21,16 +23,10 @@ import { toast } from '@/hooks/use-toast';
 import Image from 'next/image';
 import Link from 'next/link';
 import { TerminalWelcome } from '@/components/pos/terminal-welcome';
-import { TerminalPermissionsGate } from '@/components/pos/terminal-permissions-gate';
 import { TerminalLiveAudioAgent } from '@/components/pos/terminal-live-audio-agent';
+import { clearObsoleteTerminalStorage } from '@/lib/role-routing';
 
-const OBSOLETE_TERMINAL_STORAGE_KEYS = [
-  'pinMigrationAcknowledged',
-  'uax_pin_migration_ack',
-  'uax_pin_disclaimer_ack',
-  'uax_legacy_pin',
-  'legacyPin',
-];
+const QUICK_PIN_BANNER_DISMISSED_KEY = 'uax_quick_pin_banner_dismissed';
 
 export function TerminalLock({ children, unit }: { children: React.ReactNode; unit?: BusinessUnit }) {
   const { user: authUser } = useUser();
@@ -57,6 +53,7 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
   const [deviceId, setDeviceId] = useState('');
   const [selectedOperator, setSelectedOperator] = useState<UserProfile | null>(null);
   const [serverPinConfigured, setServerPinConfigured] = useState(false);
+  const [pinBannerDismissed, setPinBannerDismissed] = useState(false);
   const [pinResetMode, setPinResetMode] = useState(false);
   const [pinResetSent, setPinResetSent] = useState(false);
   const [pinResetCode, setPinResetCode] = useState('');
@@ -66,42 +63,37 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
 
   const [recentOperators, setRecentOperators] = useState<UserProfile[]>([]);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
-  const [showWelcome, setShowWelcome] = useState(true);
+  const [showWelcome, setShowWelcome] = useState(false);
   const welcomeDismissedRef = useRef(false);
-  const adminAutoUnlockedRef = useRef<string | null>(null);
-  const [permissionsReadyForUid, setPermissionsReadyForUid] = useState<string | null>(null);
-
-  const handlePermissionsReady = useCallback(() => {
-    if (activeCashier?.uid) setPermissionsReadyForUid(activeCashier.uid + ':' + activeCashier.role);
-  }, [activeCashier?.uid, activeCashier?.role]);
-
-  useEffect(() => {
-    if (!activeCashier?.uid) setPermissionsReadyForUid(null);
-  }, [activeCashier?.uid]);
 
   const hiddenInputRef = useRef<HTMLInputElement>(null);
   const registeredIdentityRef = useRef<string | null>(null);
   const selectedCashier = selectedOperator || activeCashier;
 
-  // Administrators signed in with password bypass terminal PIN gates automatically on initial entry.
+  const isAdminUser = Boolean(
+    activeCashier && (activeCashier.role === 'ADMIN' || activeCashier.isSuperAdmin === true)
+  );
+  const isRemotelyDisabled = Boolean(
+    !isAdminUser &&
+      activeTerminal &&
+      ((activeTerminal as any).disabled === true || (activeTerminal as any).locked === true)
+  );
+
+  // Administrators bypass station locks automatically unless explicitly switching accounts.
   useEffect(() => {
-    if (!authUser || !activeCashier) return;
-    const isAdminUser = activeCashier.role === 'ADMIN' || activeCashier.isSuperAdmin === true;
-    if (isAdminUser && authUser.uid === activeCashier.uid && adminAutoUnlockedRef.current !== authUser.uid) {
-      adminAutoUnlockedRef.current = authUser.uid;
-      welcomeDismissedRef.current = true;
-      setShowWelcome(false);
+    if (isAdminUser && isLocked && !showStaffSelector && !isSigningInWithPassword) {
       setIsLocked(false);
     }
-  }, [authUser, activeCashier, setIsLocked]);
+  }, [isAdminUser, isLocked, showStaffSelector, isSigningInWithPassword, setIsLocked]);
 
   useEffect(() => {
-    if (isLocked) {
+    if (isLocked && !authUser) {
       if (!welcomeDismissedRef.current) setShowWelcome(true);
-    } else {
+    } else if (!isLocked) {
       welcomeDismissedRef.current = false;
+      setShowWelcome(false);
     }
-  }, [isLocked]);
+  }, [isLocked, authUser]);
 
   const handleBeginShift = useCallback(() => {
     welcomeDismissedRef.current = true;
@@ -116,13 +108,14 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
   }, []);
 
   useEffect(() => {
-    // Automatically clear obsolete terminal storage keys from localStorage
-    for (const key of OBSOLETE_TERMINAL_STORAGE_KEYS) {
-      try {
-        localStorage.removeItem(key);
-      } catch {
-        // Ignore storage errors
+    clearObsoleteTerminalStorage();
+
+    try {
+      if (sessionStorage.getItem(QUICK_PIN_BANNER_DISMISSED_KEY) === 'true') {
+        setPinBannerDismissed(true);
       }
+    } catch {
+      // Ignore sessionStorage errors
     }
 
     let savedDeviceId = localStorage.getItem('uax_terminal_device_id');
@@ -139,11 +132,15 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
         const safeOperators = parsed
           .filter((u: UserProfile) => u && u.role !== 'CLIENT')
           .map((operator: UserProfile) => {
-            const safe = { ...operator } as UserProfile & { pinConfigured?: boolean };
+            const safe = { ...operator } as Record<string, unknown>;
             delete safe.pin;
-            delete (safe as any).masterKey;
-            delete (safe as any).disclaimerAcknowledged;
-            return safe;
+            delete safe.masterKey;
+            for (const key of Object.keys(safe)) {
+              if (key.toLowerCase().startsWith('disclaim')) {
+                delete safe[key];
+              }
+            }
+            return safe as unknown as UserProfile;
           });
         setRecentOperators(safeOperators);
         localStorage.setItem('uax_recent_operators', JSON.stringify(safeOperators));
@@ -204,6 +201,15 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
       cancelled = true;
     };
   }, [authUser, activeCashier?.uid, deviceId]);
+
+  const dismissPinBanner = useCallback(() => {
+    setPinBannerDismissed(true);
+    try {
+      sessionStorage.setItem(QUICK_PIN_BANNER_DISMISSED_KEY, 'true');
+    } catch {
+      // Ignore storage errors
+    }
+  }, []);
 
   const focusInput = () => {
     hiddenInputRef.current?.focus();
@@ -381,6 +387,18 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     setShowStaffSelector(true);
   };
 
+  const handleResumeCurrentSession = () => {
+    if (!authUser || isRemotelyDisabled) return;
+    setIsSigningInWithPassword(false);
+    setSelectedOperator(null);
+    setShowStaffSelector(false);
+    setShowWelcome(false);
+    setPin('');
+    setError(false);
+    setPinErrorMessage('');
+    setIsLocked(false);
+  };
+
   const handlePasswordSignIn = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (isVerifying || !deviceId) return;
@@ -458,7 +476,15 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     }
   };
 
-  if (loading) {
+  const shouldShowOverlay = Boolean(
+    isRemotelyDisabled ||
+      isLocked ||
+      isSigningInWithPassword ||
+      showStaffSelector ||
+      !authUser
+  );
+
+  if (shouldShowOverlay && loading) {
     return (
       <div className="fixed inset-0 z-[2000] bg-black flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
@@ -469,7 +495,7 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     );
   }
 
-  if (showWelcome && (isLocked || !activeCashier) && !isSigningInWithPassword) {
+  if (showWelcome && shouldShowOverlay && !isSigningInWithPassword) {
     return (
       <>
         <TerminalLiveAudioAgent terminalId={activeTerminal?.id} cashierId={activeCashier?.uid} cashierName={activeCashier?.displayName} />
@@ -478,8 +504,16 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     );
   }
 
-  if (isLocked || !activeCashier || isSigningInWithPassword || showStaffSelector) {
-    const showSelector = (showStaffSelector && !isSigningInWithPassword) || (!activeCashier && !isSigningInWithPassword);
+  if (shouldShowOverlay) {
+    const selectedHasPin = Boolean(
+      selectedCashier &&
+        ((selectedCashier as UserProfile & { pinConfigured?: boolean }).pinConfigured ||
+          selectedCashier.hasPin ||
+          (selectedCashier.uid === activeCashier?.uid && serverPinConfigured))
+    );
+    const showSelector =
+      (showStaffSelector && !isSigningInWithPassword) ||
+      ((!selectedCashier || !selectedHasPin) && !isSigningInWithPassword);
 
     return (
       <div className="fixed inset-0 z-[2000] bg-black flex items-center justify-center p-0 overflow-hidden font-sans">
@@ -639,12 +673,23 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
                     Sign in with Email & Password
                   </Button>
                 </div>
+                {authUser && activeCashier && !isRemotelyDisabled && (
+                  <div className="text-center">
+                    <button
+                      type="button"
+                      onClick={handleResumeCurrentSession}
+                      className="text-xs font-black uppercase tracking-widest text-zinc-300 hover:text-white underline underline-offset-4"
+                    >
+                      Continue as {activeCashier.displayName || activeCashier.email}
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="w-full flex flex-col md:flex-row gap-5 md:gap-10 items-center justify-center animate-in fade-in duration-700 mt-2 md:mt-0">
                 <div className="space-y-6 md:space-y-8 text-center md:text-left flex-1 max-lg">
                   <div className="inline-flex items-center gap-5 md:gap-6 bg-black/25 backdrop-blur-xl p-3 md:p-4 pr-5 md:pr-10 rounded-[2rem] md:rounded-[2.5rem] border border-white/5 shadow-2xl mx-auto md:mx-0">
-                    <Avatar className="h-16 w-16 md:h-24 md:w-24 rounded-[1.5rem] md:rounded-[2rem] ring-4 ring-primary/20 shadow-2xl border-2 border-white/10 shrink-0">
+                    <Avatar className="h-16 w-16 md:h-24 md:w-24 rounded-[1.5rem] md:rounded-[2.5rem] ring-4 ring-primary/20 shadow-2xl border-2 border-white/10 shrink-0">
                       <AvatarImage src={selectedCashier?.photoURL || undefined} className="object-cover" />
                       <AvatarFallback className="bg-zinc-900 text-primary text-xl md:text-2xl font-black uppercase border border-white/5">
                         {selectedCashier?.displayName?.[0]}
@@ -688,6 +733,15 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
                     >
                       Use password instead
                     </button>
+                    {authUser && activeCashier && selectedCashier?.uid === activeCashier.uid && !isRemotelyDisabled && (
+                      <button
+                        type="button"
+                        onClick={handleResumeCurrentSession}
+                        className="text-zinc-300 hover:text-white uppercase font-black text-[9px] md:text-[11px] tracking-[0.2em] h-10 px-5 rounded-xl border border-white/10 bg-white/5 transition-all active:scale-95"
+                      >
+                        Return to workspace
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -896,25 +950,49 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     );
   }
 
-  if (
-    activeCashier &&
-    activeCashier.role !== 'CLIENT' &&
-    activeCashier.role !== 'ADMIN' &&
-    !activeCashier.isSuperAdmin &&
-    permissionsReadyForUid !== activeCashier.uid + ':' + activeCashier.role
-  ) {
-    return (
-      <TerminalPermissionsGate
-        key={activeCashier.uid}
-        canSkip
-        onReady={handlePermissionsReady}
-      />
-    );
-  }
+  const showInlinePinPrompt = Boolean(
+    unit &&
+      activeCashier &&
+      activeCashier.role !== 'CLIENT' &&
+      !isAdminUser &&
+      !activeCashier.hasPin &&
+      !serverPinConfigured &&
+      !pinBannerDismissed
+  );
 
   return (
     <>
       <TerminalLiveAudioAgent terminalId={activeTerminal?.id} cashierId={activeCashier?.uid} cashierName={activeCashier?.displayName} />
+      {showInlinePinPrompt && (
+        <div
+          role="region"
+          aria-label="Optional quick PIN setup"
+          className="bg-zinc-900 text-white px-4 py-2 text-xs flex items-center justify-between gap-3 border-b border-zinc-800"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <KeyRound className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="truncate text-[11px] font-medium text-zinc-200">
+              Shared POS tip: set an optional 4-digit PIN for fast operator switching.
+            </span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/settings"
+              className="px-2.5 py-1 rounded-md bg-primary text-white text-[10px] font-black uppercase tracking-wider hover:bg-primary/90 transition-colors"
+            >
+              Set up quick PIN
+            </Link>
+            <button
+              type="button"
+              onClick={dismissPinBanner}
+              aria-label="Dismiss quick PIN tip"
+              className="p-1 text-zinc-400 hover:text-white transition-colors"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
       {children}
     </>
   );

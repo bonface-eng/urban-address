@@ -17,9 +17,9 @@ describe('shared staff terminal journey', () => {
     expect(welcome).toContain('Back to home');
   });
 
-  it('shows idle welcome before staff selection and PIN entry', () => {
-    const idle = lock.indexOf('if (showWelcome &&');
-    const access = lock.indexOf('if (isLocked || !activeCashier || isSigningInWithPassword || showStaffSelector)');
+  it('shows idle welcome before staff selection and PIN entry when no user session is active', () => {
+    const idle = lock.indexOf('if (showWelcome && shouldShowOverlay');
+    const access = lock.indexOf('if (shouldShowOverlay) {');
     const selector = lock.indexOf(': showSelector ? (');
     const pin = lock.indexOf('Secure Staff Access');
 
@@ -36,9 +36,11 @@ describe('shared staff terminal journey', () => {
     expect(startSelector).toBeGreaterThan(begin);
   });
 
-  it('locks the terminal again after a page reload instead of trusting local storage', () => {
-    expect(terminal).toContain('const [isLocked, setIsLocked] = useState(true)');
+  it('starts unlocked for signed-in Supabase sessions and never blocks /dashboard with legacy PIN or permission cards', () => {
+    expect(terminal).toContain('const [isLocked, setIsLocked] = useState(false)');
     expect(terminal).not.toContain('uax_last_unlocked_at');
+    expect(lock).not.toContain('TerminalPermissionsGate');
+    expect(lock).toContain('Set up quick PIN');
   });
 
   it('signs staff in cleanly with email + password and optional 4-digit PIN without legacy blockers', () => {

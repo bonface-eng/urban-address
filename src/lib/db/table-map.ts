@@ -276,7 +276,7 @@ const TABLES_WITH_UPDATED_AT_MS = new Set([
 const TIMESTAMPTZ_EXTRA_COLUMNS: Record<string, Set<string>> = {
   firebase_uid_map: new Set(['migrated_at']),
   terminal_device_staff: new Set([
-    'disclaimer_acknowledged_at', 'pin_updated_at', 'pin_reset_at',
+    'pin_updated_at', 'pin_reset_at',
     'registered_at', 'last_seen_at',
   ]),
   terminal_sessions: new Set(['expires_at']),
