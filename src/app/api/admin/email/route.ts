@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
     let recipients: Array<{ email: string; name: string }> = [];
     if (audience === 'CUSTOM') {
       const raw = Array.isArray(body?.recipients) ? body.recipients : [];
-      const normalized = [...new Set(raw.map((value: unknown) => String(value).trim().toLowerCase()).filter(validEmail))];
+      const normalized = [...new Set(raw.map((value: unknown) => String(value).trim().toLowerCase()).filter(validEmail))] as string[];
       const singleRecipientRequired = ['DISMISSAL', 'WARNING_LETTER', 'PURCHASE_ORDER'].includes(kind);
       if (!normalized.length || normalized.length > 20 || (singleRecipientRequired && normalized.length !== 1)) {
         return NextResponse.json({ error: 'Enter exactly one recipient for HR notices and purchase orders, or between 1 and 20 valid addresses for other emails.' }, { status: 400 });

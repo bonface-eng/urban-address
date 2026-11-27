@@ -30,6 +30,9 @@ export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
+  firstName?: string;
+  middleName?: string;
+  lastName?: string;
   role: UserRole;
   assignedUnits?: BusinessUnit[] | null;
   /** Branch access for multi-branch operations. Empty/omitted remains legacy until staff are assigned. */
@@ -41,6 +44,7 @@ export interface UserProfile {
   address?: string | null;
   deliveryLocation?: { latitude: number; longitude: number } | null;
   mpesaNumber?: string | null; // Dedicated M-Pesa Payout Destination
+  paystackRecipientCode?: string | null;
   mustChangePassword?: boolean;
   accountType?: 'STAFF' | 'CLIENT';
   pin?: string; // 4-digit security code
@@ -133,7 +137,7 @@ export interface Order {
   id?: string;
   type: 'LOUNGE' | 'STORE' | 'CARWASH' | 'SYSTEM-REPORT';
   jobType?: 'VEHICLE' | 'CARPET';
-  status: 'PENDING' | 'PAID' | 'VOIDED' | 'REFUNDED' | 'PARTIALLY_REFUNDED';
+  status: 'PENDING' | 'PAID' | 'VOIDED' | 'REFUNDED' | 'PARTIALLY_REFUNDED' | 'CANCELLED';
   prepStatus?: 'NEW' | 'PREPARING' | 'READY' | 'SERVED';
   total: number;
   discount?: number;

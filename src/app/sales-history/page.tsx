@@ -151,7 +151,7 @@ export default function SalesHistoryPage() {
     if (!isSuperAdmin && (role === 'CASHIER' || role === 'STOREKEEPER' || role === 'ATTENDANT')) {
       const units = profile?.assignedUnits || [];
       if (units.length > 0) {
-        baseList = baseList.filter(o => units.includes(o.type));
+        baseList = baseList.filter(o => units.includes(o.type as BusinessUnit));
       }
     }
 
@@ -234,7 +234,7 @@ export default function SalesHistoryPage() {
     if (!isSuperAdmin && (role === 'CASHIER' || role === 'STOREKEEPER' || role === 'ATTENDANT')) {
       const units = profile?.assignedUnits || [];
       if (units.length > 0) {
-        baseList = baseList.filter(order => units.includes(order.type));
+        baseList = baseList.filter(order => units.includes(order.type as BusinessUnit));
       }
     }
 

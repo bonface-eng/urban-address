@@ -268,7 +268,7 @@ export default function AttendantsPage() {
           password: password,
           displayName: displayName || email.split('@')[0],
           role: 'ATTENDANT',
-          assignedUnit: 'CARWASH'
+          assignedUnits: ['CARWASH']
         });
         if (!res.success) throw new Error(res.message);
         toast({ title: "Staff Member Added" });

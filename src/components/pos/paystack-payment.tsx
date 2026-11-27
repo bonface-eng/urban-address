@@ -70,7 +70,7 @@ export function PaystackPayment({ amount, onSuccess, onClose }: PaystackPaymentP
     }
 
     try {
-      initializePayment(
+      (initializePayment as any)(
         (response: any) => {
           if (response && response.reference) {
             onSuccess(response.reference);

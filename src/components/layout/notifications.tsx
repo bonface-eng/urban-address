@@ -55,7 +55,7 @@ export function Notifications() {
       newArrivals.forEach((n: any) => {
         toast({
           title: n.title,
-          message: n.message,
+          description: n.message,
           variant: n.type === 'SECURITY' ? 'destructive' : 'default'
         });
       });

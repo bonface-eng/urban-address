@@ -189,7 +189,7 @@ export default function AdminEmailPage() {
             </div>
             {kind === 'MARKETING' && <div className="rounded-md border border-orange-200 bg-orange-50 p-3 text-xs leading-5 text-orange-900">Marketing sends only to customer profiles with explicit recorded marketing consent. Unsubscribed contacts are excluded and the email includes an unsubscribe link. Customer-wide promotional sends cannot use the general-email template.</div>}
             {(kind === 'DISMISSAL' || kind === 'WARNING_LETTER') && <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900"><AlertTriangle className="mr-1 inline h-4 w-4" /> Confidential employment correspondence. Confirm the facts, approval and applicable HR/legal process before sending.</div>}
-            <Button className="w-full bg-[#FF6A00] text-white hover:bg-[#E85F00]" onClick={send} disabled={sending}><Send className="mr-2 h-4 w-4" />{sending ? 'Sending…' : 'Review and send'}</Button>
+            <Button className="w-full bg-[#FF6A00] text-white hover:bg-[#E85F00]" onClick={() => void send(false)} disabled={sending}><Send className="mr-2 h-4 w-4" />{sending ? 'Sending…' : 'Review and send'}</Button>
             {result && <div className="rounded-md border border-zinc-200 bg-zinc-50 p-3 text-sm"><p className="font-semibold">Campaign {result.status.toLowerCase()}</p><p className="mt-1 text-xs text-zinc-600">{result.sentCount} sent · {result.failedCount} failed · {result.recipientCount} recipients</p></div>}
           </CardContent>
         </Card>

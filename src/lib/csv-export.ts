@@ -27,7 +27,7 @@ export function exportAsReceiptText(data: any[], fileName: string, headers?: Rec
 
   // Resolve headers
   const keys = headers ? Object.keys(headers) : (data.length > 0 ? Object.keys(data[0]) : []);
-  const headerMap = headers || (keys.reduce((acc, k) => ({ ...acc, [k]: k }), {}));
+  const headerMap: Record<string, string> = headers || (keys.reduce<Record<string, string>>((acc, k) => ({ ...acc, [k]: k }), {}));
 
   data.forEach((item, index) => {
     if (keys.length <= 3 && keys.length > 0) {

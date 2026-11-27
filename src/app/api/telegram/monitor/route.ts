@@ -197,7 +197,6 @@ export async function GET(request: NextRequest) {
       systemAuditDeliveryFailures: systemAuditFailed,
       rosterDeliveryFailures: rosterFailed,
       auditDeliveryFailures: auditFailed,
-      systemAuditDeliveryFailures: systemAuditFailed,
     });
 
     return NextResponse.json({

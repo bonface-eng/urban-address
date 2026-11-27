@@ -3,13 +3,13 @@ import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
 // 1. Create stable mock functions that can be referenced in tests
-export const mockUseFirestore = vi.fn(() => ({}));
-export const mockUseCollection = vi.fn(() => ({ data: [], loading: false, error: null }));
-export const mockUseDoc = vi.fn(() => ({ data: null, loading: false, error: null }));
-export const mockUseUser = vi.fn(() => ({ user: { uid: 'test-uid', email: 'test@urban.co.ke' }, loading: false }));
-export const mockUseAuth = vi.fn(() => ({}));
+export const mockUseFirestore = vi.fn((): any => ({}));
+export const mockUseCollection = vi.fn((): { data: any[] | null; loading: boolean; error?: any } => ({ data: [], loading: false, error: null }));
+export const mockUseDoc = vi.fn((): { data: any; loading: boolean; error?: any } => ({ data: null, loading: false, error: null }));
+export const mockUseUser = vi.fn((): { user: any; loading: boolean } => ({ user: { uid: 'test-uid', email: 'test@urban.co.ke' }, loading: false }));
+export const mockUseAuth = vi.fn((): any => ({}));
 export const mockUseMemoFirebase = vi.fn((factory: any) => factory());
-export const mockUseFirebase = vi.fn(() => ({ firebaseApp: {}, firestore: {}, auth: {} }));
+export const mockUseFirebase = vi.fn((): any => ({ firebaseApp: {}, firestore: {}, auth: {} }));
 
 // 2. Register the module mock
 vi.mock('@/firebase', () => ({
@@ -35,10 +35,11 @@ vi.mock('next/navigation', () => ({
   }),
   usePathname: () => '/',
   useParams: () => ({}),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // 4. Mock Profile Hook
-export const mockUseProfile = vi.fn(() => ({
+export const mockUseProfile = vi.fn((): any => ({
   role: 'ADMIN',
   profile: { uid: 'test-uid', displayName: 'Admin User', email: 'admin@urban.co.ke' },
   isSuperAdmin: true,

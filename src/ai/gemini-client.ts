@@ -50,7 +50,7 @@ export async function* streamGeminiResponse(input: GeminiChatInput) {
       model: input.model,
       system: input.systemPrompt,
       prompt: input.prompt,
-      history: input.history?.map(m => ({
+      messages: input.history?.map(m => ({
         role: m.role as any,
         content: [{ text: m.content }]
       })),
@@ -58,7 +58,7 @@ export async function* streamGeminiResponse(input: GeminiChatInput) {
         temperature: input.temperature,
         maxOutputTokens: input.maxTokens,
       },
-    });
+    } as any);
 
     for await (const chunk of stream) {
       const text = chunk.text;

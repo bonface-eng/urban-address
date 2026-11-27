@@ -1,9 +1,9 @@
 'use client';
 
 import {
-  CheckCircle,
-  CircleNotch,
-} from "@phosphor-icons/react";
+  CheckCircle2,
+  Loader2,
+} from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   type ComponentPropsWithoutRef,
@@ -223,7 +223,7 @@ function StatusIndicator({
             key="complete"
             transition={{ duration: animate ? 0.16 : 0, ease: easeOut }}
           >
-            <CheckCircle size={18} weight="fill" />
+            <CheckCircle2 className="h-[18px] w-[18px]" />
           </motion.span>
         ) : (
           <motion.span
@@ -240,12 +240,11 @@ function StatusIndicator({
             key="working"
             transition={{ duration: animate ? 0.16 : 0, ease: easeOut }}
           >
-            <CircleNotch
+            <Loader2
               className={cn(
+                "h-[18px] w-[18px]",
                 animate && "animate-spin motion-reduce:animate-none",
               )}
-              size={18}
-              weight="bold"
             />
           </motion.span>
         )}
@@ -347,15 +346,19 @@ export function ReceiptPrinterOutput({
       ) : null}
 
       <motion.div
-        animate={{
-          opacity: isReceiptVisible ? 1 : 0,
-          y:
-            stage === "printing" && shouldMove
-              ? "0%" 
-              : isReceiptVisible || !shouldMove
-                ? "0%"
-                : "-100%",
-        }}
+        animate={
+          stage === "printing" && shouldMove && shouldUseSteppedFeed
+            ? "printing"
+            : {
+                opacity: isReceiptVisible ? 1 : 0,
+                y:
+                  stage === "printing" && shouldMove
+                    ? "0%"
+                    : isReceiptVisible || !shouldMove
+                      ? "0%"
+                      : "-100%",
+              }
+        }
         variants={{
           printing: {
             y: printingTransformKeyframes,
@@ -366,7 +369,6 @@ export function ReceiptPrinterOutput({
             }
           }
         }}
-        animate={stage === "printing" && shouldMove && shouldUseSteppedFeed ? "printing" : undefined}
         aria-hidden={stage !== "complete"}
         className="relative isolate"
         initial={false}

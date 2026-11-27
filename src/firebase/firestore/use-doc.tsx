@@ -16,7 +16,7 @@ import { toPublicServiceError } from '@/lib/public-errors';
  * Hook to listen to a single Firestore document.
  * Handles permission errors gracefully without triggering hard crashes.
  */
-export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
+export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<FirestoreError | null>(null);

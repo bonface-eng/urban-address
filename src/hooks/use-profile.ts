@@ -70,8 +70,10 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   // Employee Guard: True if any staff role is detected or Super Admin
   const isEmployee = useMemo(() => 
-    isSuperAdmin ||
-    (firestoreProfile?.role && firestoreProfile.role !== 'CLIENT' && firestoreProfile.role !== undefined), 
+    Boolean(
+      isSuperAdmin ||
+      (firestoreProfile?.role && firestoreProfile.role !== 'CLIENT' && firestoreProfile.role !== undefined)
+    ), 
   [isSuperAdmin, firestoreProfile]);
 
   /**

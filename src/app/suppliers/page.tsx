@@ -170,7 +170,7 @@ export default function SuppliersPage() {
     setName(supplier.name);
     setContactPerson(supplier.contactPerson);
     setPhone(supplier.phone);
-    setEmail(supplier.email);
+    setEmail(supplier.email || '');
     setCategory(supplier.category);
     setIsEditOpen(true);
   };

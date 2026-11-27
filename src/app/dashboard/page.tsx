@@ -209,7 +209,7 @@ export default function DashboardPage() {
       { name: 'Carwash', value: carwashSales, color: 'hsl(25, 100%, 50%)' },
     ];
 
-    let velocityData = [];
+    let velocityData: Array<{ name: string; total: number }> = [];
     if (dateFilter === 'TODAY' || dateFilter === 'YESTERDAY') {
       const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
       velocityData = hours.map(h => ({ name: h, total: 0 }));

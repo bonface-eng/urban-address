@@ -138,6 +138,20 @@ export default function BranchOrderingPage() {
   const currentRangeStart = totalProducts === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1;
   const currentRangeEnd = Math.min(currentPage * itemsPerPage, totalProducts);
 
+  const handleAdd = (e: React.MouseEvent<HTMLButtonElement>, product: Product) => {
+    e.stopPropagation();
+    if (!product.id) {
+      toast({ variant: 'destructive', title: 'Item unavailable', description: 'This item cannot be added right now.' });
+      return;
+    }
+    if (product.unit !== 'CARWASH' && (product.stockLevel ?? 0) <= 0) {
+      toast({ variant: 'destructive', title: 'Sold out', description: 'This item is currently out of stock.' });
+      return;
+    }
+    addToCart(product);
+    toast({ title: 'Added to cart', description: product.name });
+  };
+
   return (
     <div className="flex flex-col min-h-screen bg-[#FDFDFD]">
       <section className="bg-white border-b border-zinc-100 py-12">

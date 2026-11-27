@@ -22,7 +22,7 @@ export function shouldPublishSnapshot(isFirstSnapshot: boolean, changedDocumentC
   return isFirstSnapshot || changedDocumentCount > 0;
 }
 
-export function useCollection<T = DocumentData>(query: Query<T> | null) {
+export function useCollection<T = DocumentData>(query: Query<any> | null) {
   const [data, setData] = useState<T[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<FirestoreError | null>(null);

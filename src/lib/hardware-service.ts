@@ -1,6 +1,7 @@
 'use client';
 
 import { Firestore } from 'firebase/firestore';
+// @ts-expect-error esc-pos-encoder does not ship TypeScript declaration files
 import EscPosEncoder from 'esc-pos-encoder';
 
 /**

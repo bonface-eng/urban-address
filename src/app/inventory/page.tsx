@@ -504,7 +504,7 @@ export default function InventoryCatalogue() {
       if (stockStatusFilter === 'ARCHIVED') {
         if (!item.archived || !matchesUnit) return false;
       } else {
-        if (item.archived && stockStatusFilter !== 'ARCHIVED') return false;
+        if (item.archived) return false;
       }
 
       const matchesCategory = selectedCategoryFilter === 'All' || item.category === selectedCategoryFilter;
