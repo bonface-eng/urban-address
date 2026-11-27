@@ -3,19 +3,18 @@ import { useEffect, useState } from 'react';
 import { useUser } from '@/firebase';
 import type { Product } from '@/lib/types';
 
-type State = { loading: boolean; data: Product[] | null; error: { code: string } | null; uid: string; key: unknown };
-export function useInventoryFallback(error: { code?: string } | null, retry: number) {
+type State = { loading: boolean; data: Product[] | null; error: { code: string } | null; uid: string; key: number };
+export function useStaffInventory(retry: number) {
   const { user } = useUser();
-  const [state, setState] = useState<State>({ loading: false, data: null, error: null, uid: '', key: null });
-  const eligible = !!error && error.code !== 'permission-denied';
+  const [state, setState] = useState<State>({ loading: false, data: null, error: null, uid: '', key: -1 });
   useEffect(() => {
-    if (!eligible || !user) return;
+    if (!user) return;
     const controller = new AbortController();
     const uid = user.uid;
-    setState({ loading: true, data: null, error: null, uid, key: error });
+    setState({ loading: true, data: null, error: null, uid, key: retry });
     (async () => {
       try {
-        const token = await user.getIdToken();
+        const token = await user.getIdToken(true);
         const products: Product[] = [];
         let cursor: string | null = null;
         const seen = new Set<string>();
@@ -31,19 +30,18 @@ export function useInventoryFallback(error: { code?: string } | null, retry: num
           if (cursor && seen.has(cursor)) throw new Error('INVENTORY_SERVER_UNAVAILABLE');
           if (cursor) seen.add(cursor);
         } while (cursor);
-        if (!controller.signal.aborted) setState({ loading: false, data: products, error: null, uid, key: error });
+        if (!controller.signal.aborted) setState({ loading: false, data: products, error: null, uid, key: retry });
       } catch (failure) {
         if (!controller.signal.aborted) {
           const candidate = failure instanceof Error ? failure.message : '';
           const allowed = ['INVENTORY_AUTH_REQUIRED', 'INVENTORY_STAFF_REQUIRED', 'INVENTORY_SERVER_ACCESS', 'INVENTORY_DATABASE_CONFIGURATION'];
-          setState({ loading: false, data: null, error: { code: allowed.includes(candidate) ? candidate : 'INVENTORY_SERVER_UNAVAILABLE' }, uid, key: error });
+          setState({ loading: false, data: null, error: { code: allowed.includes(candidate) ? candidate : 'INVENTORY_SERVER_UNAVAILABLE' }, uid, key: retry });
         }
       }
     })();
     return () => controller.abort();
-  }, [eligible, error, user, retry]);
-  if (!eligible) return { loading: false, data: null, error: null };
+  }, [user, retry]);
   if (!user) return { loading: false, data: null, error: { code: 'INVENTORY_AUTH_REQUIRED' } };
-  if (state.uid !== user.uid || state.key !== error) return { loading: true, data: null, error: null };
+  if (state.uid !== user.uid || state.key !== retry) return { loading: true, data: null, error: null };
   return state;
 }

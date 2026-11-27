@@ -12,7 +12,7 @@ export function InventoryLoadState({ loading, error, ready, total, visible, unit
       : error.code === 'INVENTORY_STAFF_REQUIRED' ? 'The server could not confirm active staff access. Contact your administrator. Ref: INVENTORY_STAFF_REQUIRED'
       : error.code === 'INVENTORY_SERVER_ACCESS' ? 'The server database connection lacks inventory access. Ref: INVENTORY_SERVER_ACCESS'
       : error.code === 'INVENTORY_DATABASE_CONFIGURATION' ? 'The database requires configuration before inventory can load. Ref: INVENTORY_DATABASE_CONFIGURATION'
-      : error.code === 'INVENTORY_SERVER_UNAVAILABLE' ? 'Both the direct and same-site inventory connections failed. Your records have not been changed. Ref: INVENTORY_SERVER_UNAVAILABLE'
+      : error.code === 'INVENTORY_SERVER_UNAVAILABLE' ? 'The authenticated inventory service could not complete the read. Your records have not been changed. Ref: INVENTORY_SERVER_UNAVAILABLE'
       : 'The inventory connection failed. This does not mean stock records were deleted. Check your connection and retry. Ref: INVENTORY_READ_FAILED'}</p>
     <Button onClick={onRetry}>Retry inventory</Button>
   </div>;
