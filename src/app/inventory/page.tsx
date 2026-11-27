@@ -83,10 +83,10 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Product, BusinessUnit, Order } from '@/lib/types';
-import { useInventoryFallback } from '@/hooks/use-inventory-fallback';
+import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { InventoryLoadState } from '@/components/inventory/load-state';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
+import { useFirestore } from '@/firebase';
+import { collection, query, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { ImageUpload } from '@/components/shared/image-upload';
@@ -192,16 +192,10 @@ export default function InventoryCatalogue() {
     setSelectedItemIds([]); setCurrentPage(1);
   };
 
-  const inventoryQuery = useMemoFirebase(() => {
-    if (!firestore || !profile) return null;
-    return query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
-  }, [firestore, profile, inventoryRetry]);
-
-  const direct = useCollection<Product>(inventoryQuery);
-  const fallback = useInventoryFallback(direct.error, inventoryRetry);
-  const inventory = direct.error && direct.error.code !== 'permission-denied' ? fallback.data : direct.data;
-  const inventoryLoading = direct.error && direct.error.code !== 'permission-denied' ? fallback.loading : direct.loading;
-  const inventoryError = direct.error && direct.error.code !== 'permission-denied' ? fallback.error : direct.error;
+  // Server authorization is the sole read authority for the management catalogue.
+  // A browser permission failure must not prevent that independent check running.
+  const { data: inventory, loading: inventoryLoading, error: inventoryError } = useStaffInventory(inventoryRetry);
+  const refreshInventory = () => setInventoryRetry(value => value + 1);
 
   const handleQuickStockAdjust = async (item: Product, delta: number) => {
     if (!firestore || !profile) return;
@@ -215,6 +209,7 @@ export default function InventoryCatalogue() {
         timestamp: Date.now(),
         severity: 'INFO'
       });
+      refreshInventory();
       toast({ title: "Stock Updated", description: `${item.name}: ${newStock} units` });
     } catch (err) {
       toast({ variant: "destructive", title: "Stock update failed" });
@@ -236,6 +231,7 @@ export default function InventoryCatalogue() {
         timestamp: Date.now(),
         severity: 'WARNING'
       });
+      refreshInventory();
       toast({ 
         title: newArchived ? "Item Archived" : "Item Restored", 
         description: `${item.name} is now ${newArchived ? 'hidden from POS catalog' : 'active'}` 
@@ -291,6 +287,7 @@ export default function InventoryCatalogue() {
     } catch (err: any) {
       toast({ variant: "destructive", title: "Import Failed", description: err.message });
     } finally {
+      refreshInventory();
       setIsSubmitting(false);
     }
   };
@@ -405,6 +402,7 @@ export default function InventoryCatalogue() {
     } catch (err: any) {
       toast({ variant: "destructive", title: "Transfer Failed", description: err.message });
     } finally {
+      refreshInventory();
       setIsSubmitting(false);
     }
   };
@@ -550,9 +548,11 @@ export default function InventoryCatalogue() {
     try {
       if (editingItem) { 
         await updateDoc(doc(firestore, 'inventory', editingItem.id!), productData); 
+        refreshInventory();
         toast({ title: "Handshake Complete", description: "Product SKU synchronized successfully." });
       } else { 
         await addDoc(collection(firestore, 'inventory'), { ...productData, archived: false, createdAt: Date.now() }); 
+        refreshInventory();
         toast({ title: "Handshake Complete", description: "New SKU added to master ledger." });
       }
       resetForms();
@@ -583,9 +583,11 @@ export default function InventoryCatalogue() {
     try {
       if (editingItem) { 
         await updateDoc(doc(firestore, 'inventory', editingItem.id!), serviceData); 
+        refreshInventory();
         toast({ title: "Node Updated", description: "Service configuration synchronized." }); 
       } else { 
         await addDoc(collection(firestore, 'inventory'), { ...serviceData, archived: false, createdAt: Date.now() }); 
+        refreshInventory();
         toast({ title: "Node Active", description: "New detailing service added." }); 
       }
       resetForms();
@@ -698,6 +700,7 @@ export default function InventoryCatalogue() {
         </div>
       </div>
 
+      <Button variant="outline" onClick={refreshInventory}>Refresh inventory</Button>
       <Tabs value={activeUnitTab} onValueChange={(v: any) => { setActiveUnitTab(v); setSelectedCategoryFilter('All'); setSelectedItemIds([]); setCurrentPage(1); }} className="w-full px-2">
         <TabsList className="bg-white p-1.5 rounded-[1.5rem] h-16 mb-4 md:mb-8 shadow-sm border border-zinc-100 flex w-full overflow-x-auto no-scrollbar">
            <TabsTrigger value="STORE" className="flex-1 rounded-xl h-full uppercase font-black text-[10px] tracking-widest gap-2 md:gap-3 data-[state=active]:bg-zinc-900 data-[state=active]:text-white transition-all whitespace-nowrap">
