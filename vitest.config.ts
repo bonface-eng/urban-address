@@ -9,7 +9,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     globals: true,
-    exclude: ['**/node_modules/**', '**/dist/**', 'legacy-firebase/**'],
+    exclude: ['**/node_modules/**', '**/dist/**'],
     alias: {
       '@': path.resolve(__dirname, './src'),
     },

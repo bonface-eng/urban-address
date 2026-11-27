@@ -51,7 +51,7 @@ export default function DigitalMenuAdminPage() {
       setPublishedCount(items.length);
       toast({ title: status === 'PUBLISHED' ? 'Digital menu published' : 'Draft saved', description: status === 'PUBLISHED' ? 'The customer display will update automatically.' : 'Your changes are saved but not visible on the TV.' });
     } catch (error) {
-      toast({ variant: 'destructive', title: 'Could not save digital menu', description: 'Check your administrator permissions and Firestore rules.' });
+      toast({ variant: 'destructive', title: 'Could not save digital menu', description: 'Check your administrator permissions and database policies.' });
     } finally { setSaving(false); }
   };
 
