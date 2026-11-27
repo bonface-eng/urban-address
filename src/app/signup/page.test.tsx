@@ -18,14 +18,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/lib/recaptcha-client', () => ({
-  getRecaptchaToken: vi.fn().mockResolvedValue('fresh-signup-token'),
-}));
-
-vi.mock('@/lib/actions', () => ({
-  verifyRecaptcha: vi.fn().mockResolvedValue({ success: true, message: 'Security check passed.' }),
-}));
-
 vi.mock('firebase/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('firebase/auth')>();
   return {
@@ -75,7 +67,7 @@ describe('SignUp Integration Architecture', () => {
     expect(screen.getByText(/Password Strength/i)).toBeInTheDocument();
   });
 
-  it('verifies fresh reCAPTCHA token, creates user, and redirects to /auth/verify-email', async () => {
+  it('creates user and redirects to /auth/verify-email', async () => {
     vi.mocked(createUserWithEmailAndPassword).mockResolvedValueOnce({
       user: {
         uid: 'new-user-123',

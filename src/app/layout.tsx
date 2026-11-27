@@ -10,11 +10,9 @@ import { TerminalProvider } from "@/hooks/use-terminal";
 import { KeyboardCommands } from "@/components/shared/keyboard-commands";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 import { PWAPrompt } from "@/components/shared/pwa-prompt";
-import Script from "next/script";
 
 const inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: '--font-space' });
-const recaptchaSiteKey = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY?.trim();
 
 const businessStructuredData = {
   "@context": "https://schema.org",
@@ -134,12 +132,6 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans bg-background text-foreground antialiased`}>
-        {recaptchaSiteKey && recaptchaSiteKey !== '[SENSITIVE]' && (
-          <Script
-            src={`https://www.google.com/recaptcha/api.js?render=${encodeURIComponent(recaptchaSiteKey)}`}
-            strategy="afterInteractive"
-          />
-        )}
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{

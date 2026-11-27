@@ -16,8 +16,6 @@ import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { cn } from '@/lib/utils';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
-import { getRecaptchaToken } from '@/lib/recaptcha-client';
-import { verifyRecaptcha } from '@/lib/actions';
 
 export default function SignUpPage() {
   const { user } = useUser();
@@ -87,19 +85,7 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
     try {
-      // 1. Fresh single-use reCAPTCHA check on submit
-      const token = await getRecaptchaToken('SIGNUP');
-      const captchaResult = await verifyRecaptcha(token, 'SIGNUP');
-      if (!captchaResult.success) {
-        toast({
-          variant: "destructive",
-          title: "Security Check Failed",
-          description: captchaResult.message,
-        });
-        return;
-      }
-
-      // 2. Create Firebase Account
+      // Create Firebase Account
       const normalizedEmail = email.toLowerCase().trim();
       const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
       await updateProfile(cred.user, { displayName: name.trim() });
@@ -172,17 +158,6 @@ export default function SignUpPage() {
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const token = await getRecaptchaToken('SIGNUP');
-      const captchaResult = await verifyRecaptcha(token, 'SIGNUP');
-      if (!captchaResult.success) {
-        toast({
-          variant: "destructive",
-          title: "Security Check Failed",
-          description: captchaResult.message,
-        });
-        return;
-      }
-
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);

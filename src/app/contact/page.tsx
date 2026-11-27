@@ -11,8 +11,6 @@ import { Mail, MapPin, Phone, MessageSquare, Send, CheckCircle2, RefreshCcw } fr
 import { toast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { collection, addDoc } from 'firebase/firestore';
-import { getRecaptchaToken } from '@/lib/recaptcha-client';
-import { verifyRecaptcha } from '@/lib/actions';
 
 export default function ContactPage() {
   const firestore = useFirestore();
@@ -32,19 +30,7 @@ export default function ContactPage() {
     setIsSubmitting(true);
     
     try {
-      // 1. Security Check
-      const token = await getRecaptchaToken('CONTACT');
-      const captchaResult = await verifyRecaptcha(token, 'CONTACT');
-      if (!captchaResult.success) {
-        toast({
-          variant: "destructive",
-          title: "Security Check Failed",
-          description: captchaResult.message,
-        });
-        return;
-      }
-
-      // 2. Persist Inquiry
+      // Persist Inquiry
       await addDoc(collection(firestore, 'support_queries'), {
         name,
         email,

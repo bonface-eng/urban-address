@@ -20,14 +20,6 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('@/lib/recaptcha-client', () => ({
-  getRecaptchaToken: vi.fn().mockResolvedValue('fresh-test-token'),
-}));
-
-vi.mock('@/lib/actions', () => ({
-  verifyRecaptcha: vi.fn().mockResolvedValue({ success: true, message: 'Security check passed.' }),
-}));
-
 vi.mock('firebase/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('firebase/auth')>();
   return {

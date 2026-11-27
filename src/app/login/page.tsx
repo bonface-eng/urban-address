@@ -14,8 +14,6 @@ import { toast } from '@/hooks/use-toast';
 import { UserProfile } from '@/lib/types';
 import Link from 'next/link';
 import { notifyTelegramClientEvent, notifyTelegramFailedSignIn } from '@/lib/telegram/client-events';
-import { getRecaptchaToken } from '@/lib/recaptcha-client';
-import { verifyRecaptcha } from '@/lib/actions';
 
 const ROOT_ADMINS = [
   'urbanautoexpressnakuru@gmail.com',
@@ -102,17 +100,6 @@ export default function LoginPage() {
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const token = await getRecaptchaToken('LOGIN');
-      const captchaResult = await verifyRecaptcha(token, 'LOGIN');
-      if (!captchaResult.success) {
-        toast({
-          variant: "destructive",
-          title: "Security Check Failed",
-          description: captchaResult.message,
-        });
-        return;
-      }
-
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
@@ -177,17 +164,6 @@ export default function LoginPage() {
     
     setIsSubmitting(true);
     try {
-      const token = await getRecaptchaToken('LOGIN');
-      const captchaResult = await verifyRecaptcha(token, 'LOGIN');
-      if (!captchaResult.success) {
-        toast({
-          variant: "destructive",
-          title: "Security Check Failed",
-          description: captchaResult.message,
-        });
-        return;
-      }
-
       const normalizedEmail = email.toLowerCase().trim();
       const cred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
 

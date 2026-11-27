@@ -4,7 +4,6 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command } f
 import { SYSTEM_CONFIG } from './config';
 import * as admin from 'firebase-admin';
 import { getAdminApp, getDbAdmin } from './firebase-admin';
-import { verifyRecaptchaServer } from '@/lib/recaptcha';
 
 const ROOT_ADMIN_EMAILS = [
   'urbanautoexpressnakuru@gmail.com',
@@ -62,13 +61,6 @@ async function requireAdminCaller(idToken?: string | null) {
     throw new Error('ADMIN_PRIVILEGES_REQUIRED');
   }
   return { uid: decoded.uid, email, role, app, auth, db };
-}
-
-/**
- * reCAPTCHA Server Action Verification
- */
-export async function verifyRecaptcha(token: string | null, action?: string) {
-  return verifyRecaptchaServer(token, action);
 }
 
 function getR2Client() {
