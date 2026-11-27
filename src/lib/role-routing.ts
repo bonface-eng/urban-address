@@ -120,7 +120,8 @@ export function clearObsoleteTerminalStorage(): void {
         lower.startsWith('uax_pin_') ||
         lower.startsWith('uax_legacy_') ||
         lower.startsWith('terminal_security_') ||
-        lower.startsWith('terminal-security-');
+        lower.startsWith('terminal-security-') ||
+        lower.startsWith('uax_admin_');
       const isObsoletePinGateKey =
         lower.includes('pin') &&
         (lower.includes('migrat') ||
@@ -130,8 +131,15 @@ export function clearObsoleteTerminalStorage(): void {
           lower.includes('version') ||
           lower.includes('reset') ||
           lower.includes('require'));
+      const isObsoleteAdminGateKey =
+        (lower.includes('admin') || lower.startsWith('uax_')) &&
+        (lower.includes('otp') ||
+          lower.includes('verif') ||
+          lower.includes('daily') ||
+          lower.includes('claim') ||
+          lower.includes('guard'));
 
-      if (isObsoletePrefix || isObsoletePinGateKey) {
+      if (isObsoletePrefix || isObsoletePinGateKey || isObsoleteAdminGateKey) {
         try {
           storage.removeItem(key);
         } catch {

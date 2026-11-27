@@ -9,7 +9,7 @@ type SendEmailInput = {
 };
 
 const SENDERS: Record<EmailSender, string> = {
-  auth: 'Urban Auto Express Security <otp@urbanautoexpress.com>',
+  auth: 'Urban Auto Express Accounts <auth@urbanautoexpress.com>',
   finance: 'Urban Auto Express Finance <finance@urbanautoexpress.com>',
   general: 'Urban Auto Express <mail@urbanautoexpress.com>',
 };
