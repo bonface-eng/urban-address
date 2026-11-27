@@ -189,7 +189,16 @@ export default function LoungePOS() {
   }, [products, activeCategory, searchTerm]);
 
   const addToCart = (product: Product) => {
-    if (product.stockLevel <= 0) {
+    if (product.price === null || product.price === undefined || product.price <= 0) {
+      toast({
+        variant: "destructive",
+        title: "Price Required",
+        description: `Please set a price for ${product.name} in Inventory before selling.`
+      });
+      return;
+    }
+    const hasUntrackedStock = (product as any).track_stock === false || product.stockLevel === null || product.stockLevel === undefined;
+    if (!hasUntrackedStock && (product.stockLevel ?? 0) <= 0) {
       toast({ variant: "destructive", title: "Out of Stock" });
       return;
     }
@@ -200,7 +209,7 @@ export default function LoungePOS() {
         newCart[existingIdx] = { ...newCart[existingIdx], quantity: newCart[existingIdx].quantity + 1 };
         return newCart;
       }
-      return [...prev, { productId: product.id!, name: product.name, price: product.price, quantity: 1, category: product.category, status: 'DRAFT' }];
+      return [...prev, { productId: product.id!, name: product.name, price: product.price!, quantity: 1, category: product.category, status: 'DRAFT' }];
     });
     setCheckoutStep('CART');
   };

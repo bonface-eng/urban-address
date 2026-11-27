@@ -144,7 +144,12 @@ export default function BranchOrderingPage() {
       toast({ variant: 'destructive', title: 'Item unavailable', description: 'This item cannot be added right now.' });
       return;
     }
-    if (product.unit !== 'CARWASH' && (product.stockLevel ?? 0) <= 0) {
+    if (product.price === null || product.price === undefined || product.price <= 0) {
+      toast({ title: 'Price on Request', description: 'Contact our team via WhatsApp or at the counter for current pricing.' });
+      return;
+    }
+    const hasUntracked = (product as any).track_stock === false || (product as any).trackStock === false || product.stockLevel === null;
+    if (product.unit !== 'CARWASH' && !hasUntracked && (product.stockLevel ?? 0) <= 0) {
       toast({ variant: 'destructive', title: 'Sold out', description: 'This item is currently out of stock.' });
       return;
     }
@@ -258,6 +263,15 @@ export default function BranchOrderingPage() {
              </p>
           </div>
 
+          {isLounge && (
+            <div className="mb-8 rounded-2xl bg-amber-500/10 border border-amber-500/20 p-4 flex items-center gap-3">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white font-black text-xs">18+</span>
+              <p className="text-xs font-semibold text-amber-900">
+                Alcohol & Tobacco: Sales are strictly restricted to customers 18 years of age or older. Valid identification is required upon collection or delivery.
+              </p>
+            </div>
+          )}
+
           {loading && products.length === 0 ? (
             <div className="py-40 text-center flex flex-col items-center gap-8" role="status" aria-live="polite">
               <Loader2 className="w-10 h-10 animate-spin text-zinc-200" />
@@ -292,23 +306,45 @@ export default function BranchOrderingPage() {
                     </div>
                   </div>
 
-                  <div className="p-3 md:p-6 flex flex-col flex-1 justify-between gap-3 md:gap-6">
-                    <div className="space-y-0.5 md:space-y-1">
-                      <h4 className="text-[10px] md:text-sm font-black text-zinc-900 uppercase tracking-tight leading-tight line-clamp-2">{product.name}</h4>
-                    </div>
-                    <div className="flex items-center justify-between pt-3 md:pt-5 border-t border-zinc-50">
-                      <div className="space-y-0 min-w-0">
-                         <p className="text-[7px] md:text-[8px] font-black uppercase text-zinc-300 tracking-widest truncate">KES</p>
-                         <p className="text-xs md:text-lg font-black text-zinc-900 tracking-tighter truncate">{product.price.toLocaleString()}</p>
+                    <div className="p-3 md:p-6 flex flex-col flex-1 justify-between gap-3 md:gap-6">
+                      <div className="space-y-0.5 md:space-y-1">
+                        <h4 className="text-[10px] md:text-sm font-black text-zinc-900 uppercase tracking-tight leading-tight line-clamp-2">{product.name}</h4>
+                        {product.size && (
+                          <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest block">
+                            {product.size}{product.sizeUnit || ''}
+                          </span>
+                        )}
                       </div>
-                      <button 
-                        onClick={(e) => handleAdd(e, product)}
-                        className="w-8 h-8 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-90 bg-zinc-900 text-white hover:bg-primary"
-                      >
-                        <Plus className="w-4 h-4 md:w-5 md:h-5" />
-                      </button>
+                      <div className="flex items-center justify-between pt-3 md:pt-5 border-t border-zinc-50">
+                        <div className="space-y-0 min-w-0">
+                          {product.price !== null && product.price !== undefined && product.price > 0 ? (
+                            <>
+                              <p className="text-[7px] md:text-[8px] font-black uppercase text-zinc-300 tracking-widest truncate">KES</p>
+                              <p className="text-xs md:text-lg font-black text-zinc-900 tracking-tighter truncate">{product.price.toLocaleString()}</p>
+                            </>
+                          ) : (
+                            <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[8px] md:text-[9px] font-black uppercase px-2 py-0.5">
+                              Price on Request
+                            </Badge>
+                          )}
+                        </div>
+                        {product.price !== null && product.price !== undefined && product.price > 0 ? (
+                          <button 
+                            onClick={(e) => handleAdd(e, product)}
+                            className="w-8 h-8 md:w-12 md:h-12 rounded-xl md:rounded-2xl flex items-center justify-center transition-all shadow-lg active:scale-90 bg-zinc-900 text-white hover:bg-primary"
+                          >
+                            <Plus className="w-4 h-4 md:w-5 md:h-5" />
+                          </button>
+                        ) : (
+                          <button 
+                            onClick={(e) => { e.stopPropagation(); router.push(`/client/product/${product.id}`); }}
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-50 text-amber-700 hover:bg-amber-100 text-[8px] md:text-[9px] font-black uppercase tracking-wider"
+                          >
+                            Inquire
+                          </button>
+                        )}
+                      </div>
                     </div>
-                  </div>
                 </div>
               ))}
             </div>

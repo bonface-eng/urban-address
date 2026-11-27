@@ -232,10 +232,18 @@ export default function CarwashPOS() {
   }, [services, searchTerm, jobType]);
 
   const addToCart = (product: Product) => {
+    if (product.price === null || product.price === undefined || product.price <= 0) {
+      toast({
+        variant: "destructive",
+        title: "Price Required",
+        description: `Please set a price for ${product.name} in Inventory before servicing.`
+      });
+      return;
+    }
     setCart(prev => {
       const exists = prev.find(i => i.productId === product.id);
       if (exists) return prev;
-      return [...prev, { productId: product.id!, name: product.name, price: product.price, quantity: 1, category: product.category, status: 'DRAFT', commission: product.commission || 30 }];
+      return [...prev, { productId: product.id!, name: product.name, price: product.price!, quantity: 1, category: product.category, status: 'DRAFT', commission: product.commission || 30 }];
     });
     setCheckoutStep('CART');
   };

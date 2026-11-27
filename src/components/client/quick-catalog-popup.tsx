@@ -190,10 +190,12 @@ export function QuickCatalogPopup({ isOpen, onClose, unit, initialCategory }: Qu
                            </div>
                            
                            <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
-                              <span className="text-sm font-black text-zinc-900 tracking-tighter">KES {product.price.toLocaleString()}</span>
+                              <span className="text-sm font-black text-zinc-900 tracking-tighter">
+                                {product.price !== null && product.price !== undefined && product.price > 0 ? `KES ${product.price.toLocaleString()}` : 'Price on Request'}
+                              </span>
                               <Button 
                                 onClick={(e) => handleAddToCart(e, product)}
-                                disabled={product.stockLevel <= 0}
+                                disabled={product.stockLevel <= 0 || product.price === null || product.price === undefined || product.price <= 0}
                                 size="sm" 
                                 className="h-9 px-4 bg-zinc-900 text-white hover:bg-primary rounded-xl font-black uppercase text-[8px] tracking-widest gap-2 shadow-lg transition-all"
                               >

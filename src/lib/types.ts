@@ -110,17 +110,27 @@ export interface Review {
 export interface Product {
   id?: string;
   name: string;
+  original_name?: string;
   category: string;
+  subcategory?: string;
+  description?: string;
   price: number;
   stockLevel: number;
   minStock: number;
   barcode?: string;
   unit: BusinessUnit;
   image?: string;
-  size?: number;
+  image_url?: string;
+  image_asset_key?: string;
+  size?: number | string;
   sizeUnit?: string;
   commission?: number;
   commissionNightShift?: number;
+  track_stock?: boolean;
+  is_active?: boolean;
+  needs_review?: boolean;
+  review_notes?: string;
+  source_ref?: string;
   // Stock Take Fields
   lastCountedStock?: number | null;
   lastCountedAt?: number | null;

@@ -90,7 +90,7 @@ import Link from 'next/link';
 
 const CATEGORIES = ['Accessories', 'Oils', 'Cleaning', 'Tyres', 'Parts', 'Drinks', 'Food', 'Tobacco', 'Other'];
 
-type StockStatusFilter = 'ALL' | 'IN_STOCK' | 'LOW' | 'OUT' | 'ARCHIVED';
+type StockStatusFilter = 'ALL' | 'IN_STOCK' | 'LOW' | 'OUT' | 'NEEDS_PRICE' | 'NEEDS_STOCK' | 'NEEDS_REVIEW' | 'MISSING_IMAGE' | 'ARCHIVED';
 type SortOption = 'name_asc' | 'name_desc' | 'price_desc' | 'price_asc' | 'stock_asc' | 'stock_desc' | 'value_desc';
 
 export default function InventoryCatalogue() {
@@ -99,6 +99,8 @@ export default function InventoryCatalogue() {
   
   const [mounted, setMounted] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [inlinePriceVal, setInlinePriceVal] = useState<string>('');
   
   const [activeUnitTab, setActiveUnitTab] = useState<BusinessUnit>(() => {
     if (typeof window !== 'undefined') {
@@ -307,6 +309,27 @@ export default function InventoryCatalogue() {
     }
   };
 
+  const handleQuickPriceUpdate = async (item: Product, newPrice: number | null) => {
+    if (!firestore || !profile || !item.id) return;
+    try {
+      await updateDoc(doc(firestore, 'inventory', item.id), { 
+        price: newPrice, 
+        updatedBy: profile.email || profile.uid,
+        updatedAt: Date.now() 
+      });
+      await addDoc(collection(firestore, 'audit_logs'), {
+        action: 'PRICE_UPDATE',
+        userId: profile.uid,
+        details: `Updated price for ${item.name} from ${item.price ?? 'NULL'} to ${newPrice ?? 'NULL'}`,
+        timestamp: Date.now(),
+        severity: 'INFO'
+      });
+      toast({ title: "Price Updated", description: `${item.name}: ${newPrice !== null ? `KES ${newPrice.toLocaleString()}` : 'Price unset'}` });
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Price update failed", description: err.message });
+    }
+  };
+
   const handleToggleArchive = async (item: Product) => {
     if (!firestore || !profile) return;
     const newArchived = !item.archived;
@@ -387,24 +410,28 @@ export default function InventoryCatalogue() {
       return;
     }
 
-    const headers = ['ID', 'Name', 'Category', 'Unit', 'Barcode', 'Sale Price (KES)', 'Cost Price (KES)', 'Stock Level', 'Min Stock Alert', 'Stock Value (KES)', 'Status'];
+    const headers = ['ID', 'Name', 'Category', 'Subcategory', 'Size', 'Unit', 'Barcode', 'Sale Price (KES)', 'Cost Price (KES)', 'Stock Level', 'Min Stock Alert', 'Stock Value (KES)', 'Needs Review', 'Review Notes', 'Status'];
     const rows = filteredInventory.map(item => {
-      const isLow = item.unit !== 'CARWASH' && (item.stockLevel || 0) <= (item.minStock || 0);
-      const isOut = item.unit !== 'CARWASH' && (item.stockLevel || 0) === 0;
+      const isLow = item.unit !== 'CARWASH' && item.stockLevel !== null && (item.stockLevel || 0) <= (item.minStock || 0);
+      const isOut = item.unit !== 'CARWASH' && item.stockLevel !== null && (item.stockLevel || 0) === 0;
       const statusStr = item.archived ? 'ARCHIVED' : (item.unit === 'CARWASH' ? 'SERVICE' : (isOut ? 'OUT OF STOCK' : (isLow ? 'LOW STOCK' : 'IN STOCK')));
-      const itemVal = item.unit === 'CARWASH' ? 0 : (item.price * (item.stockLevel || 0));
+      const itemVal = item.unit === 'CARWASH' ? 0 : ((item.price || 0) * (item.stockLevel || 0));
 
       return [
         `"${item.id || ''}"`,
         `"${item.name.replace(/"/g, '""')}"`,
         `"${item.category}"`,
+        `"${(item as any).subcategory || ''}"`,
+        `"${item.size || ''}"`,
         `"${item.unit}"`,
         `"${item.barcode || ''}"`,
-        item.price || 0,
+        item.price !== null && item.price !== undefined ? item.price : 'UNSET',
         item.costPrice || 0,
-        item.unit === 'CARWASH' ? 'UNLIMITED' : (item.stockLevel || 0),
+        item.unit === 'CARWASH' ? 'UNLIMITED' : (item.stockLevel !== null && item.stockLevel !== undefined ? item.stockLevel : 'UNSET'),
         item.minStock || 0,
         itemVal,
+        `"${(item as any).needs_review ? 'YES' : 'NO'}"`,
+        `"${((item as any).review_notes || '').replace(/"/g, '""')}"`,
         `"${statusStr}"`
       ].join(',');
     });
@@ -514,11 +541,19 @@ export default function InventoryCatalogue() {
 
       let matchesStatus = true;
       if (stockStatusFilter === 'IN_STOCK') {
-        matchesStatus = item.unit === 'CARWASH' || (item.stockLevel || 0) > (item.minStock || 0);
+        matchesStatus = item.unit === 'CARWASH' || (item.stockLevel !== null && item.stockLevel !== undefined && (item.stockLevel || 0) > (item.minStock || 0));
       } else if (stockStatusFilter === 'LOW') {
-        matchesStatus = item.unit !== 'CARWASH' && (item.stockLevel || 0) <= (item.minStock || 0) && (item.stockLevel || 0) > 0;
+        matchesStatus = item.unit !== 'CARWASH' && item.stockLevel !== null && item.stockLevel !== undefined && (item.stockLevel || 0) <= (item.minStock || 0) && (item.stockLevel || 0) > 0;
       } else if (stockStatusFilter === 'OUT') {
-        matchesStatus = item.unit !== 'CARWASH' && (item.stockLevel || 0) === 0;
+        matchesStatus = item.unit !== 'CARWASH' && item.stockLevel !== null && item.stockLevel !== undefined && (item.stockLevel || 0) === 0;
+      } else if (stockStatusFilter === 'NEEDS_PRICE') {
+        matchesStatus = item.price === null || item.price === undefined || item.price <= 0;
+      } else if (stockStatusFilter === 'NEEDS_STOCK') {
+        matchesStatus = item.unit !== 'CARWASH' && (item.stockLevel === null || item.stockLevel === undefined);
+      } else if (stockStatusFilter === 'MISSING_IMAGE') {
+        matchesStatus = !item.image && !(item as any).image_url;
+      } else if (stockStatusFilter === 'NEEDS_REVIEW') {
+        matchesStatus = (item as any).needs_review === true;
       }
 
       return matchesUnit && matchesCategory && matchesSearch && matchesStatus;
@@ -526,11 +561,11 @@ export default function InventoryCatalogue() {
       switch (sortBy) {
         case 'name_asc': return a.name.localeCompare(b.name);
         case 'name_desc': return b.name.localeCompare(a.name);
-        case 'price_desc': return b.price - a.price;
-        case 'price_asc': return a.price - b.price;
-        case 'stock_desc': return (b.stockLevel || 0) - (a.stockLevel || 0);
-        case 'stock_asc': return (a.stockLevel || 0) - (b.stockLevel || 0);
-        case 'value_desc': return (b.price * (b.stockLevel || 0)) - (a.price * (a.stockLevel || 0));
+        case 'price_desc': return (b.price ?? 0) - (a.price ?? 0);
+        case 'price_asc': return (a.price ?? 0) - (b.price ?? 0);
+        case 'stock_desc': return (b.stockLevel ?? 0) - (a.stockLevel ?? 0);
+        case 'stock_asc': return (a.stockLevel ?? 0) - (b.stockLevel ?? 0);
+        case 'value_desc': return ((b.price ?? 0) * (b.stockLevel ?? 0)) - ((a.price ?? 0) * (a.stockLevel ?? 0));
         default: return 0;
       }
     });
@@ -545,6 +580,7 @@ export default function InventoryCatalogue() {
   const stats = useMemo(() => {
     if (!inventory) return { 
       total: 0, lowStock: 0, outOfStock: 0, archivedCount: 0,
+      needsPriceCount: 0, needsStockCount: 0, needsReviewCount: 0, missingImageCount: 0,
       totalValue: 0, totalCost: 0, estProfit: 0, lowStockItems: [],
       outOfStockItems: [], categoryValues: {} as Record<string, number>
     };
@@ -553,8 +589,12 @@ export default function InventoryCatalogue() {
     const activeItems = unitInventory.filter(i => !i.archived);
     const archivedItems = unitInventory.filter(i => i.archived);
     
-    const lowStockItems = activeItems.filter(i => i.unit !== 'CARWASH' && (i.stockLevel || 0) <= (i.minStock || 0) && (i.stockLevel || 0) > 0);
-    const outOfStockItems = activeItems.filter(i => i.unit !== 'CARWASH' && (i.stockLevel || 0) === 0);
+    const lowStockItems = activeItems.filter(i => i.unit !== 'CARWASH' && i.stockLevel !== null && (i.stockLevel || 0) <= (i.minStock || 0) && (i.stockLevel || 0) > 0);
+    const outOfStockItems = activeItems.filter(i => i.unit !== 'CARWASH' && i.stockLevel !== null && (i.stockLevel || 0) === 0);
+    const needsPriceItems = activeItems.filter(i => i.price === null || i.price === undefined || i.price <= 0);
+    const needsStockItems = activeItems.filter(i => i.unit !== 'CARWASH' && (i.stockLevel === null || i.stockLevel === undefined));
+    const needsReviewItems = activeItems.filter(i => (i as any).needs_review === true);
+    const missingImageItems = activeItems.filter(i => !i.image && !(i as any).image_url);
 
     let totalValue = 0;
     let totalCost = 0;
@@ -572,7 +612,10 @@ export default function InventoryCatalogue() {
 
     return {
       total: activeItems.length, lowStock: lowStockItems.length, outOfStock: outOfStockItems.length,
-      archivedCount: archivedItems.length, totalValue, totalCost, estProfit: totalValue - totalCost,
+      archivedCount: archivedItems.length, needsPriceCount: needsPriceItems.length,
+      needsStockCount: needsStockItems.length, needsReviewCount: needsReviewItems.length,
+      missingImageCount: missingImageItems.length,
+      totalValue, totalCost, estProfit: totalValue - totalCost,
       lowStockItems, outOfStockItems, categoryValues
     };
   }, [inventory, activeUnitTab]);
@@ -584,16 +627,20 @@ export default function InventoryCatalogue() {
     setIsSubmitting(true);
     toast({ title: "Saving product", description: `Updating the inventory record for ${name}.` });
     
+    const parsedPrice = price.trim() !== '' ? Math.max(0, parseFloat(price)) : null;
+    const parsedStock = stockLevel.trim() !== '' ? Math.max(0, parseInt(stockLevel)) : null;
+
     const productData = { 
       name, 
       category, 
-      price: Number(price), 
+      price: parsedPrice, 
       costPrice: Number(costPrice) || 0,
-      stockLevel: Number(stockLevel), 
-      minStock: Number(minStock), 
+      stockLevel: parsedStock, 
+      minStock: Number(minStock) || 0, 
       barcode: barcode || null, 
       unit: unit || activeUnitTab, 
       image: imageUrl || null, 
+      updatedBy: profile.email || profile.uid,
       updatedAt: Date.now() 
     };
 
@@ -693,7 +740,7 @@ export default function InventoryCatalogue() {
     setEditingItem(item);
     if (item.unit === 'CARWASH') {
       setServiceName(item.name);
-      setServicePrice(item.price.toString());
+      setServicePrice(item.price !== null && item.price !== undefined ? item.price.toString() : '');
       setServiceCategory(item.category);
       setServiceCommission(item.commission?.toString() || '30');
       setServiceCommissionNight(item.commissionNightShift?.toString() || '30');
@@ -702,13 +749,13 @@ export default function InventoryCatalogue() {
     } else {
       setName(item.name);
       setCategory(item.category);
-      setPrice(item.price.toString());
+      setPrice(item.price !== null && item.price !== undefined ? item.price.toString() : '');
       setCostPrice(item.costPrice?.toString() || '');
-      setStockLevel(item.stockLevel.toString());
-      setMinStock(item.minStock.toString());
+      setStockLevel(item.stockLevel !== null && item.stockLevel !== undefined ? item.stockLevel.toString() : '');
+      setMinStock(item.minStock?.toString() || '5');
       setBarcode(item.barcode || '');
       setUnit(item.unit);
-      setImageUrl(item.image || '');
+      setImageUrl(item.image || (item as any).image_url || '');
       openWorkflow('product', item.id);
     }
   };
@@ -795,11 +842,15 @@ export default function InventoryCatalogue() {
                     <div className="flex items-center gap-2"><Filter className="w-3.5 h-3.5 text-zinc-400" /><SelectValue /></div>
                   </SelectTrigger>
                   <SelectContent className="rounded-2xl border-none shadow-2xl">
-                    <SelectItem value="ALL" className="text-[10px] font-black uppercase">All Statuses</SelectItem>
+                    <SelectItem value="ALL" className="text-[10px] font-black uppercase">All Statuses ({stats.total})</SelectItem>
                     <SelectItem value="IN_STOCK" className="text-[10px] font-black uppercase text-green-600">In Stock</SelectItem>
-                    <SelectItem value="LOW" className="text-[10px] font-black uppercase text-amber-600">Low Stock</SelectItem>
-                    <SelectItem value="OUT" className="text-[10px] font-black uppercase text-red-600">Out of Stock</SelectItem>
-                    <SelectItem value="ARCHIVED" className="text-[10px] font-black uppercase text-zinc-400">Archived</SelectItem>
+                    <SelectItem value="LOW" className="text-[10px] font-black uppercase text-amber-600">Low Stock ({stats.lowStock})</SelectItem>
+                    <SelectItem value="OUT" className="text-[10px] font-black uppercase text-red-600">Out of Stock ({stats.outOfStock})</SelectItem>
+                    <SelectItem value="NEEDS_PRICE" className="text-[10px] font-black uppercase text-amber-600">Needs Price ({stats.needsPriceCount})</SelectItem>
+                    <SelectItem value="NEEDS_STOCK" className="text-[10px] font-black uppercase text-blue-600">Needs Stock ({stats.needsStockCount})</SelectItem>
+                    <SelectItem value="NEEDS_REVIEW" className="text-[10px] font-black uppercase text-purple-600">Needs Review ({stats.needsReviewCount})</SelectItem>
+                    <SelectItem value="MISSING_IMAGE" className="text-[10px] font-black uppercase text-zinc-500">Missing Image ({stats.missingImageCount})</SelectItem>
+                    <SelectItem value="ARCHIVED" className="text-[10px] font-black uppercase text-zinc-400">Archived ({stats.archivedCount})</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -851,6 +902,63 @@ export default function InventoryCatalogue() {
               <Plus className="w-4 h-4" /> Add {activeUnitTab === 'CARWASH' ? 'Service' : 'Item'}
             </Button>
           </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 px-2 mb-4">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => { setStockStatusFilter('ALL'); setCurrentPage(1); }}
+            className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'ALL' ? "bg-zinc-900 text-white" : "bg-white text-zinc-500 hover:bg-zinc-100 border border-zinc-200")}
+          >
+            All ({stats.total})
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => { setStockStatusFilter('NEEDS_PRICE'); setCurrentPage(1); }}
+            className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'NEEDS_PRICE' ? "bg-amber-600 text-white" : "bg-white text-amber-600 hover:bg-amber-50 border border-amber-200")}
+          >
+            Needs Price ({stats.needsPriceCount})
+          </Button>
+          {activeUnitTab !== 'CARWASH' && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => { setStockStatusFilter('NEEDS_STOCK'); setCurrentPage(1); }}
+              className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'NEEDS_STOCK' ? "bg-blue-600 text-white" : "bg-white text-blue-600 hover:bg-blue-50 border border-blue-200")}
+            >
+              Needs Stock ({stats.needsStockCount})
+            </Button>
+          )}
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => { setStockStatusFilter('NEEDS_REVIEW'); setCurrentPage(1); }}
+            className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'NEEDS_REVIEW' ? "bg-purple-600 text-white" : "bg-white text-purple-600 hover:bg-purple-50 border border-purple-200")}
+          >
+            Needs Review ({stats.needsReviewCount})
+          </Button>
+          {stats.lowStock > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => { setStockStatusFilter('LOW'); setCurrentPage(1); }}
+              className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'LOW' ? "bg-amber-500 text-white" : "bg-white text-amber-500 hover:bg-amber-50 border border-amber-200")}
+            >
+              Low Stock ({stats.lowStock})
+            </Button>
+          )}
+          {stats.outOfStock > 0 && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => { setStockStatusFilter('OUT'); setCurrentPage(1); }}
+              className={cn("h-7 px-3 rounded-full text-[9px] font-black uppercase tracking-wider", stockStatusFilter === 'OUT' ? "bg-red-500 text-white" : "bg-white text-red-500 hover:bg-red-50 border border-red-200")}
+            >
+              Out of Stock ({stats.outOfStock})
+            </Button>
+          )}
         </div>
 
         <Card className="ua-inventory-table border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
@@ -909,7 +1017,44 @@ export default function InventoryCatalogue() {
                         </div>
                       </TableCell>
                       <TableCell><Badge variant="outline" className="text-[7px] md:text-[8px] font-black uppercase border-zinc-200 px-2">{item.category}</Badge></TableCell>
-                      <TableCell className="text-right"><span className="text-xs md:text-sm font-black text-zinc-900">KES {item.price.toLocaleString()}</span></TableCell>
+                      <TableCell className="text-right">
+                        {editingPriceId === item.id ? (
+                          <div className="flex items-center justify-end gap-1">
+                            <Input
+                              type="number"
+                              value={inlinePriceVal}
+                              onChange={(e) => setInlinePriceVal(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  const val = inlinePriceVal.trim() !== '' ? Math.max(0, parseFloat(inlinePriceVal)) : null;
+                                  handleQuickPriceUpdate(item, val);
+                                  setEditingPriceId(null);
+                                } else if (e.key === 'Escape') {
+                                  setEditingPriceId(null);
+                                }
+                              }}
+                              onBlur={() => {
+                                const val = inlinePriceVal.trim() !== '' ? Math.max(0, parseFloat(inlinePriceVal)) : null;
+                                handleQuickPriceUpdate(item, val);
+                                setEditingPriceId(null);
+                              }}
+                              autoFocus
+                              className="h-8 w-24 text-right text-xs font-bold"
+                            />
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setEditingPriceId(item.id!); setInlinePriceVal(item.price?.toString() ?? ''); }}
+                            className="group/p inline-flex items-center justify-end gap-1 hover:text-primary transition-colors text-right"
+                            title="Click to edit price"
+                          >
+                            <span className={cn("text-xs md:text-sm font-black", item.price === null || item.price === undefined ? "text-amber-600 font-semibold italic" : "text-zinc-900")}>
+                              {item.price !== null && item.price !== undefined ? `KES ${item.price.toLocaleString()}` : "Set Price"}
+                            </span>
+                            <Edit2 className="w-3 h-3 text-zinc-300 group-hover/p:text-primary opacity-0 group-hover/p:opacity-100 transition-opacity" />
+                          </button>
+                        )}
+                      </TableCell>
                       <TableCell className="text-right">
                          <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center justify-end gap-1.5">
@@ -917,16 +1062,19 @@ export default function InventoryCatalogue() {
                                 <button onClick={() => handleQuickStockAdjust(item, -1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Minus className="w-3 h-3" /></button>
                               )}
                               <span className={cn("text-xs md:text-sm font-black min-w-[24px] text-center", isOut ? "text-red-500" : isLow ? "text-amber-500" : "text-zinc-900")}>
-                                {item.unit === 'CARWASH' ? 'INF' : item.stockLevel}
+                                {item.unit === 'CARWASH' ? 'INF' : (item.stockLevel !== null && item.stockLevel !== undefined ? item.stockLevel : 'Unset')}
                               </span>
                               {item.unit !== 'CARWASH' && (
                                 <button onClick={() => handleQuickStockAdjust(item, 1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Plus className="w-3 h-3" /></button>
                               )}
                             </div>
+                            {item.stockLevel === null && <Badge className="bg-amber-100 text-amber-800 border-none text-[6px] font-black uppercase px-1 h-3">Uncounted</Badge>}
                             {isOut && <Badge className="bg-red-500 text-white border-none text-[6px] font-black uppercase px-1 h-3 animate-pulse">Out of Stock</Badge>}
                          </div>
                       </TableCell>
-                      <TableCell className="text-right font-black text-zinc-500 text-xs">KES {(item.price * (item.unit === 'CARWASH' ? 0 : item.stockLevel)).toLocaleString()}</TableCell>
+                      <TableCell className="text-right font-black text-zinc-500 text-xs">
+                        {item.unit === 'CARWASH' ? 'KES 0' : (item.price !== null && item.stockLevel !== null ? `KES ${((item.price || 0) * (item.stockLevel || 0)).toLocaleString()}` : '—')}
+                      </TableCell>
                       <TableCell className="text-right pr-8">
                         <div className="flex items-center justify-end gap-1">
                           <Button onClick={() => openDetails(item)} variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-primary"><Info className="w-4 h-4" /></Button>
@@ -1086,7 +1234,7 @@ export default function InventoryCatalogue() {
               <div className="flex h-36 w-36 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
                 {editingItem.image ? <img src={editingItem.image} alt={editingItem.name} className="h-full w-full object-contain p-2" /> : <Package className="h-10 w-10 text-zinc-300" />}
               </div>
-              <div className="min-w-0"><h2 className="text-xl font-black uppercase">{editingItem.name}</h2><p className="mt-1 text-sm text-zinc-500">{editingItem.category} · {editingItem.unit}</p><p className="mt-4 text-2xl font-black">KES {editingItem.price.toLocaleString()}</p><p className="mt-1 text-xs text-zinc-500">Barcode: {editingItem.barcode || 'Not set'}</p></div>
+              <div className="min-w-0"><h2 className="text-xl font-black uppercase">{editingItem.name}</h2><p className="mt-1 text-sm text-zinc-500">{editingItem.category} · {editingItem.unit}</p><p className="mt-4 text-2xl font-black">{editingItem.price !== null && editingItem.price !== undefined ? `KES ${editingItem.price.toLocaleString()}` : 'Price on Request'}</p><p className="mt-1 text-xs text-zinc-500">Barcode: {editingItem.barcode || 'Not set'}</p></div>
             </div>
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               <div className="rounded-xl bg-zinc-50 p-4"><p className="text-xs text-zinc-500">Stock on hand</p><p className="mt-1 text-xl font-black">{editingItem.unit === 'CARWASH' ? 'Unlimited' : editingItem.stockLevel}</p></div>

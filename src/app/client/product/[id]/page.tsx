@@ -86,8 +86,19 @@ export default function ProductDetailPage() {
     setActiveImage(productImages[0] || null);
   }, [productImages]);
 
+  const isRestricted18Plus = product?.category === 'Tobacco' || 
+    product?.category === 'Drinks' || 
+    (typeof product?.subcategory === 'string' && /vape|tobacco|beer|whisky|gin|vodka|rum|tequila|cognac|wine|liqueur/i.test(product.subcategory));
+
   const handleAddToCart = () => {
     if (!product) return;
+    if (product.price === null || product.price === undefined || product.price <= 0) {
+      toast({
+        title: "Price on Request",
+        description: "Please inquire via WhatsApp or ask our staff at the counter for current pricing."
+      });
+      return;
+    }
     addToCart(product, quantity);
     toast({
       title: "Order Updated",
@@ -97,7 +108,8 @@ export default function ProductDetailPage() {
 
   const handleWhatsAppOrder = () => {
     if (!product) return;
-    const message = `Hi Urban Auto Express, I would like to order ${quantity}x ${product.name} (KES ${(product.price * quantity).toLocaleString()}). Product Ref: ${product.id}`;
+    const priceStr = product.price !== null ? `(KES ${(product.price * quantity).toLocaleString()})` : `(Price on Request)`;
+    const message = `Hi Urban Auto Express, I would like to order ${quantity}x ${product.name} ${priceStr}. Product Ref: ${product.id}`;
     const encoded = encodeURIComponent(message);
     window.open(`https://wa.me/254785860753?text=${encoded}`, '_blank');
   };
@@ -163,16 +175,25 @@ export default function ProductDetailPage() {
                {product.name}
              </h1>
              <div className="flex items-center gap-6">
-                <p className="text-3xl font-black text-zinc-900">KES {product.price.toLocaleString()}</p>
+                <p className="text-3xl font-black text-zinc-900">
+                  {product.price !== null && product.price !== undefined ? `KES ${product.price.toLocaleString()}` : 'Price on Request'}
+                </p>
                 {product.size && (
                   <>
                     <div className="h-6 w-px bg-zinc-100" />
                     <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                      {product.size}{product.sizeUnit} Edition
+                      {product.size}{product.sizeUnit || ''}
                     </p>
                   </>
                 )}
              </div>
+
+             {isRestricted18Plus && (
+               <div className="mt-4 rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 flex items-center gap-3">
+                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-amber-500 text-white font-black text-xs">18+</span>
+                 <p className="text-[11px] font-semibold text-amber-900">Age Restricted: Must be 18 or older to purchase. ID verification required.</p>
+               </div>
+             )}
           </div>
 
           <div className="p-8 bg-zinc-50 rounded-2xl border border-zinc-100 space-y-6">
@@ -188,9 +209,10 @@ export default function ProductDetailPage() {
              <div className="grid gap-3">
                <Button 
                  onClick={handleAddToCart}
-                 className="w-full h-16 bg-zinc-900 hover:bg-zinc-800 text-white rounded-xl font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl transition-transform active:scale-95 flex items-center justify-center gap-4"
+                 disabled={product.price === null || product.price === undefined || product.price <= 0}
+                 className="w-full h-16 bg-zinc-900 hover:bg-zinc-800 disabled:opacity-50 text-white rounded-xl font-black uppercase text-[10px] tracking-[0.2em] shadow-2xl transition-transform active:scale-95 flex items-center justify-center gap-4"
                >
-                 <ShoppingCart className="w-4 h-4 text-primary" /> Purchase Online
+                 <ShoppingCart className="w-4 h-4 text-primary" /> {product.price !== null ? 'Purchase Online' : 'Price on Request'}
                </Button>
                
                <Button 

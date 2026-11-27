@@ -17,17 +17,21 @@ function numberOr(value: unknown, fallback: number) {
 }
 
 function publicProduct(id: string, data: Record<string, any>) {
-  const stock = numberOr(data.stockLevel, 0);
+  const stock = data.stockLevel !== null && data.stockLevel !== undefined ? Number(data.stockLevel) : null;
+  const rawPrice = data.price !== null && data.price !== undefined ? Number(data.price) : null;
+  const trackStock = data.trackStock !== false && data.track_stock !== false;
   return {
     id,
     name: typeof data.name === 'string' ? data.name : 'Unnamed product',
     category: typeof data.category === 'string' ? data.category : 'Other',
-    price: Math.max(0, numberOr(data.price, 0)),
+    subcategory: typeof data.subcategory === 'string' ? data.subcategory : undefined,
+    price: rawPrice !== null && !isNaN(rawPrice) ? Math.max(0, rawPrice) : null,
     // Public clients need availability, not the exact stock count.
-    stockLevel: stock > 0 ? 1 : 0,
+    stockLevel: stock !== null && !isNaN(stock) ? (stock > 0 ? 1 : 0) : null,
+    trackStock,
     unit: String(data.unit || '').toUpperCase(),
-    image: typeof data.image === 'string' ? data.image : '',
-    size: numberOr(data.size, 0) || undefined,
+    image: typeof data.imageUrl === 'string' && data.imageUrl ? data.imageUrl : (typeof data.image === 'string' ? data.image : ''),
+    size: data.size || undefined,
     sizeUnit: typeof data.sizeUnit === 'string' ? data.sizeUnit : undefined,
   };
 }
@@ -104,14 +108,17 @@ export async function GET(request: NextRequest) {
     const cached = await getCachedUnitCatalogue(unit);
     let products = cached.products
       .filter(product => !category || category === 'All' || product.category === category)
-      .filter(product => product.price >= minPrice && product.price <= maxPrice)
+      .filter(product => {
+        if (product.price === null) return minPrice === 0;
+        return product.price >= minPrice && product.price <= maxPrice;
+      })
       .filter(product => !search ||
         product.name.toLocaleLowerCase().includes(search) ||
         product.category.toLocaleLowerCase().includes(search));
 
     products.sort((a, b) => {
-      if (sort === 'price-asc') return a.price - b.price || a.name.localeCompare(b.name);
-      if (sort === 'price-desc') return b.price - a.price || a.name.localeCompare(b.name);
+      if (sort === 'price-asc') return (a.price ?? 0) - (b.price ?? 0) || a.name.localeCompare(b.name);
+      if (sort === 'price-desc') return (b.price ?? 0) - (a.price ?? 0) || a.name.localeCompare(b.name);
       return a.name.localeCompare(b.name) || a.id.localeCompare(b.id);
     });
 
