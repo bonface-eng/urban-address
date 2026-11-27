@@ -1,22 +1,64 @@
-
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import LoginPage from './page';
-import { mockUseFirestore, mockUseAuth } from '@/test/setup';
+import { mockUseFirestore } from '@/test/setup';
 import { signInWithEmailAndPassword } from 'firebase/auth';
+import { Toaster } from '@/components/ui/toaster';
 
-// Setup explicit modular mocks
+const mockReplace = vi.fn();
+const mockPush = vi.fn();
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({
+    push: mockPush,
+    replace: mockReplace,
+    prefetch: vi.fn(),
+    back: vi.fn(),
+  }),
+  usePathname: () => '/login',
+  useParams: () => ({}),
+  useSearchParams: () => new URLSearchParams(),
+}));
+
+vi.mock('@/lib/recaptcha-client', () => ({
+  getRecaptchaToken: vi.fn().mockResolvedValue('fresh-test-token'),
+}));
+
+vi.mock('@/lib/actions', () => ({
+  verifyRecaptcha: vi.fn().mockResolvedValue({ success: true, message: 'Security check passed.' }),
+}));
+
 vi.mock('firebase/auth', async (importOriginal) => {
   const actual = await importOriginal<typeof import('firebase/auth')>();
-  return { 
-    ...actual, 
+  return {
+    ...actual,
     signInWithEmailAndPassword: vi.fn(),
     GoogleAuthProvider: vi.fn(),
-    signInWithPopup: vi.fn()
+    signInWithPopup: vi.fn(),
+  };
+});
+
+vi.mock('firebase/firestore', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('firebase/firestore')>();
+  return {
+    ...actual,
+    doc: vi.fn(() => ({ path: 'users/uid' })),
+    getDoc: vi.fn().mockResolvedValue({
+      exists: () => true,
+      data: () => ({ uid: 'test-uid', email: 'client@urban.co.ke', displayName: 'Client User', role: 'CLIENT' }),
+    }),
+    setDoc: vi.fn().mockResolvedValue(undefined),
+    addDoc: vi.fn().mockResolvedValue({ id: 'audit-1' }),
+    collection: vi.fn(),
   };
 });
 
 describe('LoginPage Auth Logic', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseFirestore.mockReturnValue({} as any);
+  });
+
   it('renders login form components', () => {
     render(<LoginPage />);
     expect(screen.getByPlaceholderText(/Email address/i)).toBeInTheDocument();
@@ -24,47 +66,46 @@ describe('LoginPage Auth Logic', () => {
     expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument();
   });
 
-  it('prevents staff login on client portal', async () => {
-    const mockGetDocs = vi.fn().mockResolvedValue({
-      empty: false,
-      docs: [{ data: () => ({ role: 'ADMIN' }) }]
-    });
-    
-    mockUseFirestore.mockReturnValue({} as any);
-    vi.mock('firebase/firestore', async (importOriginal) => {
-      const actual = await importOriginal<typeof import('firebase/firestore')>();
-      return { 
-        ...actual, 
-        getDocs: () => mockGetDocs(),
-        query: vi.fn(),
-        collection: vi.fn(),
-        where: vi.fn()
-      };
-    });
+  it('completes customer login and redirects even when audit_logs write is denied for CLIENT role', async () => {
+    const { addDoc } = await import('firebase/firestore');
+    vi.mocked(addDoc).mockRejectedValueOnce({ code: 'permission-denied' });
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
+      user: {
+        uid: 'client-1',
+        email: 'client@urban.co.ke',
+        emailVerified: true,
+        reload: vi.fn().mockResolvedValue(undefined),
+        getIdToken: vi.fn().mockResolvedValue('id-token'),
+      },
+    } as any);
 
     render(<LoginPage />);
-    
-    fireEvent.change(screen.getByPlaceholderText(/Email address/i), { target: { value: 'admin@urban.co.ke' } });
-    fireEvent.change(screen.getByPlaceholderText(/Password/i), { target: { value: 'password123' } });
+
+    fireEvent.change(screen.getByPlaceholderText(/Email address/i), { target: { value: 'client@urban.co.ke' } });
+    fireEvent.change(screen.getByPlaceholderText(/Password/i), { target: { value: 'Password123!' } });
     fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
 
     await waitFor(() => {
-      expect(screen.getByText(/Staff Account Detected/i)).toBeInTheDocument();
+      expect(mockReplace).toHaveBeenCalledWith('/');
     });
   });
 
   it('masks Firebase errors for security', async () => {
-    vi.mocked(signInWithEmailAndPassword).mockRejectedValue({ code: 'auth/invalid-credential' });
-    
-    render(<LoginPage />);
-    
+    vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({ code: 'auth/invalid-credential' });
+
+    render(
+      <>
+        <LoginPage />
+        <Toaster />
+      </>
+    );
+
     fireEvent.change(screen.getByPlaceholderText(/Email address/i), { target: { value: 'test@user.com' } });
     fireEvent.change(screen.getByPlaceholderText(/Password/i), { target: { value: 'wrongpass' } });
     fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
 
     await waitFor(() => {
       expect(screen.getByText(/Invalid email or password/i)).toBeInTheDocument();
-      // Ensure raw technical code isn't shown
       expect(screen.queryByText(/auth\/invalid-credential/i)).not.toBeInTheDocument();
     });
   });

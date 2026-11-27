@@ -16,6 +16,8 @@ import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { cn } from '@/lib/utils';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
+import { getRecaptchaToken } from '@/lib/recaptcha-client';
+import { verifyRecaptcha } from '@/lib/actions';
 
 export default function SignUpPage() {
   const { user } = useUser();
@@ -85,15 +87,27 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
     try {
+      // 1. Fresh single-use reCAPTCHA check on submit
+      const token = await getRecaptchaToken('SIGNUP');
+      const captchaResult = await verifyRecaptcha(token, 'SIGNUP');
+      if (!captchaResult.success) {
+        toast({
+          variant: "destructive",
+          title: "Security Check Failed",
+          description: captchaResult.message,
+        });
+        return;
+      }
 
       // 2. Create Firebase Account
-      const cred = await createUserWithEmailAndPassword(auth, email, password);
-      await updateProfile(cred.user, { displayName: name });
+      const normalizedEmail = email.toLowerCase().trim();
+      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
+      await updateProfile(cred.user, { displayName: name.trim() });
       
       await setDoc(doc(firestore, 'users', cred.user.uid), {
         uid: cred.user.uid,
-        email: email.toLowerCase(),
-        displayName: name,
+        email: normalizedEmail,
+        displayName: name.trim(),
         role: 'CLIENT',
         createdAt: Date.now(),
         accountType: 'CLIENT',
@@ -106,7 +120,7 @@ export default function SignUpPage() {
         ...(marketingOptIn ? { marketingConsentUpdatedAt: Date.now(), marketingConsentSource: 'signup' } : {})
       });
 
-      await notifyTelegramClientEvent(cred.user, { type: 'SIGNUP', name });
+      void notifyTelegramClientEvent(cred.user, { type: 'SIGNUP', name: name.trim() });
       try {
         const idToken = await cred.user.getIdToken();
         const verificationResponse = await fetch('/api/auth/send-verification', {
@@ -127,10 +141,23 @@ export default function SignUpPage() {
         router.replace('/auth/verify-email');
       }
     } catch (error: any) {
+      const code = error?.code || '';
+      const friendlyMessage =
+        code === 'auth/email-already-in-use'
+          ? 'An account with this email already exists. Please sign in instead.'
+          : code === 'auth/invalid-email'
+            ? 'Please enter a valid email address.'
+            : code === 'auth/weak-password'
+              ? 'Please choose a stronger password (at least 8 characters).'
+              : code === 'auth/operation-not-allowed' || code === 'auth/unauthorized-domain'
+                ? 'Registration is not enabled for this domain yet. Please contact support.'
+                : code === 'auth/network-request-failed'
+                  ? 'Network error. Please check your internet connection and try again.'
+                  : error?.message || 'Could not complete registration. Please try again.';
       toast({
         variant: "destructive",
         title: "Registration Failed",
-        description: error.message || "Something went wrong.",
+        description: friendlyMessage,
       });
     } finally {
       setIsSubmitting(false);
@@ -145,6 +172,16 @@ export default function SignUpPage() {
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const token = await getRecaptchaToken('SIGNUP');
+      const captchaResult = await verifyRecaptcha(token, 'SIGNUP');
+      if (!captchaResult.success) {
+        toast({
+          variant: "destructive",
+          title: "Security Check Failed",
+          description: captchaResult.message,
+        });
+        return;
+      }
 
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -302,7 +339,7 @@ export default function SignUpPage() {
                     <div className={cn("h-full transition-all duration-500", strengthColor)} style={{ width: `${passwordStrength}%` }} />
                   </div>
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[9px] font-bold text-zinc-500">At least 8 characters, uppercase, number and symbol improve strength.</p>
+                    <p className="text-[9px] font-bold text-zinc-500">Password Strength: At least 8 characters, uppercase, number and symbol.</p>
                     <p className={cn("text-[9px] font-black uppercase tracking-widest", passwordStrength <= 25 ? "text-red-600" : passwordStrength <= 50 ? "text-amber-600" : passwordStrength <= 75 ? "text-blue-600" : "text-green-600")}>{strengthLabel}</p>
                   </div>
                 </div>

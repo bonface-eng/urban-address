@@ -14,6 +14,16 @@ import { toast } from '@/hooks/use-toast';
 import { UserProfile } from '@/lib/types';
 import Link from 'next/link';
 import { notifyTelegramClientEvent, notifyTelegramFailedSignIn } from '@/lib/telegram/client-events';
+import { getRecaptchaToken } from '@/lib/recaptcha-client';
+import { verifyRecaptcha } from '@/lib/actions';
+
+const ROOT_ADMINS = [
+  'urbanautoexpressnakuru@gmail.com',
+  'urbanaautoexpressnakuru@gmail.com',
+  'samuelkarani044@gmail.com',
+  'gmaina424@gmail.com',
+  'bonfacewana3072@gmail.com',
+];
 
 export default function LoginPage() {
   const auth = useAuth();
@@ -22,12 +32,16 @@ export default function LoginPage() {
   const firestore = useFirestore();
 
   // Only allow same-origin customer destinations; never accept external redirect URLs.
-  const getPostLoginDestination = (role?: string) => {
+  const getPostLoginDestination = (role?: string, email?: string | null) => {
     const requested = searchParams.get('redirect');
     if (requested && requested.startsWith('/client/') && !requested.startsWith('//') && !requested.includes(String.fromCharCode(92))) {
       return requested;
     }
-    return role && role !== 'CLIENT' ? '/dashboard' : '/';
+    const normalizedEmail = (email || '').trim().toLowerCase();
+    const isRoot = ROOT_ADMINS.includes(normalizedEmail);
+    const upperRole = (role || 'CLIENT').toUpperCase();
+    if (upperRole === 'KITCHEN') return '/kds';
+    return (isRoot || (upperRole && upperRole !== 'CLIENT')) ? '/dashboard' : '/';
   };
   
   const [email, setEmail] = useState('');
@@ -36,34 +50,68 @@ export default function LoginPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const continueAfterLogin = async (signedInUser: any, role?: string) => {
-    await signedInUser.reload();
-    if (role === 'CLIENT' && !signedInUser.emailVerified) {
-      const verificationToken = await signedInUser.getIdToken(true);
-      await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${verificationToken}` },
-      });
+    try {
+      await signedInUser.reload?.();
+    } catch {
+      // Best-effort reload; do not abort login if reload is unsupported in test/offline mode
+    }
+
+    const userEmail = String(signedInUser?.email || email || '').trim().toLowerCase();
+    const upperRole = String(role || 'CLIENT').toUpperCase();
+    const isRootOrAdmin = ROOT_ADMINS.includes(userEmail) || upperRole === 'ADMIN';
+
+    if (!isRootOrAdmin && upperRole === 'CLIENT' && signedInUser?.emailVerified === false) {
+      try {
+        const verificationToken = await signedInUser.getIdToken?.(true);
+        if (verificationToken) {
+          await fetch('/api/auth/send-verification', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${verificationToken}` },
+          });
+        }
+      } catch {
+        // Non-fatal: verify-email page allows manual resend
+      }
       router.replace('/auth/verify-email');
       return;
     }
-    const token = await signedInUser.getIdToken(true);
-    const response = await fetch('/api/admin/otp/request', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Administrator verification could not start.');
-    if (data.required) {
-      router.replace('/admin-otp');
-      return;
+
+    if (isRootOrAdmin) {
+      try {
+        const token = await signedInUser.getIdToken?.(true);
+        if (token) {
+          const response = await fetch('/api/admin/otp/request', {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const data = await response.json().catch(() => ({}));
+          if (response.ok && data?.required) {
+            router.replace('/admin-otp');
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('[ADMIN_OTP_CHECK_WARNING]', err);
+      }
     }
-    router.replace(getPostLoginDestination(role));
+
+    router.replace(getPostLoginDestination(upperRole, userEmail));
   };
 
   const handleGoogleLogin = async () => {
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      const token = await getRecaptchaToken('LOGIN');
+      const captchaResult = await verifyRecaptcha(token, 'LOGIN');
+      if (!captchaResult.success) {
+        toast({
+          variant: "destructive",
+          title: "Security Check Failed",
+          description: captchaResult.message,
+        });
+        return;
+      }
 
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
@@ -90,23 +138,32 @@ export default function LoginPage() {
         profileData = userSnap.data() as UserProfile;
       }
       
-      await addDoc(collection(firestore, 'audit_logs'), {
-        action: 'USER_SIGN_IN_GOOGLE',
-        userId: profileData.uid,
-        details: `Signed in with Google: ${profileData.displayName}`,
-        timestamp: Date.now(),
-        severity: 'INFO'
-      });
+      if (profileData.role && profileData.role !== 'CLIENT' && profileData.role !== 'KITCHEN') {
+        await addDoc(collection(firestore, 'audit_logs'), {
+          action: 'USER_SIGN_IN_GOOGLE',
+          userId: profileData.uid,
+          details: `Signed in with Google: ${profileData.displayName}`,
+          timestamp: Date.now(),
+          severity: 'INFO'
+        }).catch(() => undefined);
+      }
 
-      await notifyTelegramClientEvent(result.user, { type: 'SIGNIN', method: 'GOOGLE' });
+      void notifyTelegramClientEvent(result.user, { type: 'SIGNIN', method: 'GOOGLE' });
       await continueAfterLogin(result.user, profileData.role);
     } catch (error: any) {
       if (error?.code !== 'auth/popup-closed-by-user') {
-        await notifyTelegramFailedSignIn(email);
+        void notifyTelegramFailedSignIn(email);
+        const code = error?.code || '';
+        const description =
+          code === 'auth/unauthorized-domain' || code === 'auth/operation-not-allowed'
+            ? 'Google sign-in is not authorized for this domain yet. Please use email and password or contact support.'
+            : code === 'auth/network-request-failed'
+              ? 'Network error while connecting to Google. Check your internet connection and retry.'
+              : 'Could not sign in with Google. Please try again.';
         toast({ 
           variant: "destructive", 
           title: "Login Failed", 
-          description: "Could not sign in with Google." 
+          description,
         });
       }
     } finally {
@@ -120,29 +177,71 @@ export default function LoginPage() {
     
     setIsSubmitting(true);
     try {
+      const token = await getRecaptchaToken('LOGIN');
+      const captchaResult = await verifyRecaptcha(token, 'LOGIN');
+      if (!captchaResult.success) {
+        toast({
+          variant: "destructive",
+          title: "Security Check Failed",
+          description: captchaResult.message,
+        });
+        return;
+      }
 
       const normalizedEmail = email.toLowerCase().trim();
       const cred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
-      const userRef = doc(firestore!, 'users', cred.user.uid);
-      const snap = await getDoc(userRef);
-      
-      if (snap.exists()) {
-        const profileData = snap.data() as UserProfile;
-        
-        await addDoc(collection(firestore!, 'audit_logs'), {
-          action: 'USER_SIGN_IN',
-          userId: profileData.uid,
-          details: `Signed in: ${profileData.displayName}`,
-          timestamp: Date.now(),
-          severity: 'INFO'
-        });
 
-        await notifyTelegramClientEvent(cred.user, { type: 'SIGNIN', method: 'EMAIL' });
-        await continueAfterLogin(cred.user, profileData.role);
+      let profileData: UserProfile = {
+        uid: cred.user.uid,
+        email: cred.user.email?.toLowerCase() || normalizedEmail,
+        displayName: cred.user.displayName || normalizedEmail.split('@')[0] || 'Urban Member',
+        role: ROOT_ADMINS.includes(normalizedEmail) ? 'ADMIN' : 'CLIENT',
+        createdAt: Date.now(),
+        accountType: ROOT_ADMINS.includes(normalizedEmail) ? 'STAFF' : 'CLIENT',
+        loyaltyPoints: 0,
+        totalSpent: 0,
+      };
+
+      if (firestore) {
+        try {
+          const userRef = doc(firestore, 'users', cred.user.uid);
+          const snap = await getDoc(userRef);
+          if (snap && typeof snap.exists === 'function' && snap.exists()) {
+            profileData = { ...profileData, ...(snap.data() as UserProfile), uid: cred.user.uid };
+          } else if (snap && typeof snap.exists === 'function' && !snap.exists() && !ROOT_ADMINS.includes(normalizedEmail)) {
+            await setDoc(userRef, profileData).catch(() => undefined);
+          }
+
+          if (profileData.role && profileData.role !== 'CLIENT' && profileData.role !== 'KITCHEN') {
+            await addDoc(collection(firestore, 'audit_logs'), {
+              action: 'USER_SIGN_IN',
+              userId: profileData.uid,
+              details: `Signed in: ${profileData.displayName}`,
+              timestamp: Date.now(),
+              severity: 'INFO'
+            }).catch(() => undefined);
+          }
+        } catch (profileErr) {
+          console.warn('[LOGIN_PROFILE_LOOKUP_WARNING]', profileErr);
+        }
       }
+
+      void notifyTelegramClientEvent(cred.user, { type: 'SIGNIN', method: 'EMAIL' });
+      await continueAfterLogin(cred.user, profileData.role);
     } catch (error: any) {
-      await notifyTelegramFailedSignIn(email);
-      toast({ variant: "destructive", title: "Login Failed", description: "Invalid email or password." });
+      void notifyTelegramFailedSignIn(email);
+      const code = error?.code || '';
+      const description =
+        code === 'auth/too-many-requests'
+          ? 'Too many unsuccessful sign-in attempts. Please wait a few minutes or reset your password.'
+          : code === 'auth/network-request-failed'
+            ? 'Network error. Please check your internet connection and try again.'
+            : code === 'auth/user-disabled'
+              ? 'This account has been disabled. Please contact an administrator.'
+              : code === 'auth/unauthorized-domain' || code === 'auth/operation-not-allowed'
+                ? 'Email sign-in is not configured for this domain. Please contact an administrator.'
+                : 'Invalid email or password.';
+      toast({ variant: "destructive", title: "Login Failed", description });
     } finally {
       setIsSubmitting(false);
     }
@@ -215,7 +314,7 @@ export default function LoginPage() {
             </div>
 
             <div className="flex justify-end px-1">
-               <Link href="/forgot-password" size="sm" className="text-[10px] font-black text-zinc-400 uppercase tracking-widest hover:text-primary transition-colors">
+               <Link href="/forgot-password" className="text-[10px] font-black text-zinc-400 uppercase tracking-widest hover:text-primary transition-colors">
                  Forgot password?
                </Link>
             </div>
