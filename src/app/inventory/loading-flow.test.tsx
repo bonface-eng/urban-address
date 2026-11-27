@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import InventoryCatalogue from './page';
 const mocks = vi.hoisted(() => ({ state: {} as any, query: vi.fn() }));
 vi.mock('@/firebase', () => ({ useFirestore: () => 'db', useCollection: () => mocks.state, useMemoFirebase: (factory: () => unknown, deps: unknown[]) => React.useMemo(factory, deps) }));
+vi.mock('@/hooks/use-inventory-fallback', () => ({ useInventoryFallback: () => ({ data: null, loading: false, error: null }) }));
 vi.mock('@/hooks/use-profile', () => ({ useProfile: () => ({ profile: { uid: 'staff' }, isSuperAdmin: true }) }));
 vi.mock('firebase/firestore', () => ({ collection: vi.fn(), query: mocks.query, orderBy: vi.fn(), addDoc: vi.fn(), where: vi.fn(), doc: vi.fn(), updateDoc: vi.fn(), deleteDoc: vi.fn(), getDocs: vi.fn(), limit: vi.fn(), writeBatch: vi.fn() }));
 vi.mock('@/components/shared/image-upload', () => ({ ImageUpload: () => null }));

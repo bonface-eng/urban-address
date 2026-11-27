@@ -83,6 +83,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Product, BusinessUnit, Order } from '@/lib/types';
+import { useInventoryFallback } from '@/hooks/use-inventory-fallback';
 import { InventoryLoadState } from '@/components/inventory/load-state';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
@@ -196,7 +197,11 @@ export default function InventoryCatalogue() {
     return query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
   }, [firestore, profile, inventoryRetry]);
 
-  const { data: inventory, loading: inventoryLoading, error: inventoryError } = useCollection<Product>(inventoryQuery);
+  const direct = useCollection<Product>(inventoryQuery);
+  const fallback = useInventoryFallback(direct.error, inventoryRetry);
+  const inventory = direct.error && direct.error.code !== 'permission-denied' ? fallback.data : direct.data;
+  const inventoryLoading = direct.error && direct.error.code !== 'permission-denied' ? fallback.loading : direct.loading;
+  const inventoryError = direct.error && direct.error.code !== 'permission-denied' ? fallback.error : direct.error;
 
   const handleQuickStockAdjust = async (item: Product, delta: number) => {
     if (!firestore || !profile) return;
