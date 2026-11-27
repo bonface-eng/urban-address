@@ -22,6 +22,34 @@ function getR2Client() {
 }
 
 /**
+ * reCAPTCHA Enterprise Verification Node
+ */
+export async function verifyRecaptcha(token: string | null) {
+  if (!token) return { success: false, message: 'Security verification token missing.' };
+  
+  const secretKey = process.env.RECAPTCHA_SECRET_KEY;
+  
+  try {
+    const response = await fetch(`https://www.google.com/recaptcha/api/siteverify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `secret=${secretKey}&response=${token}`
+    });
+    
+    const data = await response.json();
+    
+    if (data.success) {
+      return { success: true, message: 'Identity verified.' };
+    }
+    
+    return { success: false, message: 'Security check failed. Ref: ' + (data['error-codes']?.[0] || 'Unknown') };
+  } catch (err) {
+    console.error('[RECAPTCHA_VERIFY_ERROR]', err);
+    return { success: false, message: 'Verification node unreachable.' };
+  }
+}
+
+/**
  * Cloudflare Connectivity Handshake
  */
 export async function testCloudflareConnection() {
@@ -36,51 +64,28 @@ export async function testCloudflareConnection() {
 }
 
 /**
- * Creates the conventional empty object markers used to organize the public
- * asset bucket. R2 has a flat key space, so trailing-slash objects represent
- * folders for dashboard and tooling purposes.
- */
-export async function provisionR2Infrastructure() {
-  try {
-    const r2 = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME;
-    if (!bucket) throw new Error('R2_CONFIG_MISSING');
-    const folders = ['profile/', 'products/', 'system/'];
-    await Promise.all(folders.map((Key) => r2.send(new PutObjectCommand({
-      Bucket: bucket, Key, Body: '', ContentType: 'application/x-directory',
-    }))));
-    return { success: true, message: 'Profile, product and system image folders provisioned.' };
-  } catch (err: any) {
-    return { success: false, message: err.message || 'R2_PROVISION_FAILED' };
-  }
-}
-
-/**
  * Uploads assets to Cloudflare R2 with category prefixing
  */
 export async function uploadImageToR2(formData: FormData) {
   try {
-    const file = formData.get('file') as File | null;
-    if (!file || typeof file.name !== 'string') throw new Error('R2_FILE_REQUIRED');
-    const allowedTypes: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
-    const extension = allowedTypes[file.type];
-    if (!extension) throw new Error('R2_IMAGE_TYPE_NOT_SUPPORTED');
-    if (file.size <= 0 || file.size > 8 * 1024 * 1024) throw new Error('R2_IMAGE_SIZE_LIMIT_8MB');
-    const requestedCategory = String(formData.get('category') || 'products').toLowerCase();
-    const folder = requestedCategory === 'profile' || requestedCategory === 'profiles' ? 'profile'
-      : requestedCategory === 'system' || requestedCategory === 'branding' || requestedCategory === 'banner' ? 'system'
-      : 'products';
+    const file = formData.get('file') as File;
+    const category = (formData.get('category') as string) || 'other';
     const r2 = getR2Client();
     const bucket = process.env.R2_BUCKET_NAME;
     const publicUrl = process.env.R2_PUBLIC_URL;
-    if (!bucket || !publicUrl || !/^https:\/\//i.test(publicUrl)) throw new Error('R2_CONFIG_MISSING_OR_PUBLIC_URL_INVALID');
-    const key = folder + '/' + Date.now() + '-' + Math.random().toString(36).substring(7) + '.' + extension;
-    const buffer = await fileToBuffer(file);
+    if (!bucket || !publicUrl) throw new Error('R2_CONFIG_MISSING');
+
+    const extension = file.name.split('.').pop();
+    const key = `catalog/${category.toLowerCase()}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
+    const buffer = Buffer.from(await file.arrayBuffer());
+
     await r2.send(new PutObjectCommand({
-      Bucket: bucket, Key: key, Body: buffer,
-      ContentType: file.type || 'application/octet-stream'
+      Bucket: bucket,
+      Key: key,
+      Body: buffer,
+      ContentType: file.type
     }));
-    return { success: true, url: publicUrl + '/' + key, key, folder };
+    return { success: true, url: `${publicUrl}/${key}` };
   } catch (err: any) {
     return { success: false, message: err.message };
   }
@@ -129,43 +134,30 @@ export async function listImagesFromR2(category?: string) {
     const bucket = process.env.R2_BUCKET_NAME;
     const publicUrl = process.env.R2_PUBLIC_URL;
     if (!bucket || !publicUrl) throw new Error('R2_CONFIG_MISSING');
-    const requested = String(category || 'All').toLowerCase();
-    const folderFilter = requested === 'profile' || requested === 'profile images' ? 'profile'
-      : requested === 'products' || requested === 'product' || requested === 'product images' ? 'products'
-      : requested === 'system' || requested === 'system images' ? 'system' : null;
-    const contents: any[] = [];
-    let continuationToken: string | undefined;
-    do {
-      const response = await r2.send(new ListObjectsV2Command({
-        Bucket: bucket,
-        ...(folderFilter ? { Prefix: folderFilter + '/' } : {}),
-        ContinuationToken: continuationToken,
-      }));
-      contents.push(...(response.Contents || []));
-      continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
-    } while (continuationToken);
+
+    const prefix = category && category !== 'All' ? `catalog/${category.toLowerCase()}/` : 'catalog/';
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+    });
+
+    const response = await r2.send(command);
+    const contents = response.Contents || [];
+
     const images = contents
       .filter(item => {
-        const key = String(item.Key || '');
-        return /\.(jpg|jpeg|png|gif|webp|avif|svg)$/i.test(key) && !key.endsWith('/');
+        const key = item.Key || '';
+        return key.match(/\.(jpg|jpeg|png|gif|webp)$/i);
       })
-      .map(item => {
-        const key = String(item.Key || '');
-        const firstFolder = key.split('/')[0].toLowerCase();
-        const folder = firstFolder === 'profile' ? 'profile'
-          : firstFolder === 'products' || firstFolder === 'catalog' ? 'products'
-          : 'system';
-        return {
-          url: publicUrl + '/' + key,
-          key,
-          lastModified: item.LastModified?.getTime?.() || 0,
-          size: item.Size || 0,
-          folder,
-          category: folder === 'profile' ? 'Profile Images' : folder === 'products' ? 'Product Images' : 'System Images'
-        };
-      })
-      .filter(item => !folderFilter || item.folder === folderFilter)
+      .map(item => ({
+        url: `${publicUrl}/${item.Key}`,
+        key: item.Key || '',
+        lastModified: item.LastModified?.getTime() || 0,
+        size: item.Size || 0,
+        category: (item.Key || '').split('/')[1] || 'other'
+      }))
       .sort((a, b) => b.lastModified - a.lastModified);
+
     return { success: true, images };
   } catch (err: any) {
     console.error('[R2_LIST_ERROR]', err);

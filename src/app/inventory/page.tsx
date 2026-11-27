@@ -1,9 +1,6 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
 import { 
   Search, 
   Plus, 
@@ -63,6 +60,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -77,8 +82,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 import { Product, BusinessUnit, Order } from '@/lib/types';
+import { InventoryLoadState } from '@/components/inventory/load-state';
 import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
@@ -102,14 +107,16 @@ export default function InventoryCatalogue() {
   
   const [activeUnitTab, setActiveUnitTab] = useState<BusinessUnit>(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem('uax_inventory_unit') as BusinessUnit) || 'STORE';
+      const saved = localStorage.getItem('uax_inventory_unit');
+      return ['STORE', 'LOUNGE', 'CARWASH'].includes(saved || '') ? saved as BusinessUnit : 'STORE';
     }
     return 'STORE';
   });
 
   const [stockStatusFilter, setStockStatusFilter] = useState<StockStatusFilter>(() => {
     if (typeof window !== 'undefined') {
-      return (localStorage.getItem('uax_inventory_status') as StockStatusFilter) || 'ALL';
+      const saved = localStorage.getItem('uax_inventory_status');
+      return ['ALL', 'IN_STOCK', 'LOW', 'OUT', 'ARCHIVED'].includes(saved || '') ? saved as StockStatusFilter : 'ALL';
     }
     return 'ALL';
   });
@@ -122,41 +129,12 @@ export default function InventoryCatalogue() {
 
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
 
-  type InventoryWorkflow = 'product' | 'service' | 'details' | 'transfer' | 'import' | 'report';
-  const [activeWorkflow, setActiveWorkflow] = useState<InventoryWorkflow | null>(null);
-
-  const openWorkflow = (workflow: InventoryWorkflow, itemId?: string) => {
-    const url = new URL(window.location.href);
-    url.searchParams.set('workflow', workflow);
-    if (itemId) url.searchParams.set('item', itemId);
-    else url.searchParams.delete('item');
-    window.history.pushState({ inventoryWorkflow: workflow }, '', url);
-    setActiveWorkflow(workflow);
-  };
-
-  const closeWorkflow = () => {
-    const url = new URL(window.location.href);
-    url.searchParams.delete('workflow');
-    url.searchParams.delete('item');
-    window.history.replaceState({}, '', url);
-    setActiveWorkflow(null);
-  };
-
-  const cancelWorkflow = () => {
-    closeWorkflow();
-    resetForms();
-  };
-
-  useEffect(() => {
-    const syncWorkflowFromUrl = () => {
-      const value = new URLSearchParams(window.location.search).get('workflow');
-      const allowed: InventoryWorkflow[] = ['product', 'service', 'details', 'transfer', 'import', 'report'];
-      setActiveWorkflow(allowed.includes(value as InventoryWorkflow) ? value as InventoryWorkflow : null);
-    };
-    syncWorkflowFromUrl();
-    window.addEventListener('popstate', syncWorkflowFromUrl);
-    return () => window.removeEventListener('popstate', syncWorkflowFromUrl);
-  }, []);
+  const [isSKUDialogOpen, setIsSKUDialogOpen] = useState(false);
+  const [isServiceDialogOpen, setIsServiceDialogOpen] = useState(false);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [isTransferDialogOpen, setIsTransferDialogOpen] = useState(false);
+  const [isBulkImportOpen, setIsBulkImportOpen] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isFetchingAnalytics, setIsFetchingAnalytics] = useState(false);
@@ -207,93 +185,24 @@ export default function InventoryCatalogue() {
     }
   }, [activeUnitTab, stockStatusFilter, mounted]);
 
+  const [inventoryRetry, setInventoryRetry] = useState(0);
+  const resetInventoryFilters = () => {
+    setSearchTerm(''); setStockStatusFilter('ALL'); setSelectedCategoryFilter('All');
+    setSelectedItemIds([]); setCurrentPage(1);
+  };
+
   const inventoryQuery = useMemoFirebase(() => {
     if (!firestore || !profile) return null;
     return query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
-  }, [firestore, profile?.uid]);
+  }, [firestore, profile, inventoryRetry]);
 
   const { data: inventory, loading: inventoryLoading, error: inventoryError } = useCollection<Product>(inventoryQuery);
 
-  // Product sales analytics are subscribed only while a product detail sheet is open.
-  // This keeps the totals live and avoids a one-time getDocs snapshot.
-  const productOrdersQuery = useMemoFirebase(() => {
-    if (!firestore || activeWorkflow !== 'details' || !editingItem?.id) return null;
-    return query(
-      collection(firestore, 'orders'),
-      where('status', '==', 'PAID')
-    );
-  }, [firestore, activeWorkflow, editingItem?.id]);
-  const { data: productOrders, loading: productOrdersLoading } = useCollection<Order>(productOrdersQuery);
-
-  useEffect(() => {
-    if (activeWorkflow !== 'details' || !editingItem?.id) {
-      setProductAnalytics(null);
-      setIsFetchingAnalytics(false);
-      return;
-    }
-    if (productOrdersLoading || productOrders === null) {
-      setIsFetchingAnalytics(true);
-      return;
-    }
-
-    let lastSoldAt: number | null = null;
-    let totalSold = 0;
-    let totalRevenue = 0;
-    productOrders.forEach(order => {
-      const matches = order.items?.filter(item => item.productId === editingItem.id) || [];
-      if (matches.length > 0) {
-        if (lastSoldAt === null || order.timestamp > lastSoldAt) lastSoldAt = order.timestamp;
-        matches.forEach(item => {
-          totalSold += item.quantity;
-          totalRevenue += item.price * item.quantity;
-        });
-      }
-    });
-    setProductAnalytics({ lastSoldAt, totalSold, totalRevenue });
-    setIsFetchingAnalytics(false);
-  }, [activeWorkflow, editingItem?.id, productOrders, productOrdersLoading]);
-
-  useEffect(() => {
-    if (!inventory?.length) return;
-    const itemId = new URLSearchParams(window.location.search).get('item');
-    if (!itemId || editingItem?.id === itemId) return;
-    const item = inventory.find(record => record.id === itemId);
-    if (!item) return;
-    setEditingItem(item);
-    if (item.unit === 'CARWASH') {
-      setServiceName(item.name);
-      setServicePrice(String(item.price));
-      setServiceCategory(item.category);
-      setServiceCommission(String(item.commission ?? 30));
-      setServiceCommissionNight(String(item.commissionNightShift ?? 30));
-      setServiceImageUrl(item.image || '');
-    } else {
-      setName(item.name);
-      setCategory(item.category);
-      setPrice(String(item.price));
-      setCostPrice(String(item.costPrice ?? ''));
-      setStockLevel(String(item.stockLevel));
-      setMinStock(String(item.minStock));
-      setBarcode(item.barcode || '');
-      setUnit(item.unit);
-      setImageUrl(item.image || '');
-    }
-  }, [inventory, editingItem?.id]);
-
   const handleQuickStockAdjust = async (item: Product, delta: number) => {
     if (!firestore || !profile) return;
-    if (!isSuperAdmin) {
-      toast({
-        variant: "destructive",
-        title: "Stock adjustment requires approval",
-        description: "Submit this change through the Urban Address Telegram bot using /request_stock_adjustment " + item.id + " " + (delta > 0 ? "+" : "") + delta + " REASON.",
-      });
-      return;
-    }
     const newStock = Math.max(0, (item.stockLevel || 0) + delta);
     try {
       await updateDoc(doc(firestore, 'inventory', item.id!), { stockLevel: newStock, updatedAt: Date.now() });
-      await notifyTelegramClientEvent(getAuth().currentUser, { type: 'STOCK_ADJUSTMENT', item: item.name, before: item.stockLevel || 0, after: newStock, minimum: item.minStock || 0, unit: item.unit });
       await addDoc(collection(firestore, 'audit_logs'), {
         action: 'STOCK_ADJUSTMENT',
         userId: profile.uid,
@@ -372,7 +281,7 @@ export default function InventoryCatalogue() {
       });
 
       toast({ title: "Bulk Import Complete", description: `Added ${count} items to inventory catalog.` });
-      closeWorkflow();
+      setIsBulkImportOpen(false);
       setCsvData('');
     } catch (err: any) {
       toast({ variant: "destructive", title: "Import Failed", description: err.message });
@@ -485,7 +394,7 @@ export default function InventoryCatalogue() {
         description: `Moved ${qty} units of ${sourceItem.name} to ${transferTargetUnit}.` 
       });
 
-      closeWorkflow();
+      setIsTransferDialogOpen(false);
       setTransferItemId('');
       setTransferQuantity('1');
     } catch (err: any) {
@@ -537,10 +446,11 @@ export default function InventoryCatalogue() {
   }, [inventory, searchTerm, activeUnitTab, selectedCategoryFilter, stockStatusFilter, sortBy]);
 
   const totalPages = Math.ceil(filteredInventory.length / itemsPerPage);
+  const visiblePage = Math.max(1, Math.min(currentPage, totalPages || 1));
   const paginatedInventory = useMemo(() => {
-    const start = (currentPage - 1) * itemsPerPage;
+    const start = (visiblePage - 1) * itemsPerPage;
     return filteredInventory.slice(start, start + itemsPerPage);
-  }, [filteredInventory, currentPage]);
+  }, [filteredInventory, visiblePage]);
 
   const stats = useMemo(() => {
     if (!inventory) return { 
@@ -577,12 +487,47 @@ export default function InventoryCatalogue() {
     };
   }, [inventory, activeUnitTab]);
 
+  const fetchProductAnalytics = async (productId: string) => {
+    if (!firestore) return;
+    setIsFetchingAnalytics(true);
+    try {
+      const q = query(collection(firestore, 'orders'), where('status', '==', 'PAID'), limit(500));
+      const snap = await getDocs(q);
+      
+      let lastSoldAt: number | null = null;
+      let totalSold = 0;
+      let totalRevenue = 0;
+
+      snap.forEach(docSnap => {
+        const order = docSnap.data() as Order;
+        const itemMatch = order.items?.filter(item => item.productId === productId);
+        
+        if (itemMatch && itemMatch.length > 0) {
+          const orderTime = order.timestamp;
+          if (!lastSoldAt || orderTime > lastSoldAt) {
+            lastSoldAt = orderTime;
+          }
+          itemMatch.forEach(item => {
+            totalSold += item.quantity;
+            totalRevenue += (item.price * item.quantity);
+          });
+        }
+      });
+
+      setProductAnalytics({ lastSoldAt, totalSold, totalRevenue });
+    } catch (err) {
+      console.error('[ANALYTICS_ERROR]', err);
+    } finally {
+      setIsFetchingAnalytics(false);
+    }
+  };
+
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore || !profile) return;
     
-    setIsSubmitting(true);
-    toast({ title: "Saving product", description: `Updating the inventory record for ${name}.` });
+    setIsSKUDialogOpen(false);
+    toast({ title: "Synchronizing Registry", description: `Background update started for ${name}.` });
     
     const productData = { 
       name, 
@@ -605,12 +550,9 @@ export default function InventoryCatalogue() {
         await addDoc(collection(firestore, 'inventory'), { ...productData, archived: false, createdAt: Date.now() }); 
         toast({ title: "Handshake Complete", description: "New SKU added to master ledger." });
       }
-      closeWorkflow();
       resetForms();
     } catch (err) { 
-      toast({ variant: "destructive", title: "Product save failed", description: "Your form is still open. Please retry." }); 
-    } finally {
-      setIsSubmitting(false);
+      toast({ variant: "destructive", title: "Background Sync Failed", description: "Registry link interrupted. Please retry manually." }); 
     }
   };
 
@@ -618,8 +560,8 @@ export default function InventoryCatalogue() {
     e.preventDefault();
     if (!firestore || !profile) return;
     
-    setIsSubmitting(true);
-    toast({ title: "Saving service", description: `Updating detailing service: ${serviceName}` });
+    setIsServiceDialogOpen(false);
+    toast({ title: "Linking Protocol", description: `Updating detailing service: ${serviceName}` });
 
     const serviceData = { 
       name: serviceName, 
@@ -641,10 +583,8 @@ export default function InventoryCatalogue() {
         await addDoc(collection(firestore, 'inventory'), { ...serviceData, archived: false, createdAt: Date.now() }); 
         toast({ title: "Node Active", description: "New detailing service added." }); 
       }
-      closeWorkflow();
       resetForms();
-    } catch (err) { toast({ variant: "destructive", title: "Service save failed", description: "Your form is still open. Please retry." }); }
-    finally { setIsSubmitting(false); }
+    } catch (err) { toast({ variant: "destructive", title: "Action Failed" }); }
   };
 
   const handlePrintLowStock = () => {
@@ -665,7 +605,7 @@ export default function InventoryCatalogue() {
       }))
     };
     setPreviewReport(reportData);
-    openWorkflow('report');
+    setIsPreviewOpen(true);
   };
 
   const handlePrintOutOfStock = () => {
@@ -686,7 +626,7 @@ export default function InventoryCatalogue() {
       }))
     };
     setPreviewReport(reportData);
-    openWorkflow('report');
+    setIsPreviewOpen(true);
   };
 
   const openEdit = (item: Product) => {
@@ -698,7 +638,7 @@ export default function InventoryCatalogue() {
       setServiceCommission(item.commission?.toString() || '30');
       setServiceCommissionNight(item.commissionNightShift?.toString() || '30');
       setServiceImageUrl(item.image || '');
-      openWorkflow('service', item.id);
+      setIsServiceDialogOpen(true);
     } else {
       setName(item.name);
       setCategory(item.category);
@@ -709,14 +649,15 @@ export default function InventoryCatalogue() {
       setBarcode(item.barcode || '');
       setUnit(item.unit);
       setImageUrl(item.image || '');
-      openWorkflow('product', item.id);
+      setIsSKUDialogOpen(true);
     }
   };
 
   const openDetails = (item: Product) => {
     setEditingItem(item);
     setProductAnalytics(null);
-    openWorkflow('details', item.id);
+    setIsDetailsDialogOpen(true);
+    fetchProductAnalytics(item.id!);
   };
 
   const resetForms = () => { 
@@ -736,13 +677,18 @@ export default function InventoryCatalogue() {
   };
 
   if (!mounted) return null;
+  const loadState = <InventoryLoadState loading={inventoryLoading} error={inventoryError} ready={!!firestore && !!profile}
+    total={inventory?.length || 0} visible={filteredInventory.length} unit={activeUnitTab}
+    onReset={resetInventoryFilters} onRetry={() => setInventoryRetry(value => value + 1)} />;
+  if (!firestore || !profile || inventoryLoading || inventoryError) return (
+    <div className="p-6 space-y-4"><h1 className="text-2xl font-bold">Inventory</h1>{loadState}</div>
+  );
 
-  if (!activeWorkflow) {
-    return (
-    <div className="space-y-4 md:space-y-6 pb-12 max-w-[1600px] mx-auto px-1 md:px-0 ua-compact-page">
+  return (
+    <div className="space-y-4 md:space-y-6 pb-12 max-w-[1600px] mx-auto px-1 md:px-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 pt-2">
         <div>
-          <PageHeader title="Inventory" breadcrumb={["Operations", "Inventory"]} className="mb-0" />
+          <h1 className="text-2xl md:text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Inventory</h1>
           <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">Stock and Service Management</p>
         </div>
       </div>
@@ -760,7 +706,7 @@ export default function InventoryCatalogue() {
            </TabsTrigger>
         </TabsList>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8 ua-metric-strip">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 md:mb-8">
            <MetricMiniCard title="Total Items" value={stats.total.toString()} sub={`${stats.archivedCount} Archived`} icon={Boxes} />
            <MetricMiniCard title="Stock Value" value={`KES ${stats.totalValue.toLocaleString()}`} sub="Retail Valuation" icon={DollarSign} color="text-emerald-600" />
            <MetricMiniCard title="Margin %" value={stats.totalValue > 0 ? `${Math.round((stats.estProfit / stats.totalValue) * 100)}%` : '0%'} sub={`Cost: KES ${stats.totalCost.toLocaleString()}`} icon={TrendingUp} />
@@ -782,7 +728,7 @@ export default function InventoryCatalogue() {
            />
         </div>
 
-        <div className="ua-inventory-toolbar flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-zinc-100 mb-4">
+        <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-zinc-100 mb-4">
           <div className="flex flex-col sm:flex-row items-center gap-3 flex-1">
              <div className="relative w-full sm:w-80">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -816,9 +762,9 @@ export default function InventoryCatalogue() {
              </div>
           </div>
 
-          <div className="ua-inventory-actions flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {activeUnitTab !== 'CARWASH' && (
-              <Button variant="outline" onClick={() => openWorkflow('transfer')} className="h-12 md:h-14 px-4 rounded-2xl border-zinc-100 text-[9px] font-black uppercase tracking-widest gap-2 bg-white flex-1 sm:flex-none">
+              <Button variant="outline" onClick={() => setIsTransferDialogOpen(true)} className="h-12 md:h-14 px-4 rounded-2xl border-zinc-100 text-[9px] font-black uppercase tracking-widest gap-2 bg-white flex-1 sm:flex-none">
                  <ArrowLeftRight className="w-4 h-4 text-blue-600" /> <span className="hidden sm:inline">Transfer</span>
               </Button>
             )}
@@ -844,16 +790,17 @@ export default function InventoryCatalogue() {
             <Button variant="outline" onClick={handleExportCSV} className="h-12 md:h-14 px-4 rounded-2xl border-zinc-100 text-[9px] font-black uppercase tracking-widest gap-2 bg-white flex-1 sm:flex-none">
                <FileDown className="w-4 h-4 text-emerald-600" /> <span className="hidden sm:inline">Export</span>
             </Button>
-            <Button variant="outline" onClick={() => openWorkflow('import')} className="h-12 md:h-14 px-4 rounded-2xl border-zinc-100 text-[9px] font-black uppercase tracking-widest gap-2 bg-white flex-1 sm:flex-none">
+            <Button variant="outline" onClick={() => setIsBulkImportOpen(true)} className="h-12 md:h-14 px-4 rounded-2xl border-zinc-100 text-[9px] font-black uppercase tracking-widest gap-2 bg-white flex-1 sm:flex-none">
                <Upload className="w-4 h-4 text-emerald-600" /> <span className="hidden sm:inline">Import</span>
             </Button>
-            <Button onClick={() => { resetForms(); activeUnitTab === 'CARWASH' ? openWorkflow('service') : (setUnit(activeUnitTab), openWorkflow('product')); }} className="h-12 md:h-14 px-6 bg-zinc-900 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 flex-1 sm:flex-none">
+            <Button onClick={() => { resetForms(); activeUnitTab === 'CARWASH' ? setIsServiceDialogOpen(true) : setIsSKUDialogOpen(true); }} className="h-12 md:h-14 px-6 bg-zinc-900 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 flex-1 sm:flex-none">
               <Plus className="w-4 h-4" /> Add {activeUnitTab === 'CARWASH' ? 'Service' : 'Item'}
             </Button>
           </div>
         </div>
 
-        <Card className="ua-inventory-table border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
+        {loadState}
+        <Card className="border-none shadow-sm rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
           <CardContent className="p-0 overflow-x-auto no-scrollbar">
             <Table className="min-w-[800px]">
               <TableHeader className="bg-zinc-50/50">
@@ -872,20 +819,7 @@ export default function InventoryCatalogue() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {inventoryLoading || inventory === null ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-40 text-center">
-                      <div role="status" aria-live="polite" className="flex flex-col items-center justify-center gap-3 text-zinc-400">
-                        <span className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-primary" />
-                        <span className="text-[10px] font-bold uppercase tracking-widest">Loading inventory records…</span>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ) : inventoryError ? (
-                  <TableRow><TableCell colSpan={7} className="h-32 text-center text-xs font-semibold text-red-600">Inventory could not be loaded. Check the database connection and reload.</TableCell></TableRow>
-                ) : paginatedInventory.length === 0 ? (
-                  <TableRow><TableCell colSpan={7} className="h-32 text-center text-xs font-semibold text-zinc-400">No inventory items match this view.</TableCell></TableRow>
-                ) : paginatedInventory.map((item) => {
+                {paginatedInventory.map((item) => {
                   const isSelected = selectedItemIds.includes(item.id!);
                   const isLow = item.unit !== 'CARWASH' && (item.stockLevel || 0) <= (item.minStock || 0) && (item.stockLevel || 0) > 0;
                   const isOut = item.unit !== 'CARWASH' && (item.stockLevel || 0) === 0;
@@ -942,10 +876,10 @@ export default function InventoryCatalogue() {
 
             {totalPages > 1 && (
               <div className="flex items-center justify-between px-8 py-4 bg-white border-t border-zinc-50">
-                 <p className="text-[10px] font-black uppercase text-zinc-400">Page {currentPage} of {totalPages}</p>
+                 <p className="text-[10px] font-black uppercase text-zinc-400">Page {visiblePage} of {totalPages}</p>
                  <div className="flex gap-2">
-                   <Button variant="outline" size="sm" disabled={currentPage === 1} onClick={() => setCurrentPage(p => Math.max(1, p - 1))} className="h-9 px-4 rounded-lg text-[9px] font-black uppercase tracking-widest"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
-                   <Button variant="outline" size="sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} className="h-9 px-4 rounded-lg text-[9px] font-black uppercase tracking-widest">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
+                   <Button variant="outline" size="sm" disabled={visiblePage === 1} onClick={() => setCurrentPage(p => Math.max(1, visiblePage - 1))} className="h-9 px-4 rounded-lg text-[9px] font-black uppercase tracking-widest"><ChevronLeft className="w-4 h-4 mr-1" /> Prev</Button>
+                   <Button variant="outline" size="sm" disabled={visiblePage === totalPages} onClick={() => setCurrentPage(p => Math.min(totalPages, visiblePage + 1))} className="h-9 px-4 rounded-lg text-[9px] font-black uppercase tracking-widest">Next <ChevronRight className="w-4 h-4 ml-1" /></Button>
                  </div>
               </div>
             )}
@@ -953,157 +887,153 @@ export default function InventoryCatalogue() {
         </Card>
       </Tabs>
 
-      </div>
-    );
-  }
-
-  return (
-    <div className="min-h-[calc(100dvh-4rem)] bg-white text-zinc-900">
-      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-zinc-200 bg-white/95 px-4 py-3 backdrop-blur md:px-8">
-        <div className="flex min-w-0 items-center gap-3">
-          <Button type="button" variant="outline" onClick={cancelWorkflow} className="h-11 w-11 shrink-0 rounded-xl p-0" aria-label="Back to inventory">
-            <ChevronLeft className="h-5 w-5" />
-          </Button>
-          <div className="min-w-0">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">Inventory workspace</p>
-            <h1 className="truncate text-lg font-black uppercase tracking-tight md:text-xl">
-              {activeWorkflow === 'product' ? (editingItem ? 'Edit product' : 'Add product') :
-               activeWorkflow === 'service' ? 'Service definition' :
-               activeWorkflow === 'transfer' ? 'Stock transfer' :
-               activeWorkflow === 'import' ? 'Bulk data import' :
-               activeWorkflow === 'details' ? 'Product details' : 'Report preview'}
-            </h1>
-          </div>
-        </div>
-        <span className="hidden text-xs font-semibold text-zinc-400 md:block">Full-page workspace</span>
-      </header>
-
-      <main className="mx-auto w-full max-w-5xl px-4 py-5 pb-28 md:px-8 md:py-8">
-        {activeWorkflow === 'product' && (
-          <form onSubmit={handleSaveProduct} className="space-y-6">
-            <section className="rounded-2xl border border-zinc-200 bg-white p-4 md:p-6">
-              <div className="mb-5">
-                <h2 className="text-base font-black uppercase">Product information</h2>
-                <p className="mt-1 text-sm text-zinc-500">Add the item details and upload its product photograph.</p>
+      {/* SKU DIALOG */}
+      <Dialog open={isSKUDialogOpen} onOpenChange={(o) => { if(!o) resetForms(); setIsSKUDialogOpen(o); }}>
+        <DialogContent className="sm:max-w-[500px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white max-h-[90vh] overflow-y-auto no-scrollbar">
+           <div className="bg-zinc-900 p-8 text-center border-b border-white/10">
+              <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mx-auto mb-4">
+                 <ShoppingBag className="w-7 h-7" />
               </div>
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="md:col-span-2">
-                  <ImageUpload onUploadComplete={setImageUrl} defaultValue={imageUrl} label="Product photography" category={activeUnitTab.toLowerCase()} />
-                </div>
-                <div className="space-y-2">
-                  <Label>Product name</Label>
-                  <Input value={name} onChange={e => setName(e.target.value)} placeholder="Full product name" className="h-12" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Retail category</Label>
-                  <Select value={category} onValueChange={setCategory} required>
-                    <SelectTrigger className="h-12"><SelectValue placeholder="Select category" /></SelectTrigger>
-                    <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Barcode / SKU</Label>
-                  <Input value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="Scan or enter code" className="h-12 font-mono" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Business unit</Label>
-                  <Select value={unit} onValueChange={(v: BusinessUnit) => setUnit(v)}>
-                    <SelectTrigger className="h-12"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="STORE">Retail shop</SelectItem>
-                      <SelectItem value="LOUNGE">Lounge</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Sale price (KES)</Label>
-                  <Input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)} className="h-12" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Cost price (KES)</Label>
-                  <Input type="number" min="0" step="0.01" value={costPrice} onChange={e => setCostPrice(e.target.value)} className="h-12" />
-                </div>
-                <div className="space-y-2">
-                  <Label>Opening stock</Label>
-                  <Input type="number" min="0" value={stockLevel} onChange={e => setStockLevel(e.target.value)} className="h-12" required />
-                </div>
-                <div className="space-y-2">
-                  <Label>Minimum stock threshold</Label>
-                  <Input type="number" min="0" value={minStock} onChange={e => setMinStock(e.target.value)} className="h-12" required />
-                </div>
+              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">{editingItem ? 'Edit Product SKU' : 'Inventory Registry'}</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold text-zinc-400 uppercase mt-1">Authorized catalog synchronization node.</DialogDescription>
+           </div>
+           <form onSubmit={handleSaveProduct} className="p-8 space-y-6">
+              <div className="space-y-4">
+                 <ImageUpload 
+                   onUploadComplete={setImageUrl} 
+                   defaultValue={imageUrl} 
+                   label="Product Photography" 
+                   category={activeUnitTab.toLowerCase()} 
+                 />
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Product Name</Label><Input value={name} onChange={e => setName(e.target.value)} placeholder="Full description" className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase" required /></div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Retail Category</Label>
+                    <Select value={category} onValueChange={setCategory} required>
+                      <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase text-xs">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl">
+                        {CATEGORIES.map(c => <SelectItem key={c} value={c} className="text-xs uppercase font-bold">{c}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                   </div>
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Barcode / SKU</Label><Input value={barcode} onChange={e => setBarcode(e.target.value)} placeholder="Scan or Enter" className="h-12 bg-zinc-50 border-none rounded-xl font-mono text-xs uppercase" /></div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Unit Price (Sale)</Label><Input type="number" value={price} onChange={e => setPrice(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Cost Price (Purchase)</Label><Input type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" /></div>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Opening Stock</Label><Input type="number" value={stockLevel} onChange={e => setStockLevel(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Min Threshold</Label><Input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
+                 </div>
               </div>
-            </section>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={cancelWorkflow} className="h-12 sm:min-w-36">Cancel</Button>
-              <Button type="submit" disabled={isSubmitting} className="h-12 bg-zinc-900 px-8 text-white sm:min-w-56">{isSubmitting ? 'Saving…' : editingItem ? 'Save product changes' : 'Create product'}</Button>
-            </div>
-          </form>
-        )}
+              <Button type="submit" disabled={isSubmitting} className="w-full h-16 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Authorize SKU Record</Button>
+           </form>
+        </DialogContent>
+      </Dialog>
 
-        {activeWorkflow === 'service' && (
-          <form onSubmit={handleSaveService} className="space-y-6">
-            <section className="rounded-2xl border border-zinc-200 p-4 md:p-6">
-              <h2 className="mb-1 text-base font-black uppercase">Service configuration</h2>
-              <p className="mb-5 text-sm text-zinc-500">Configure the service, price and commission settings.</p>
-              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div className="md:col-span-2"><ImageUpload onUploadComplete={setServiceImageUrl} defaultValue={serviceImageUrl} label="Service illustration" category="carwash" /></div>
-                <div className="space-y-2 md:col-span-2"><Label>Service name</Label><Input value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Executive Interior Detailing" className="h-12" required /></div>
-                <div className="space-y-2"><Label>Base price (KES)</Label><Input type="number" min="0" value={servicePrice} onChange={e => setServicePrice(e.target.value)} className="h-12" required /></div>
-                <div className="space-y-2"><Label>Standard commission (%)</Label><Input type="number" min="0" max="100" value={serviceCommission} onChange={e => setServiceCommission(e.target.value)} className="h-12" required /></div>
-                <div className="space-y-2"><Label>Night shift commission (%)</Label><Input type="number" min="0" max="100" value={serviceCommissionNight} onChange={e => setServiceCommissionNight(e.target.value)} className="h-12" required /></div>
+      {/* SERVICE DIALOG */}
+      <Dialog open={isServiceDialogOpen} onOpenChange={(o) => { if(!o) resetForms(); setIsServiceDialogOpen(o); }}>
+        <DialogContent className="sm:max-w-[450px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white">
+           <div className="bg-primary p-8 text-center border-b border-primary/10">
+              <div className="w-14 h-14 rounded-2xl bg-white shadow-xl flex items-center justify-center text-primary mx-auto mb-4"><Zap className="w-7 h-7" /></div>
+              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">Carwash Service Definition</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold text-white/60 uppercase mt-1">Configure detailing protocols and yields.</DialogDescription>
+           </div>
+           <form onSubmit={handleSaveService} className="p-8 space-y-6">
+              <div className="space-y-4">
+                 <ImageUpload onUploadComplete={setServiceImageUrl} defaultValue={serviceImageUrl} label="Service Illustration" category="carwash" />
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Service Name</Label><Input value={serviceName} onChange={e => setServiceName(e.target.value)} placeholder="e.g. Executive Interior Detailing" className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase" required /></div>
+                 <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Service Base Price (KES)</Label><Input type="number" value={servicePrice} onChange={e => setServicePrice(e.target.value)} className="h-14 bg-zinc-50 border-none rounded-xl text-xl font-black" required /></div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Standard Comm (%)</Label><Input type="number" value={serviceCommission} onChange={e => setServiceCommission(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black text-green-600" required /></div>
+                    <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Night Shift (%)</Label><Input type="number" value={serviceCommissionNight} onChange={e => setServiceCommissionNight(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black text-amber-600" required /></div>
+                 </div>
               </div>
-            </section>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <Button type="button" variant="outline" onClick={cancelWorkflow} className="h-12 sm:min-w-36">Cancel</Button>
-              <Button type="submit" disabled={isSubmitting} className="h-12 bg-zinc-900 px-8 text-white sm:min-w-56">{isSubmitting ? 'Saving…' : 'Save service'}</Button>
-            </div>
-          </form>
-        )}
+              <Button type="submit" disabled={isSubmitting} className="w-full h-16 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Save Service Node</Button>
+           </form>
+        </DialogContent>
+      </Dialog>
 
-        {activeWorkflow === 'transfer' && (
-          <section className="space-y-6 rounded-2xl border border-zinc-200 p-4 md:p-6">
-            <div><h2 className="text-base font-black uppercase">Move stock between units</h2><p className="mt-1 text-sm text-zinc-500">Select the source item, destination and quantity.</p></div>
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2"><Label>Product to transfer</Label><Select value={transferItemId} onValueChange={setTransferItemId}><SelectTrigger className="h-12"><SelectValue placeholder="Select product" /></SelectTrigger><SelectContent>{inventory?.filter(i => i.unit === activeUnitTab && i.stockLevel > 0).map(i => <SelectItem key={i.id} value={i.id!}>{i.name} ({i.stockLevel} available)</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Destination unit</Label><Select value={transferTargetUnit} onValueChange={(v: BusinessUnit) => setTransferTargetUnit(v)}><SelectTrigger className="h-12"><SelectValue /></SelectTrigger><SelectContent>{(['STORE', 'LOUNGE'] as BusinessUnit[]).filter(u => u !== activeUnitTab).map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Quantity</Label><Input type="number" min="1" value={transferQuantity} onChange={e => setTransferQuantity(e.target.value)} className="h-12" /></div>
-            </div>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" onClick={cancelWorkflow} className="h-12 sm:min-w-36">Cancel</Button><Button onClick={handleExecuteTransfer} disabled={isSubmitting || !transferItemId} className="h-12 bg-zinc-900 px-8 text-white sm:min-w-56">Execute transfer</Button></div>
-          </section>
-        )}
-
-        {activeWorkflow === 'import' && (
-          <section className="space-y-6 rounded-2xl border border-zinc-200 p-4 md:p-6">
-            <div><h2 className="text-base font-black uppercase">Import inventory records</h2><p className="mt-1 text-sm text-zinc-500">Paste comma-separated values with a header row. Existing inventory records are not overwritten.</p></div>
-            <div className="space-y-2"><Label>CSV data (Name, Category, Price, Stock)</Label><Textarea value={csvData} onChange={e => setCsvData(e.target.value)} placeholder="name,category,price,stockLevel,minStock,barcode" className="min-h-[280px] font-mono text-sm" /><p className="text-xs text-zinc-500">Include a header row. Supported fields: name, category, price, costPrice, stockLevel, minStock, barcode and unit.</p></div>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" onClick={cancelWorkflow} className="h-12 sm:min-w-36">Cancel</Button><Button onClick={handleBulkImport} disabled={isSubmitting || !csvData.trim()} className="h-12 bg-zinc-900 px-8 text-white sm:min-w-56">{isSubmitting ? 'Importing…' : 'Import records'}</Button></div>
-          </section>
-        )}
-
-        {activeWorkflow === 'details' && editingItem && (
-          <section className="space-y-6 rounded-2xl border border-zinc-200 p-4 md:p-6">
-            <div className="flex flex-col gap-5 sm:flex-row">
-              <div className="flex h-36 w-36 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-zinc-200 bg-zinc-50">
-                {editingItem.image ? <img src={editingItem.image} alt={editingItem.name} className="h-full w-full object-contain p-2" /> : <Package className="h-10 w-10 text-zinc-300" />}
+      {/* TRANSFER DIALOG */}
+      <Dialog open={isTransferDialogOpen} onOpenChange={(o) => { if(!o) resetForms(); setIsTransferDialogOpen(o); }}>
+        <DialogContent className="sm:max-w-[450px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white">
+           <div className="bg-blue-600 p-8 text-center border-b border-blue-500">
+              <div className="w-14 h-14 rounded-2xl bg-white shadow-xl flex items-center justify-center text-blue-600 mx-auto mb-4"><ArrowLeftRight className="w-7 h-7" /></div>
+              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">Stock Transfer</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold text-white/60 uppercase mt-1">Move inventory between operational units.</DialogDescription>
+           </div>
+           <div className="p-8 space-y-6">
+              <div className="space-y-4">
+                 <div className="space-y-1.5">
+                    <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Select Item to Move</Label>
+                    <Select value={transferItemId} onValueChange={setTransferItemId}>
+                       <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase text-xs">
+                          <SelectValue placeholder="Select Product" />
+                       </SelectTrigger>
+                       <SelectContent className="rounded-xl">
+                          {inventory?.filter(i => i.unit === activeUnitTab && i.stockLevel > 0).map(i => (
+                            <SelectItem key={i.id} value={i.id!} className="text-xs uppercase font-bold">{i.name} ({i.stockLevel})</SelectItem>
+                          ))}
+                       </SelectContent>
+                    </Select>
+                 </div>
+                 <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                       <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Target Station</Label>
+                       <Select value={transferTargetUnit} onValueChange={(v: any) => setTransferTargetUnit(v)}>
+                          <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase text-xs">
+                             <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl">
+                             {['STORE', 'LOUNGE'].filter(u => u !== activeUnitTab).map(u => (
+                               <SelectItem key={u} value={u} className="text-xs uppercase font-bold">{u}</SelectItem>
+                             ))}
+                          </SelectContent>
+                       </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                       <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Quantity</Label>
+                       <Input type="number" value={transferQuantity} onChange={e => setTransferQuantity(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" />
+                    </div>
+                 </div>
               </div>
-              <div className="min-w-0"><h2 className="text-xl font-black uppercase">{editingItem.name}</h2><p className="mt-1 text-sm text-zinc-500">{editingItem.category} · {editingItem.unit}</p><p className="mt-4 text-2xl font-black">KES {editingItem.price.toLocaleString()}</p><p className="mt-1 text-xs text-zinc-500">Barcode: {editingItem.barcode || 'Not set'}</p></div>
-            </div>
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              <div className="rounded-xl bg-zinc-50 p-4"><p className="text-xs text-zinc-500">Stock on hand</p><p className="mt-1 text-xl font-black">{editingItem.unit === 'CARWASH' ? 'Unlimited' : editingItem.stockLevel}</p></div>
-              <div className="rounded-xl bg-zinc-50 p-4"><p className="text-xs text-zinc-500">Minimum stock</p><p className="mt-1 text-xl font-black">{editingItem.minStock}</p></div>
-              <div className="rounded-xl bg-zinc-50 p-4"><p className="text-xs text-zinc-500">Units sold</p><p className="mt-1 text-xl font-black">{isFetchingAnalytics ? '…' : productAnalytics?.totalSold ?? 0}</p></div>
-              <div className="rounded-xl bg-zinc-50 p-4"><p className="text-xs text-zinc-500">Sales revenue</p><p className="mt-1 text-xl font-black">KES {(productAnalytics?.totalRevenue ?? 0).toLocaleString()}</p></div>
-            </div>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end"><Button variant="outline" onClick={cancelWorkflow} className="h-12 sm:min-w-36">Back to inventory</Button><Button onClick={() => openEdit(editingItem)} className="h-12 bg-zinc-900 px-8 text-white sm:min-w-40">Edit item</Button></div>
-          </section>
-        )}
+              <Button onClick={handleExecuteTransfer} disabled={isSubmitting || !transferItemId} className="w-full h-16 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Execute Transfer</Button>
+           </div>
+        </DialogContent>
+      </Dialog>
 
-        {activeWorkflow === 'report' && (
-          <div className="mx-auto w-full max-w-2xl rounded-2xl border border-zinc-200 bg-white p-3 md:p-6">
-            <ReceiptPreview data={previewReport} onClose={cancelWorkflow} className="w-full" />
-          </div>
-        )}
-      </main>
+      {/* BULK IMPORT DIALOG */}
+      <Dialog open={isBulkImportOpen} onOpenChange={(o) => { if(!o) resetForms(); setIsBulkImportOpen(o); }}>
+        <DialogContent className="sm:max-w-[500px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white">
+           <div className="bg-emerald-600 p-8 text-center border-b border-emerald-500">
+              <div className="w-14 h-14 rounded-2xl bg-white shadow-xl flex items-center justify-center text-emerald-600 mx-auto mb-4"><Upload className="w-7 h-7" /></div>
+              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">Bulk Data Import</DialogTitle>
+              <DialogDescription className="text-[10px] font-bold text-white/60 uppercase mt-1">Upload CSV ledger directly to station node.</DialogDescription>
+           </div>
+           <div className="p-8 space-y-6">
+              <div className="space-y-4">
+                 <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">CSV Content (Name, Category, Price, Stock)</Label>
+                 <Textarea 
+                    value={csvData} 
+                    onChange={e => setCsvData(e.target.value)}
+                    placeholder="Item Name, Category, Price, StockLevel, MinStock, Barcode"
+                    className="min-h-[200px] bg-zinc-50 border-none rounded-2xl p-6 font-mono text-xs"
+                 />
+                 <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-widest px-1">Paste your comma-separated values including header row.</p>
+              </div>
+              <Button onClick={handleBulkImport} disabled={isSubmitting || !csvData.trim()} className="w-full h-16 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl active:scale-95 transition-all">Deploy Ledger</Button>
+           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* REPORT PREVIEW DIALOG */}
+      <Dialog open={isPreviewOpen} onOpenChange={(o) => { if(!o) resetForms(); setIsPreviewOpen(o); }}>
+        <DialogContent className="sm:max-w-md p-0 border-none bg-transparent shadow-none">
+          <ReceiptPreview data={previewReport} onClose={() => setIsPreviewOpen(false)} className="w-full" />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

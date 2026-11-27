@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,76 +22,20 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { verifyPaystackTransaction } from '@/lib/actions';
 import { useTerminal } from '@/hooks/use-terminal';
-import { useUser } from '@/firebase';
 
 interface PaymentViewProps {
   total: number;
   onComplete: (method: 'CASH' | 'MOBILE', metadata?: any) => Promise<void>;
   isProcessing: boolean;
   previewData?: any;
-  onMpesa: (phone: string) => Promise<string>;
-  onMpesaPaid: (orderId: string) => Promise<void>;
 }
 
-export function PaymentView({ total, onComplete, isProcessing, previewData, onMpesa, onMpesaPaid }: PaymentViewProps) {
-  const { user } = useUser();
+export function PaymentView({ total, onComplete, isProcessing, previewData }: PaymentViewProps) {
   const { locationName, clientIp } = useTerminal();
   const [cashReceived, setCashReceived] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'CASH' | 'MPESA' | 'MOBILE_AUTO' | 'MOBILE_MANUAL'>('CASH');
+  const [activeTab, setActiveTab] = useState<'CASH' | 'MOBILE_AUTO' | 'MOBILE_MANUAL'>('CASH');
   const [paymentStatus, setPaymentStatus] = useState<'IDLE' | 'FAILED' | 'CANCELLED' | 'VERIFYING'>('IDLE');
   const [manualCode, setManualCode] = useState('');
-  const [mpesaPhone, setMpesaPhone] = useState('');
-  const [mpesaOrderId, setMpesaOrderId] = useState<string | null>(null);
-  const [mpesaState, setMpesaState] = useState<'IDLE' | 'SENDING' | 'WAITING' | 'FAILED'>('IDLE');
-  const [mpesaError, setMpesaError] = useState('');
-  const onMpesaPaidRef = useRef(onMpesaPaid);
-  useEffect(() => { onMpesaPaidRef.current = onMpesaPaid; }, [onMpesaPaid]);
-
-  useEffect(() => {
-    if (!mpesaOrderId || !user) return;
-    let stopped = false;
-    let checking = false;
-    const checkStatus = async () => {
-      if (stopped || checking) return;
-      checking = true;
-      try {
-        const token = await user.getIdToken();
-        const response = await fetch(`/api/payments/mpesa/status?orderId=${encodeURIComponent(mpesaOrderId)}`, { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.error || 'Unable to check M-Pesa status.');
-        if (result.status === 'PAID' || result.paymentStatus === 'PAID') {
-          stopped = true;
-          setMpesaState('IDLE');
-          setMpesaOrderId(null);
-          await onMpesaPaidRef.current(mpesaOrderId);
-        } else if (result.paymentStatus === 'FAILED') {
-          stopped = true;
-          setMpesaState('FAILED');
-          setMpesaOrderId(null);
-          setMpesaError(result.paymentFailureReason || 'Safaricom reported that the payment was not completed.');
-        }
-      } catch (error) {
-        console.warn('[MPESA_STATUS_POLL]', error);
-      } finally { checking = false; }
-    };
-    const timer = setInterval(() => { void checkStatus(); }, 4000);
-    void checkStatus();
-    return () => { stopped = true; clearInterval(timer); };
-  }, [mpesaOrderId, user]);
-
-  const handleMpesaSubmit = async () => {
-    if (!mpesaPhone.trim() || mpesaState === 'SENDING' || mpesaState === 'WAITING') return;
-    setMpesaState('SENDING');
-    setMpesaError('');
-    try {
-      const orderId = await onMpesa(mpesaPhone.trim());
-      setMpesaOrderId(orderId);
-      setMpesaState('WAITING');
-    } catch (error) {
-      setMpesaState('FAILED');
-      setMpesaError(error instanceof Error ? error.message : 'Could not send the M-Pesa prompt.');
-    }
-  };
 
   const change = useMemo(() => {
     const received = Number(cashReceived);
@@ -154,12 +98,9 @@ export function PaymentView({ total, onComplete, isProcessing, previewData, onMp
       </div>
 
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
-        <TabsList className="grid grid-cols-4 h-12 bg-zinc-50 p-1 rounded-xl mb-6">
+        <TabsList className="grid grid-cols-3 h-12 bg-zinc-50 p-1 rounded-xl mb-6">
           <TabsTrigger value="CASH" className="rounded-lg text-[8px] font-black uppercase tracking-widest gap-1.5 transition-all">
             <Banknote className="w-3 h-3" /> Cash
-          </TabsTrigger>
-          <TabsTrigger value="MPESA" className="rounded-lg text-[8px] font-black uppercase tracking-widest gap-1.5 transition-all">
-            <Smartphone className="w-3 h-3" /> M-Pesa
           </TabsTrigger>
           <TabsTrigger value="MOBILE_AUTO" className="rounded-lg text-[8px] font-black uppercase tracking-widest gap-1.5 transition-all">
             <Zap className="w-3 h-3" /> Auto
@@ -201,29 +142,6 @@ export function PaymentView({ total, onComplete, isProcessing, previewData, onMp
           >
             {isProcessing ? <RefreshCcw className="w-4 h-4 animate-spin" /> : 'Finalize Sale'}
           </Button>
-        </TabsContent>
-
-        <TabsContent value="MPESA" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          {mpesaState === 'WAITING' ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
-              <RefreshCcw className="mx-auto h-6 w-6 animate-spin text-emerald-700" />
-              <p className="mt-3 text-sm font-semibold text-emerald-900">M-Pesa prompt sent</p>
-              <p className="mt-1 text-xs leading-5 text-emerald-800">Check the phone and enter your M-Pesa PIN. This screen will update automatically after Safaricom confirms the payment. Do not start another payment.</p>
-            </div>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Customer M-Pesa number</Label>
-                <Input type="tel" inputMode="tel" autoComplete="tel" value={mpesaPhone} onChange={event => setMpesaPhone(event.target.value)} placeholder="07XXXXXXXX or 2547XXXXXXXX" className="h-14 rounded-xl bg-zinc-50 text-center text-lg font-semibold tracking-wide" />
-                <p className="text-xs text-zinc-500">Safaricom will send an STK Push prompt to this number. The sale completes only after provider verification.</p>
-              </div>
-              {mpesaState === 'FAILED' && <p role="alert" className="rounded-lg bg-red-50 p-3 text-xs text-red-700">{mpesaError}</p>}
-              <Button onClick={handleMpesaSubmit} disabled={isProcessing || mpesaState === 'SENDING' || mpesaPhone.trim().length < 9} className="h-14 w-full rounded-xl bg-[#16A34A] font-bold text-white hover:bg-green-700">
-                {mpesaState === 'SENDING' ? <RefreshCcw className="h-4 w-4 animate-spin" /> : <Smartphone className="mr-2 h-4 w-4" />}
-                {mpesaState === 'SENDING' ? 'Sending STK prompt…' : 'Send M-Pesa STK Push'}
-              </Button>
-            </>
-          )}
         </TabsContent>
 
         <TabsContent value="MOBILE_AUTO" className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">

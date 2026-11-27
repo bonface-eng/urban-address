@@ -1,8 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-import { FullPageEditor } from '@/components/admin/full-page-editor';
-
 import React, { useState, useMemo } from 'react';
 import { 
   Truck, 
@@ -206,10 +203,10 @@ export default function SuppliersPage() {
   };
 
   return (
-    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto ua-compact-page">
+    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <PageHeader title="Supplier Network" breadcrumb={["Operations", "Supplier Network"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Supplier Network</h1>
           <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">Global procurement and vendor registry.</p>
         </div>
         <div className="flex gap-2">
@@ -221,16 +218,15 @@ export default function SuppliersPage() {
             <Download className="w-4 h-4 mr-2" /> Export
           </Button>
           
-          <Button 
-                onClick={() => setIsDialogOpen(true)} className="h-11 px-8 bg-primary hover:bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20 transition-all active:scale-95"
+          <Dialog open={isDialogOpen} onOpenChange={(o) => { setIsDialogOpen(o); if(!o) resetForm(); }}>
+            <DialogTrigger asChild>
+              <Button 
+                className="h-11 px-8 bg-primary hover:bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest shadow-xl shadow-primary/20 transition-all active:scale-95"
               >
                 <Plus className="w-4 h-4 mr-2" /> Register Vendor
               </Button>
-          <FullPageEditor open={isDialogOpen} title="Register vendor" description="Add a procurement partner to the supplier registry." onClose={() => { setIsDialogOpen(false); resetForm(); }}>
-
-              
-
-            <div className="w-full">
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-[500px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white">
               <div className="bg-primary/5 p-10 border-b border-primary/10">
                  <div className="w-16 h-16 rounded-2xl bg-white shadow-xl flex items-center justify-center text-primary mb-6">
                     <Truck className="w-7 h-7" />
@@ -279,8 +275,8 @@ export default function SuppliersPage() {
                   </Button>
                 </DialogFooter>
               </form>
-            </div>
-          </FullPageEditor>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
 
@@ -310,7 +306,7 @@ export default function SuppliersPage() {
         </div>
       </div>
 
-      <Card className="ua-supplier-table border-none shadow-mobile rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
+      <Card className="border-none shadow-mobile rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-zinc-50/50">
@@ -371,8 +367,8 @@ export default function SuppliersPage() {
         </CardContent>
       </Card>
 
-      <FullPageEditor open={isEditOpen} title="Edit supplier" description="Update supplier contact and procurement details." onClose={() => { setIsEditOpen(false); resetForm(); }}>
-        <div className="w-full">
+      <Dialog open={isEditOpen} onOpenChange={(o) => { setIsEditOpen(o); if(!o) resetForm(); }}>
+        <DialogContent className="sm:max-w-[500px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white">
           <div className="bg-primary/5 p-10 border-b border-primary/10">
              <div className="w-16 h-16 rounded-2xl bg-white shadow-xl flex items-center justify-center text-primary mb-6">
                 <Edit2 className="w-7 h-7" />
@@ -419,8 +415,8 @@ export default function SuppliersPage() {
                 </Button>
               </DialogFooter>
           </form>
-        </div>
-      </FullPageEditor>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!vendorToDelete} onOpenChange={(o) => !o && setVendorToDelete(null)}>
          <AlertDialogContent className="rounded-[3rem] border-none shadow-2xl p-10 max-w-[420px] bg-white">

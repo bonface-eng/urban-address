@@ -3,18 +3,23 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useFirestore, useUser, useAuth } from '@/firebase';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithEmailAndPassword, signInWithCustomToken, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInWithEmailAndPassword, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { POSTerminal, RegisterSession, UserProfile, BusinessUnit } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { SYSTEM_CONFIG } from '@/lib/config';
 
 interface TerminalContextType {
+  pinLoading: boolean;
+  pinEnrolled: boolean;
+  pinError: string;
+  retryPinStatus: () => void;
+  enrollPin: (pin: string, confirmation: string) => Promise<void>;
   activeTerminal: POSTerminal | null;
   activeCashier: UserProfile | null;
   activeRegisterSession: RegisterSession | null;
   loading: boolean;
   lockTerminal: () => void;
-  switchWithPin: (targetUid: string, pin: string, deviceId: string) => Promise<boolean>;
+  unlockTerminal: (pin: string) => Promise<boolean>;
   setIsLocked: (locked: boolean) => void;
   openRegister: (openingCash: number, unit: BusinessUnit) => Promise<void>;
   closeRegister: (closingCash: number) => Promise<void>;
@@ -39,14 +44,69 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [activeCashier, setActiveCashier] = useState<UserProfile | null>(null);
   const [activeRegisterSession, setActiveRegisterSession] = useState<RegisterSession | null>(null);
   const [isLocked, setIsLocked] = useState(true);
-  
+  const [pinIdentity, setPinIdentity] = useState('');
+  const [pinLoadingState, setPinLoading] = useState(true);
+  const [pinEnrolled, setPinEnrolled] = useState(false);
+  const [pinError, setPinError] = useState('');
+  const [pinRetry, setPinRetry] = useState(0);
+  const pinLoading = pinLoadingState || pinIdentity !== (user?.uid || '');
+  const identityRef = useRef(user?.uid);
+  identityRef.current = user?.uid;
+
+  const pinRequest = useCallback(async (body: Record<string, unknown>) => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser) throw new Error('Sign in with your staff account first.');
+    const uid = currentUser.uid;
+    const token = await currentUser.getIdToken();
+    const response = await fetch('/api/staff-pin', {
+      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      cache: 'no-store', signal: AbortSignal.timeout(15000), body: JSON.stringify(body),
+    });
+    const data = await response.json();
+    if (identityRef.current !== uid) throw new Error('The active account changed. Please retry.');
+    if (!response.ok || data.success === false) throw new Error(data.error || 'PIN service unavailable.');
+    return data;
+  }, [auth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const uid = user?.uid || '';
+    setIsLocked(true);
+    setPinLoading(true);
+    setPinEnrolled(false);
+    setPinError('');
+    if (!user) {
+      setPinIdentity(''); setPinLoading(false);
+      return;
+    }
+    pinRequest({ action: 'status' }).then(data => {
+      if (!cancelled) { setPinEnrolled(data.enrolled === true); setPinIdentity(uid); }
+    }).catch(error => {
+      if (!cancelled) { setPinError(error.message); setPinIdentity(uid); }
+    }).finally(() => { if (!cancelled) setPinLoading(false); });
+    return () => { cancelled = true; };
+  }, [user?.uid, pinRetry, pinRequest]);
+
+  const retryPinStatus = useCallback(() => setPinRetry(value => value + 1), []);
+  const enrollPin = useCallback(async (pin: string, confirmPin: string) => {
+    try {
+      await pinRequest({ action: 'enroll', pin, confirmPin });
+      setPinEnrolled(true);
+      setPinError('');
+      localStorage.setItem('uax_last_unlocked_at', Date.now().toString());
+      setIsLocked(false);
+    } catch (error) {
+      retryPinStatus();
+      throw error;
+    }
+  }, [pinRequest, retryPinStatus]);
+
   const [isLocationAuthorized, setIsLocationAuthorized] = useState(true);
   const [locationName, setLocationName] = useState('Remote Node');
   const [clientIp, setClientIp] = useState('0.0.0.0');
   const [loading, setLoading] = useState(true);
   
   const watchId = useRef<number | null>(null);
-  const lastUnlockedAt = useRef<number | null>(null);
   const lastGeocodeTime = useRef<number>(0);
 
   const refreshLocation = useCallback(() => {
@@ -70,7 +130,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         const now = Date.now();
         if (now - lastGeocodeTime.current > 30000) {
           lastGeocodeTime.current = now;
-          fetch(`/api/maps/geocode?lat=${latitude}&lon=${longitude}`)
+          fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=14`)
             .then(res => res.json())
             .then(data => {
               const area = data.address?.suburb || data.address?.neighbourhood || data.address?.town || data.address?.city || 'External';
@@ -80,8 +140,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
       },
       (error) => {
-        setIsLocationAuthorized(false);
-        setLocationName(error.code === 1 ? 'Location Permission Denied' : 'Offline Signal');
+        setIsLocationAuthorized(true); 
+        setLocationName('Offline Signal');
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 }
     );
@@ -111,107 +171,74 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [refreshLocation]);
 
   useEffect(() => {
+    if (typeof window === 'undefined') return;
     const checkTimeout = () => {
-      const unlockedAt = lastUnlockedAt.current;
-      if (unlockedAt !== null && !isLocked && Date.now() - unlockedAt >= 15 * 60 * 1000) {
-        lastUnlockedAt.current = null;
-        setIsLocked(true);
+      const lastUnlockedStr = localStorage.getItem('uax_last_unlocked_at');
+      if (lastUnlockedStr && !isLocked) {
+        const elapsed = Date.now() - parseInt(lastUnlockedStr, 10);
+        const fifteenMinutes = 15 * 60 * 1000;
+        if (elapsed >= fifteenMinutes) {
+          localStorage.removeItem('uax_last_unlocked_at');
+          setIsLocked(true);
+        }
       }
     };
+
     const interval = setInterval(checkTimeout, 15000);
     return () => clearInterval(interval);
   }, [isLocked]);
 
   useEffect(() => {
+    setActiveCashier(null);
+    setLoading(true);
     if (!firestore || !user) {
       setLoading(false);
       return;
     }
 
     let unsubscribeProfile: (() => void) | undefined;
-    let unsubscribeTerminal: (() => void) | undefined;
-    let unsubscribeRegister: (() => void) | undefined;
-    let currentRegisterSessionId: string | null = null;
 
-    const terminalId = localStorage.getItem('uax_terminal_id');
-    setActiveTerminal(null);
-    setActiveRegisterSession(null);
-
-    unsubscribeProfile = onSnapshot(doc(firestore, 'users', user.uid), (uSnap) => {
-      if (uSnap.exists()) {
-        const safeProfile = { ...uSnap.data() };
-        delete safeProfile.masterKey;
-        delete safeProfile.pin;
-        setActiveCashier({ ...safeProfile, uid: uSnap.id } as UserProfile);
-      } else {
-        setActiveCashier(null);
-      }
-      setLoading(false);
-    }, (err) => {
-      console.error('[TERMINAL] Cashier profile subscription failed:', err);
-      setLoading(false);
-    });
-
-    if (terminalId) {
-      unsubscribeTerminal = onSnapshot(doc(firestore, 'pos_terminals', terminalId), (terminalSnap) => {
-        if (!terminalSnap.exists()) {
-          setActiveTerminal(null);
-          setActiveRegisterSession(null);
-          currentRegisterSessionId = null;
-          unsubscribeRegister?.();
-          unsubscribeRegister = undefined;
-          return;
+    const init = async () => {
+      let terminalId = localStorage.getItem('uax_terminal_id');
+      
+      unsubscribeProfile = onSnapshot(doc(firestore, 'users', user.uid), (uSnap) => {
+        if (uSnap.exists()) {
+          setActiveCashier({ ...uSnap.data(), uid: uSnap.id } as UserProfile);
         }
-
-        const terminal = { ...terminalSnap.data(), id: terminalSnap.id } as POSTerminal & { disabled?: boolean; locked?: boolean; forceLockAt?: number };
-        setActiveTerminal(terminal);
-
-        // Remote Telegram station locks and cashier-session closures are enforced
-        // through the live terminal document, not only at the next PIN attempt.
-        if (terminal.disabled === true || terminal.locked === true) {
-          lastUnlockedAt.current = null;
-          setIsLocked(true);
-        }
-        if (terminal.currentCashierId !== undefined && terminal.currentCashierId !== user.uid) {
-          lastUnlockedAt.current = null;
-          setActiveCashier(null);
-          setIsLocked(true);
-        }
-
-        const nextSessionId = terminal.currentRegisterSessionId || null;
-        if (nextSessionId === currentRegisterSessionId) return;
-
-        unsubscribeRegister?.();
-        unsubscribeRegister = undefined;
-        currentRegisterSessionId = nextSessionId;
-        setActiveRegisterSession(null);
-
-        if (nextSessionId) {
-          unsubscribeRegister = onSnapshot(doc(firestore, 'register_sessions', nextSessionId), (registerSnap) => {
-            setActiveRegisterSession(registerSnap.exists()
-              ? { ...registerSnap.data(), id: registerSnap.id } as RegisterSession
-              : null);
-          }, (error) => {
-            console.error('[TERMINAL] Register session subscription failed:', error);
-            setActiveRegisterSession(null);
-          });
-        }
-      }, (error) => {
-        console.error('[TERMINAL] Terminal subscription failed:', error);
-        setActiveTerminal(null);
-        setActiveRegisterSession(null);
+        // Ensure loading finishes after first profile resolution attempt
+        setLoading(false);
+      }, (err) => {
+        setLoading(false);
       });
-    }
 
-    return () => {
-      unsubscribeProfile?.();
-      unsubscribeTerminal?.();
-      unsubscribeRegister?.();
+      if (!terminalId) return;
+
+      try {
+        const termDoc = await getDoc(doc(firestore, 'pos_terminals', terminalId));
+        if (termDoc.exists()) {
+          const data = termDoc.data() as POSTerminal;
+          setActiveTerminal({ ...data, id: termDoc.id });
+
+          if (data.currentRegisterSessionId) {
+            const regDoc = await getDoc(doc(firestore, 'register_sessions', data.currentRegisterSessionId));
+            if (regDoc.exists()) {
+              setActiveRegisterSession({ ...regDoc.data(), id: regDoc.id } as RegisterSession);
+            }
+          }
+        }
+      } catch (err) {
+        console.error('Terminal Init Error:', err);
+      }
     };
+
+    init();
+    return () => { if (unsubscribeProfile) unsubscribeProfile(); };
   }, [firestore, user]);
 
   const lockTerminal = useCallback(() => {
-    lastUnlockedAt.current = null;
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('uax_last_unlocked_at', '0'); // Force timeout
+    }
     setIsLocked(true);
     toast({ title: "Station Locked" });
   }, []);
@@ -229,17 +256,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const uDoc = await getDoc(userRef);
       
       if (uDoc.exists()) {
-        const safeProfile = { ...uDoc.data() };
-        delete safeProfile.masterKey;
-        delete safeProfile.pin;
-        const newUser = { ...safeProfile, uid: uDoc.id } as UserProfile;
-        if (!newUser.role || newUser.role === 'CLIENT') {
-          setActiveCashier(null);
-          setIsLocked(true);
-          await signOut(auth);
-          toast({ variant: "destructive", title: "Staff access required", description: "Customer accounts cannot enter the staff terminal." });
-          return false;
-        }
+        const newUser = { ...uDoc.data(), uid: uDoc.id } as UserProfile;
         setActiveCashier(newUser);
         setIsLocked(true); 
         
@@ -253,10 +270,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         toast({ title: "Authorized", description: `Welcome back, ${newUser.displayName}` });
         return true;
       }
-      setActiveCashier(null);
-      setIsLocked(true);
-      await signOut(auth);
-      toast({ variant: "destructive", title: "Staff profile unavailable", description: "This account is not configured for staff terminal access." });
       return false;
     } catch (err: any) {
       if (err.code === 'auth/quota-exceeded') {
@@ -276,10 +289,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       const uDoc = await getDoc(userRef);
       
       if (uDoc.exists()) {
-        const safeProfile = { ...uDoc.data() };
-        delete safeProfile.masterKey;
-        delete safeProfile.pin;
-        const profileData = safeProfile as UserProfile;
+        const profileData = uDoc.data() as UserProfile;
         if (profileData.role === 'CLIENT') {
           toast({ variant: "destructive", title: "Access Denied", description: "Standard accounts not authorized for node entry." });
           return false;
@@ -307,67 +317,32 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [auth, firestore, activeTerminal]);
 
   const swapIdentity = useCallback(async (targetUser: UserProfile): Promise<boolean> => {
-    if (!auth?.currentUser || !targetUser?.uid) return false;
-
-    // Never retrieve or reuse a stored Firebase password. Switching Firebase
-    // identities requires the operator to authenticate with their own
-    // credentials through loginAndSwitch.
-    if (auth.currentUser.uid === targetUser.uid) {
+    if (!auth || !firestore) return false;
+    
+    // Check if already signed in as this user
+    if (auth.currentUser?.email?.toLowerCase() === targetUser.email.toLowerCase()) {
       setIsLocked(true);
       return true;
     }
-
-    toast({
-      variant: "destructive",
-      title: "Re-authentication required",
-      description: "Enter this operator's own email and password to switch accounts.",
-    });
+    
+    // Never reuse another staff member's cached password to switch identities.
+    toast({ title: "Sign in required", description: "Use Add New Account to sign in with that staff account." });
     return false;
-  }, [auth]);
+  }, [auth, firestore]);
 
-  const switchWithPin = useCallback(async (targetUid: string, pin: string, deviceId: string): Promise<boolean> => {
-    if (!auth || !firestore || !auth.currentUser || !targetUid || !deviceId) return false;
+  const unlockTerminal = useCallback(async (pin: string): Promise<boolean> => {
+    if (pinLoading || !pinEnrolled || !activeCashier || activeCashier.uid !== user?.uid || !/^\d{4}$/.test(pin)) return false;
     try {
-      const idToken = await auth.currentUser.getIdToken();
-      const response = await fetch('/api/terminal/pin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${idToken}` },
-        body: JSON.stringify({ action: 'verify-pin', targetUid, deviceId, pin }),
-      });
-      const payload = await response.json();
-      if (!response.ok || typeof payload.customToken !== 'string') return false;
-
-      const credential = await signInWithCustomToken(auth, payload.customToken);
-      const profileSnap = await getDoc(doc(firestore, 'users', credential.user.uid));
-      if (!profileSnap.exists()) {
-        await signOut(auth);
-        return false;
-      }
-      const profile = { ...profileSnap.data() };
-      delete profile.masterKey;
-      delete profile.pin;
-      const safeProfile = { ...profile, uid: profileSnap.id } as UserProfile;
-      if (!safeProfile.role || safeProfile.role === 'CLIENT') {
-        await signOut(auth);
-        setActiveCashier(null);
-        setIsLocked(true);
-        return false;
-      }
-      setActiveCashier(safeProfile);
-      if (activeTerminal) {
-        await updateDoc(doc(firestore, 'pos_terminals', activeTerminal.id), {
-          currentCashierId: safeProfile.uid,
-          lastActive: Date.now(),
-        }).catch(error => console.error('[TERMINAL] Could not update active operator:', error));
-      }
-      lastUnlockedAt.current = Date.now();
+      await pinRequest({ action: 'verify', pin });
+      localStorage.setItem('uax_last_unlocked_at', Date.now().toString());
+      setPinError('');
       setIsLocked(false);
       return true;
     } catch (error) {
-      console.error('[TERMINAL] PIN identity switch failed:', error);
+      toast({ variant: "destructive", title: "PIN verification failed", description: error instanceof Error ? error.message : "Please retry." });
       return false;
     }
-  }, [auth, firestore, activeTerminal]);
+  }, [pinLoading, pinEnrolled, activeCashier, user?.uid, pinRequest]);
 
   const openRegister = async (openingCash: number, unit: BusinessUnit) => {
     if (!firestore || !user) return;
@@ -393,7 +368,6 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('uax_terminal_id', terminalId);
     setActiveTerminal(terminalData);
     setActiveRegisterSession({ ...regSession, id: regRef.id });
-    lastUnlockedAt.current = Date.now();
     setIsLocked(false);
   };
 
@@ -403,17 +377,11 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
     await updateDoc(doc(firestore, 'pos_terminals', activeTerminal.id), { status: 'CLOSED', currentCashierId: null, currentRegisterSessionId: null });
     setActiveTerminal(prev => prev ? { ...prev, status: 'CLOSED', currentCashierId: null, currentRegisterSessionId: null } : null);
     setActiveRegisterSession(null);
-    lastUnlockedAt.current = null;
     setIsLocked(true);
   };
 
-  const setTerminalLocked = useCallback((locked: boolean) => {
-    lastUnlockedAt.current = locked ? null : Date.now();
-    setIsLocked(locked);
-  }, []);
-
   const value = {
-    activeTerminal, activeCashier, activeRegisterSession, loading, lockTerminal, switchWithPin, setIsLocked: setTerminalLocked, openRegister, closeRegister, swapIdentity, loginAndSwitch, loginWithGoogle, clearActiveCashier, refreshLocation, isLocked, isLocationAuthorized, locationName, clientIp
+    pinLoading, pinEnrolled, pinError, retryPinStatus, enrollPin, activeTerminal, activeCashier, activeRegisterSession, loading, lockTerminal, unlockTerminal, setIsLocked, openRegister, closeRegister, swapIdentity, loginAndSwitch, loginWithGoogle, clearActiveCashier, refreshLocation, isLocked, isLocationAuthorized, locationName, clientIp
   };
 
   return <TerminalContext.Provider value={value}>{children}</TerminalContext.Provider>;

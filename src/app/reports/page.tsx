@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useMemo, useState } from 'react';
 import { 
   BarChart3, 
@@ -60,7 +56,6 @@ export default function BusinessReports() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
-  const { startOfToday } = useBusinessClock();
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -70,7 +65,8 @@ export default function BusinessReports() {
     if (!firestore) return null;
     return query(
       collection(firestore, 'orders'), 
-      orderBy('timestamp', 'desc')
+      orderBy('timestamp', 'desc'),
+      limit(2000)
     );
   }, [firestore]);
 
@@ -78,6 +74,8 @@ export default function BusinessReports() {
 
   const filteredOrders = useMemo(() => {
     if (!allOrders) return [];
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+
     return allOrders.filter(o => {
       if (o.status !== 'PAID') return false;
 
@@ -114,7 +112,7 @@ export default function BusinessReports() {
 
       return true; // ALL_TIME
     });
-  }, [allOrders, datePreset, startDate, endDate, searchTerm, startOfToday]);
+  }, [allOrders, datePreset, startDate, endDate, searchTerm]);
 
   const stats = useMemo(() => {
     const periodPaid = filteredOrders;
@@ -198,10 +196,10 @@ export default function BusinessReports() {
   };
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto px-2 pt-2 ua-compact-page">
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto px-2 pt-2">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <PageHeader title="Intelligence Reports" breadcrumb={["Finance", "Intelligence Reports"]} className="mb-0" />
+          <h1 className="text-2xl md:text-3xl font-black font-headline text-zinc-900 uppercase tracking-tight leading-none">Intelligence Reports</h1>
           <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">Shift performance and high-density turnover analytics</p>
         </div>
         <div className="flex gap-2">
@@ -240,7 +238,7 @@ export default function BusinessReports() {
         </Card>
 
         {/* Metric Cards */}
-        <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4 ua-metric-strip">
+        <div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <MetricCard title="Revenue Total" value={`KES ${stats.total.toLocaleString()}`} sub={`Net volume for period`} icon={Target} color="text-primary" />
           <MetricCard title="Transaction Count" value={stats.count.toString()} sub={`Authorized orders`} icon={TrendingUp} />
           <MetricCard title="Departmental Split" value={stats.units.length.toString()} sub={`Active units`} icon={LayoutList} />

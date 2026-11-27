@@ -1,152 +1,192 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { Menu } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import { 
+  LayoutDashboard, 
+  Menu, 
+  Settings,
+  ChevronRight,
+  MonitorPlay,
+  X,
+  ChefHat,
+  Coffee,
+  Store,
+  Bot,
+  Users,
+  DollarSign,
+  Package,
+  ShieldCheck,
+  HardDrive,
+  MessageSquare,
+  FileText,
+  Car,
+  UserCircle,
+  ClipboardList,
+  Contact,
+  Truck,
+  Receipt,
+  BarChart3,
+  ShieldAlert,
+  BookOpen,
+  Banknote,
+  Smartphone
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/use-profile';
 import { useDoc, useFirestore, useUser } from '@/firebase';
 import { doc } from 'firebase/firestore';
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
+import { 
+  Sheet, 
+  SheetContent, 
+  SheetHeader, 
+  SheetTitle, 
   SheetTrigger,
-  SheetClose,
+  SheetClose
 } from '@/components/ui/sheet';
-import { getVisibleNavGroups, type NavItem } from './navigation-config';
+
+type NavItem = {
+  icon: any;
+  label: string;
+  href: string;
+  superOnly?: boolean;
+  unit?: 'LOUNGE' | 'STORE' | 'CARWASH';
+};
+
+const ALL_NAV_ITEMS: NavItem[] = [
+  { icon: LayoutDashboard, label: 'Dashboard', href: '/dashboard' },
+  { icon: ChefHat, label: 'Kitchen', href: '/kds', unit: 'LOUNGE' },
+  { icon: Coffee, label: 'Lounge', href: '/lounge', unit: 'LOUNGE' },
+  { icon: Store, label: 'Store', href: '/store', unit: 'STORE' },
+  { icon: MonitorPlay, label: 'Carwash', href: '/carwash/pos', unit: 'CARWASH' },
+  
+  // Operational Hubs
+  { icon: Bot, label: 'Intelligence', href: '/admin/hubs/intelligence' },
+  { icon: Users, label: 'Staff Hub', href: '/admin/hubs/staff' },
+  { icon: DollarSign, label: 'Finance', href: '/admin/hubs/finance' },
+  { icon: Package, label: 'Logistics', href: '/admin/hubs/logistics' },
+  { icon: ShieldCheck, label: 'Governance', href: '/admin/hubs/governance', superOnly: true },
+
+  // Specialized Modules
+  { icon: Bot, label: 'Neural AI', href: '/admin/intelligence' },
+  { icon: Smartphone, label: 'App Release', href: '/admin/app-manager', superOnly: true },
+  { icon: MessageSquare, label: 'Support', href: '/admin/support' },
+  { icon: HardDrive, label: 'Database', href: '/admin/database' },
+  { icon: Banknote, label: 'Payroll', href: '/admin/payroll' },
+  { icon: FileText, label: 'Documents', href: '/admin/documents' },
+  { icon: Package, label: 'Stock', href: '/inventory' },
+  { icon: Car, label: 'Queue', href: '/carwash', unit: 'CARWASH' },
+  { icon: Users, label: 'Team', href: '/employees' },
+  { icon: UserCircle, label: 'Metrics', href: '/attendants', unit: 'CARWASH' },
+  { icon: ClipboardList, label: 'Sales', href: '/sales-history' },
+  { icon: Contact, label: 'CRM', href: '/customers' },
+  { icon: Truck, label: 'Suppliers', href: '/suppliers' },
+  { icon: Receipt, label: 'Expenses', href: '/finance' },
+  { icon: BarChart3, label: 'Analytics', href: '/reports' },
+  { icon: ShieldAlert, label: 'Security', href: '/reports/fraud' },
+  { icon: BookOpen, label: 'Help', href: '/admin/help' },
+  { icon: Settings, label: 'Matrix', href: '/admin', superOnly: true },
+];
 
 export function BottomNav() {
   const pathname = usePathname();
+  const router = useRouter();
   const { user } = useUser();
   const { role, isSuperAdmin, profile } = useProfile();
   const firestore = useFirestore();
   const [isOpen, setIsOpen] = useState(false);
 
+  // Guard document request with user session to prevent permission errors before auth resolution
   const permissionsRef = useMemo(() => {
     if (!firestore || !user) return null;
     return doc(firestore, 'system', 'permissions');
   }, [firestore, user]);
-  const { data: permMap } = useDoc<Record<string, string[]>>(permissionsRef);
 
-  const visibleGroups = useMemo(
-    () => getVisibleNavGroups({
-      role,
-      isSuperAdmin,
-      assignedUnits: profile?.assignedUnits || [],
-      permMap,
-    }),
-    [role, isSuperAdmin, profile?.assignedUnits, permMap]
-  );
+  const { data: permMap } = useDoc<any>(permissionsRef);
 
-  const allItems = visibleGroups.flatMap(group => group.items);
-  const preferred = [
-    '/dashboard',
-    '/lounge',
-    '/store',
-    '/carwash/pos',
-    '/kds',
-    '/sales-history',
-    '/settings',
-  ];
-  const primaryItems = useMemo(() => {
-    const selected = preferred
-      .map(href => allItems.find(item => item.href === href))
-      .filter((item): item is NavItem => Boolean(item));
-    const unique = selected.filter((item, index) => selected.findIndex(other => other.href === item.href) === index);
-    if (unique.length >= 3) return unique.slice(0, 3);
-    const fill = allItems.filter(item => !unique.some(existing => existing.href === item.href));
-    return [...unique, ...fill].slice(0, 3);
-  }, [allItems]);
+  const allowedItems = useMemo(() => {
+    if (isSuperAdmin) return ALL_NAV_ITEMS;
 
-  const isActive = (href: string) => pathname === href;
-  const hasActiveMore = allItems.some(item => isActive(item.href) && !primaryItems.some(primary => primary.href === item.href));
+    if (!role) return [];
+    const baseline = ['/dashboard', '/settings'];
+    const roleAllowedHrefs = permMap?.[role] || [];
+    const userUnits = profile?.assignedUnits || [];
+
+    return ALL_NAV_ITEMS.filter(item => {
+      // 1. Role-based check
+      const isAllowedByRole = baseline.includes(item.href) || roleAllowedHrefs.includes(item.href);
+      if (!isAllowedByRole) return false;
+
+      // 2. Station-based check
+      if (item.unit && !isSuperAdmin) {
+        if (!userUnits.includes(item.unit)) return false;
+      }
+
+      return true;
+    });
+  }, [role, permMap, isSuperAdmin, profile?.assignedUnits]);
+
+  const primaryNav = allowedItems.slice(0, 4);
+  const extendedNav = allowedItems.slice(4);
 
   return (
-    <nav
-      aria-label="Mobile primary navigation"
-      className="fixed inset-x-0 bottom-0 z-[60] flex h-[calc(4.25rem+env(safe-area-inset-bottom))] items-center justify-around border-t border-zinc-200 bg-white/95 px-1 pb-[env(safe-area-inset-bottom)] shadow-[0_-8px_28px_rgba(0,0,0,0.06)] backdrop-blur md:hidden"
-    >
-      {primaryItems.map(item => {
+    <nav className="fixed bottom-0 left-0 right-0 h-20 bg-white border-t border-zinc-100 flex items-center justify-around px-1 z-50 md:hidden shadow-[0_-8px_32px_rgba(0,0,0,0.05)]">
+      {primaryNav.map((item) => {
+        const active = pathname === item.href;
         const Icon = item.icon;
-        const active = isActive(item.href);
+
         return (
           <Link
             key={item.href}
             href={item.href}
-            aria-current={active ? 'page' : undefined}
             className={cn(
-              'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-center transition-colors active:scale-95',
-              active ? 'text-primary' : 'text-zinc-500'
+              "flex flex-col items-center gap-1 min-w-[64px] transition-all py-2 active:scale-90",
+              active ? "text-primary" : "text-zinc-400"
             )}
           >
-            <Icon className="h-5 w-5 shrink-0" />
-            <span className="w-full truncate text-[9px] font-bold uppercase tracking-wide">{item.label}</span>
+            <Icon className={cn("w-5 h-5", active && "animate-in fade-in zoom-in duration-300")} />
+            <span className="text-[9px] font-black uppercase tracking-widest text-center truncate w-full px-1">{item.label}</span>
           </Link>
         );
       })}
 
-      <Sheet open={isOpen} onOpenChange={setIsOpen}>
-        <SheetTrigger asChild>
-          <button
-            type="button"
-            aria-label="Open all navigation"
-            aria-expanded={isOpen}
-            className={cn(
-              'flex min-w-0 flex-1 flex-col items-center justify-center gap-1 px-1 py-2 text-center active:scale-95',
-              isOpen || hasActiveMore ? 'text-primary' : 'text-zinc-500'
-            )}
-          >
-            <Menu className="h-5 w-5" />
-            <span className="text-[9px] font-bold uppercase tracking-wide">All pages</span>
-          </button>
-        </SheetTrigger>
+      {extendedNav.length > 0 && (
+        <Sheet open={isOpen} onOpenChange={setIsOpen}>
+          <SheetTrigger asChild>
+            <button className={cn("flex flex-col items-center gap-1 min-w-[64px] transition-all py-2 active:scale-90", isOpen ? "text-primary" : "text-zinc-400")}>
+              <Menu className="w-5 h-5" />
+              <span className="text-[9px] font-black uppercase tracking-widest">More</span>
+            </button>
+          </SheetTrigger>
+          <SheetContent side="bottom" className="rounded-none border-none px-0 pb-6 bg-white max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+            <SheetHeader className="px-8 border-b border-zinc-50 flex items-center h-14 shrink-0">
+              <SheetTitle className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Navigation Hubs</SheetTitle>
+            </SheetHeader>
+            
+            <div className="flex-1 overflow-y-auto p-2 grid grid-cols-2 gap-2 no-scrollbar h-fit">
+              {extendedNav.map((item) => {
+                const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+                const Icon = item.icon;
 
-        <SheetContent
-          side="bottom"
-          className="flex h-[88dvh] max-h-[88dvh] min-h-0 flex-col overflow-hidden rounded-t-2xl border-zinc-200 bg-white px-0 pb-[max(1rem,env(safe-area-inset-bottom))]"
-        >
-          <SheetHeader className="shrink-0 border-b border-zinc-100 px-5 pb-3 text-left">
-            <SheetTitle className="text-sm font-black uppercase tracking-wider text-zinc-900">
-              All modules
-            </SheetTitle>
-            <p className="text-xs text-zinc-500">Every page available to your role and assigned stations.</p>
-          </SheetHeader>
-
-          <div className="min-h-0 flex-1 touch-pan-y overflow-y-scroll overscroll-y-contain px-4 py-4 pb-8 [-webkit-overflow-scrolling:touch]">
-            {visibleGroups.map(group => (
-              <section key={group.title} aria-label={group.title} className="mb-6 space-y-2 last:mb-0">
-                <h3 className="px-1 text-[10px] font-black uppercase tracking-[0.16em] text-zinc-400">
-                  {group.title}
-                </h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {group.items.map(item => {
-                    const Icon = item.icon;
-                    const active = isActive(item.href);
-                    return (
-                      <SheetClose asChild key={item.href}>
-                        <Link
-                          href={item.href}
-                          aria-current={active ? 'page' : undefined}
-                          className={cn(
-                            'flex min-h-12 min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                            active ? 'border-primary bg-primary/5 text-primary' : 'border-zinc-200 bg-white text-zinc-700 hover:bg-zinc-50'
-                          )}
-                        >
-                          <Icon className="h-4 w-4 shrink-0" />
-                          <span className="min-w-0 text-[11px] font-semibold leading-tight">{item.label}</span>
-                        </Link>
-                      </SheetClose>
-                    );
-                  })}
-                </div>
-              </section>
-            ))}
-          </div>
-        </SheetContent>
-      </Sheet>
+                return (
+                  <div key={item.href} onClick={() => { router.push(item.href); setIsOpen(false); }}>
+                    <div className={cn(
+                      "w-full flex flex-col items-center justify-center p-3 rounded-none border border-zinc-50 transition-all active:scale-[0.98] select-none gap-1.5 text-center",
+                      active ? "bg-primary text-white shadow-xl shadow-primary/20" : "bg-white text-zinc-600 hover:bg-zinc-50"
+                    )}>
+                      <div className={cn("w-9 h-9 rounded-none flex items-center justify-center transition-colors shadow-inner border border-zinc-100", active ? "bg-white text-primary" : "bg-zinc-50 text-zinc-400")}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className="text-[8px] font-black uppercase tracking-widest">{item.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </SheetContent>
+        </Sheet>
+      )}
     </nav>
   );
 }

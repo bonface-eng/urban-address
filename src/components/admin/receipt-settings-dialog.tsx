@@ -1,13 +1,20 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FullPageEditor } from '@/components/admin/full-page-editor';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogDescription, 
+  DialogFooter, 
+  DialogHeader, 
+  DialogTitle 
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useReceiptSettings, DEFAULT_RECEIPT_SETTINGS, ReceiptSettings } from '@/hooks/use-receipt-settings';
-import { Settings2, RefreshCcw, Building2, MapPin, Phone, CreditCard, FileText, CheckCircle2, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { Settings2, RefreshCcw, Building2, MapPin, Phone, CreditCard, FileText, CheckCircle2 } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 
 interface ReceiptSettingsDialogProps {
@@ -46,27 +53,27 @@ export function ReceiptSettingsDialog({ open, onOpenChange }: ReceiptSettingsDia
   };
 
   return (
-    <FullPageEditor open={open} title="Receipt configuration" description="Edit business headers, branch details and receipt content." onClose={() => onOpenChange(false)}>
-      <div className="flex w-full flex-col">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[620px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white max-h-[90vh] flex flex-col">
         {/* MODAL HEADER */}
         <div className="bg-zinc-900 p-8 border-b border-white/10 text-center shrink-0">
            <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mx-auto mb-3">
              <Settings2 className="w-6 h-6" />
            </div>
-           <div>
-              <h2 className="font-headline uppercase tracking-widest text-lg text-white">
+           <DialogHeader>
+              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">
                 Edit Receipt Data & Headers
-              </h2>
-              <p className="text-[10px] font-black uppercase text-zinc-400 mt-1">
+              </DialogTitle>
+              <DialogDescription className="text-[10px] font-black uppercase text-zinc-400 mt-1">
                 Customize business names, branch location, contact info, and footer notes for thermal receipts.
-              </p>
-           </div>
+              </DialogDescription>
+           </DialogHeader>
         </div>
 
         {/* MODAL BODY */}
         <form onSubmit={handleSubmit} className="p-8 overflow-y-auto flex-1 space-y-6">
            <Tabs defaultValue="headers" className="w-full">
-              <TabsList className="mb-6 grid h-auto w-full grid-cols-2 gap-1 rounded-lg bg-zinc-100 p-1.5">
+              <TabsList className="bg-zinc-100 p-1.5 rounded-2xl h-12 mb-6 w-full flex">
                  <TabsTrigger value="headers" className="flex-1 rounded-xl h-full text-[9px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-primary transition-all">
                    Brand Headers
                  </TabsTrigger>
@@ -75,9 +82,6 @@ export function ReceiptSettingsDialog({ open, onOpenChange }: ReceiptSettingsDia
                  </TabsTrigger>
                  <TabsTrigger value="footer" className="flex-1 rounded-xl h-full text-[9px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-primary transition-all">
                    Footer & Tax
-                 </TabsTrigger>
-                 <TabsTrigger value="sections" className="flex-1 rounded-xl h-full text-[9px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:text-primary transition-all">
-                   Custom Sections
                  </TabsTrigger>
               </TabsList>
 
@@ -225,33 +229,6 @@ export function ReceiptSettingsDialog({ open, onOpenChange }: ReceiptSettingsDia
                     />
                  </div>
               </TabsContent>
-
-              <TabsContent value="sections" className="m-0 space-y-4">
-                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-3">
-                  <p className="text-xs font-bold text-zinc-900">Custom receipt sections</p>
-                  <p className="mt-1 text-[10px] leading-relaxed text-zinc-500">Add store policies, service notes, warranty terms, bank details, social handles or any extra information. Sections are displayed on receipts in the order shown.</p>
-                </div>
-                {(formData.receiptSections || []).slice().sort((a, b) => a.order - b.order).map((section, index, sections) => (
-                  <div key={section.id} className="space-y-3 rounded-lg border border-zinc-200 p-3">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[10px] font-bold uppercase tracking-wide text-zinc-500">Section {index + 1}</p>
-                      <div className="flex items-center gap-1">
-                        <Button type="button" size="icon" variant="ghost" disabled={index === 0} onClick={() => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).map(item => item.id === section.id ? { ...item, order: item.order - 1 } : item).map(item => item.id === sections[index - 1]?.id ? { ...item, order: section.order } : item) }))} aria-label="Move section up"><ArrowUp className="h-4 w-4" /></Button>
-                        <Button type="button" size="icon" variant="ghost" disabled={index === sections.length - 1} onClick={() => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).map(item => item.id === section.id ? { ...item, order: item.order + 1 } : item).map(item => item.id === sections[index + 1]?.id ? { ...item, order: section.order } : item) }))} aria-label="Move section down"><ArrowDown className="h-4 w-4" /></Button>
-                        <Button type="button" size="icon" variant="ghost" className="text-red-600" onClick={() => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).filter(item => item.id !== section.id) }))} aria-label="Remove section"><Trash2 className="h-4 w-4" /></Button>
-                      </div>
-                    </div>
-                    <Input value={section.title} onChange={e => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).map(item => item.id === section.id ? { ...item, title: e.target.value } : item) }))} placeholder="Section heading" className="h-10" />
-                    <Input value={section.content} onChange={e => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).map(item => item.id === section.id ? { ...item, content: e.target.value } : item) }))} placeholder="Section text shown on the receipt" className="h-10" />
-                    <Button type="button" variant="outline" size="sm" onClick={() => setFormData(prev => ({ ...prev, receiptSections: (prev.receiptSections || []).map(item => item.id === section.id ? { ...item, enabled: !item.enabled } : item) }))} className="h-8 text-[10px]">
-                      {section.enabled ? 'Visible on receipts' : 'Hidden on receipts'}
-                    </Button>
-                  </div>
-                ))}
-                <Button type="button" variant="outline" onClick={() => setFormData(prev => ({ ...prev, receiptSections: [...(prev.receiptSections || []), { id: `custom-${Date.now()}`, title: 'New section', content: 'Add your receipt information here', enabled: true, order: (prev.receiptSections || []).length }] }))} className="h-10 w-full border-dashed">
-                  <Plus className="mr-2 h-4 w-4" /> Add receipt section
-                </Button>
-              </TabsContent>
            </Tabs>
 
            <div className="flex items-center justify-between pt-2 border-t border-zinc-100">
@@ -274,7 +251,7 @@ export function ReceiptSettingsDialog({ open, onOpenChange }: ReceiptSettingsDia
               Save Receipt Header & Data
            </Button>
         </form>
-      </div>
-    </FullPageEditor>
+      </DialogContent>
+    </Dialog>
   );
 }

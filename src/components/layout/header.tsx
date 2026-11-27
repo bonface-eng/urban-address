@@ -17,7 +17,7 @@ import { signOut } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import { 
   LogOut, 
-  UserCircle, 
+  Settings, 
   Clock, 
   Lock,
   User,
@@ -66,7 +66,7 @@ export function Header() {
       <div className="flex items-center gap-3 md:gap-4">
         
         {/* Time & Location Pulse - Refined for mobile PWA */}
-        <div className="hidden md:flex flex-col items-end">
+        <div className="flex flex-col items-end">
            <div className="flex items-center gap-1.5 md:gap-2 text-zinc-900 leading-none">
               <Clock className="w-3 md:w-3.5 h-3 md:h-3.5 text-primary opacity-40" />
               <span className="text-[13px] md:text-[15px] font-black tracking-tighter">
@@ -118,8 +118,8 @@ export function Header() {
               <DropdownMenuSeparator className="bg-zinc-50" />
               
               <DropdownMenuItem onClick={() => router.push('/settings')} className="rounded-xl gap-3 py-3 cursor-pointer">
-                <UserCircle className="w-4 h-4 text-zinc-400" />
-                <span className="text-xs font-black uppercase tracking-widest">Profile</span>
+                <Settings className="w-4 h-4 text-zinc-400" />
+                <span className="text-xs font-black uppercase tracking-widest">Settings</span>
               </DropdownMenuItem>
               
               <DropdownMenuSeparator className="bg-zinc-50" />

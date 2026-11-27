@@ -9,7 +9,7 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ["/api/"],
       },
     ],
-    sitemap: "https://urbanautoexpress.com/sitemap.xml",
-    host: "https://urbanautoexpress.com",
+    sitemap: "https://www.urbanautoexpress.com/sitemap.xml",
+    host: "https://www.urbanautoexpress.com",
   };
 }

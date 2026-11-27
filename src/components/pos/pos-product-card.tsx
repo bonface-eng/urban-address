@@ -27,13 +27,13 @@ export function POSProductCard({ product, onAdd }: POSProductCardProps) {
       onClick={() => !isOutOfStock && onAdd(product)}
       disabled={isOutOfStock}
       className={cn(
-        "flex min-w-0 items-center justify-between gap-2 p-3 sm:p-5 bg-white rounded-xl sm:rounded-[1.5rem] ring-1 ring-zinc-100 transition-all text-left group active:scale-[0.98] min-h-[72px] sm:min-h-[80px]",
+        "flex items-center justify-between p-5 bg-white rounded-[1.5rem] ring-1 ring-zinc-100 transition-all text-left group active:scale-[0.98] min-h-[80px]",
         isOutOfStock 
           ? "opacity-60 grayscale cursor-not-allowed bg-zinc-50" 
           : "hover:ring-primary/40 hover:bg-primary/5 active:scale-[0.98]"
       )}
     >
-      <div className="flex-1 min-w-0 pr-1 sm:pr-4">
+      <div className="flex-1 min-w-0 pr-4">
         <div className="flex items-center gap-2 mb-1.5">
           <span className={cn(
             "text-sm font-black uppercase truncate",
@@ -83,20 +83,20 @@ export function POSProductCard({ product, onAdd }: POSProductCardProps) {
           )}
         </div>
       </div>
-      <div className="shrink-0 text-right flex items-center gap-2 sm:gap-6">
+      <div className="text-right flex items-center gap-6">
         <span className={cn(
-          "text-xs sm:text-sm font-black whitespace-nowrap tracking-tight",
+          "text-sm font-black whitespace-nowrap tracking-tight",
           isOutOfStock ? "text-zinc-300" : "text-zinc-900"
         )}>
           KES {product.price.toLocaleString()}
         </span>
         <div className={cn(
-          "w-9 h-9 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl flex items-center justify-center transition-all border",
+          "w-12 h-12 rounded-2xl flex items-center justify-center transition-all border",
           isOutOfStock 
             ? "bg-zinc-100 text-zinc-200 border-zinc-100" 
             : "bg-zinc-50 text-zinc-400 group-hover:bg-primary group-hover:text-white group-hover:shadow-lg group-hover:shadow-primary/20 border-zinc-100"
         )}>
-          {isOutOfStock ? <AlertCircle className="w-5 h-5" /> : <Plus className="w-5 h-5 sm:w-6 sm:h-6" />}
+          {isOutOfStock ? <AlertCircle className="w-5 h-5" /> : <Plus className="w-6 h-6" />}
         </div>
       </div>
     </button>

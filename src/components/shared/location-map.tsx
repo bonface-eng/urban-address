@@ -74,13 +74,13 @@ export function LocationMap() {
   };
 
   return (
-    <section className="relative h-[420px] w-full overflow-hidden border-y border-zinc-100 bg-zinc-100 sm:h-[480px] md:h-[560px]">
-      <div className="absolute left-3 top-3 z-30 sm:left-5 sm:top-5">
+    <section className="relative w-full h-[600px] bg-zinc-100 overflow-hidden border-y border-zinc-100">
+      <div className="absolute top-8 left-8 z-30">
         <div className="flex flex-col gap-3">
           <Button 
             onClick={handleGetDirections}
             disabled={isCalculating}
-            className="h-11 px-4 bg-zinc-900 text-white rounded-md text-[9px] sm:text-[10px] font-black uppercase tracking-[0.12em] hover:bg-primary transition-all shadow-xl gap-2 sm:h-12 sm:px-5"
+            className="h-14 px-8 bg-zinc-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-primary transition-all shadow-2xl gap-3"
           >
             {isCalculating ? (
               <div className="flex items-center gap-3">

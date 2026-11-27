@@ -59,9 +59,9 @@ export function CustomerLookup({ onSelect, selectedCustomer, className }: Custom
   return (
     <div className={cn("relative", className)}>
       {selectedCustomer ? (
-        <div className="flex items-center justify-between p-2 md:p-3 bg-primary/5 border border-primary/20 rounded-lg md:rounded-xl animate-in zoom-in-95 duration-300">
+        <div className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-xl animate-in zoom-in-95 duration-300">
            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg bg-white flex items-center justify-center text-primary shadow-sm border border-primary/10">
+              <div className="w-10 h-10 rounded-lg bg-white flex items-center justify-center text-primary shadow-sm border border-primary/10">
                  <User className="w-5 h-5" />
               </div>
               <div className="min-w-0">
@@ -80,11 +80,11 @@ export function CustomerLookup({ onSelect, selectedCustomer, className }: Custom
         <div className="relative group">
           <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300 group-focus-within:text-primary transition-colors" />
           <Input 
-            placeholder="Search by member name or phone, or swipe card" 
+            placeholder="MEMBER PHONE / NAME / SWIPE CARD" 
             value={searchTerm}
             onFocus={() => setIsOpen(true)}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 h-10 md:h-12 bg-white border-zinc-100 rounded-lg md:rounded-xl font-medium text-[11px] md:text-[10px] tracking-normal focus:ring-2 focus:ring-primary/5 placeholder:text-zinc-400 shadow-sm"
+            className="pl-10 h-12 bg-white border-zinc-100 rounded-xl font-bold text-[10px] uppercase tracking-widest focus:ring-4 focus:ring-primary/5 placeholder:text-zinc-200 shadow-sm"
           />
           {isOpen && results.length > 0 && (
             <div className="absolute z-[100] left-0 right-0 top-[calc(100%+8px)] bg-white border border-zinc-100 rounded-2xl shadow-2xl overflow-hidden py-1 max-h-[300px] overflow-y-auto no-scrollbar animate-in slide-in-from-top-2">
@@ -96,10 +96,10 @@ export function CustomerLookup({ onSelect, selectedCustomer, className }: Custom
                      setIsOpen(false);
                      setSearchTerm('');
                    }}
-                   className="w-full px-3 md:px-5 py-3 md:py-4 text-left hover:bg-zinc-50 border-b border-zinc-50 last:border-0 flex items-center justify-between group"
+                   className="w-full px-5 py-4 text-left hover:bg-zinc-50 border-b border-zinc-50 last:border-0 flex items-center justify-between group"
                  >
                     <div className="flex items-center gap-4">
-                       <div className="w-8 h-8 md:w-10 md:h-10 rounded-lg md:rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-400 group-hover:text-primary transition-colors border border-zinc-100">
+                       <div className="w-10 h-10 rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-400 group-hover:text-primary transition-colors border border-zinc-100">
                           <Phone className="w-4 h-4" />
                        </div>
                        <div>

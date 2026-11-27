@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { MapContainer, TileLayer, Marker, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -48,16 +48,12 @@ export default function LocationPicker({ onLocationSelect, initialLat, initialLn
   const [isSearching, setIsSearching] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
 
-  useEffect(() => {
-    if (initialLat != null && initialLng != null) setPosition([initialLat, initialLng]);
-  }, [initialLat, initialLng]);
-
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
     setIsSearching(true);
     try {
       const response = await fetch(
-        `/api/maps/geocode?q=${encodeURIComponent(searchQuery)}`
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(searchQuery + ', Kenya')}`
       );
       const data = await response.json();
       if (data && data[0]) {

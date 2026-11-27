@@ -80,10 +80,8 @@ export function ReviewForm() {
               <button
                 key={star}
                 type="button"
-                aria-label={'Rate ' + star + ' out of 5 stars'}
-                aria-pressed={rating === star}
                 onClick={() => setRating(star)}
-                className="flex h-11 w-11 items-center justify-center rounded-md transition-transform active:scale-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
+                className="transition-transform active:scale-90"
               >
                 <Star 
                   className={cn(
@@ -97,10 +95,8 @@ export function ReviewForm() {
         </div>
 
         <div className="space-y-2">
-          <Label htmlFor="urban-review-comment" className="text-[8px] font-black uppercase tracking-widest text-zinc-400 px-1">Review Message</Label>
-          <Textarea
-            id="urban-review-comment"
-            aria-label="Review message"
+          <Label className="text-[8px] font-black uppercase tracking-widest text-zinc-400 px-1">Review Message</Label>
+          <Textarea 
             placeholder="Describe your service experience..." 
             value={comment}
             onChange={(e) => setComment(e.target.value)}

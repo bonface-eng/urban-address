@@ -1,7 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
   Coffee, 
@@ -116,7 +114,7 @@ export default function KitchenDisplaySystem() {
              <ChefHat className="w-3.5 h-3.5 text-primary" />
              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Preparation Node KDS-01</span>
           </div>
-          <PageHeader title="Kitchen Board" breadcrumb={["Operations", "Kitchen Board"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Kitchen Board</h1>
         </div>
         <div className="flex items-center gap-3">
            <Badge className="bg-zinc-900 text-white font-black uppercase text-[9px] px-4 py-2 rounded-xl shadow-lg border-none">
@@ -140,7 +138,7 @@ export default function KitchenDisplaySystem() {
                 <p className="text-[11px] font-black uppercase tracking-[0.4em]">All tickets served</p>
              </div>
            ) : (
-             <div className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-4">
+             <div className="grid grid-cols-1 gap-3">
                 {activeOrders.map((order) => (
                   <KDSOrderRow key={order.id} order={order} onUpdate={updateStatus} waitTime={getWaitTime(order.timestamp)} />
                 ))}

@@ -10,111 +10,26 @@ import { TerminalProvider } from "@/hooks/use-terminal";
 import { KeyboardCommands } from "@/components/shared/keyboard-commands";
 import { CookieConsent } from "@/components/shared/cookie-consent";
 import { PWAPrompt } from "@/components/shared/pwa-prompt";
+import Script from 'next/script';
 
 const inter = Inter({ subsets: ["latin"], variable: '--font-inter' });
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: '--font-space' });
 
-const businessStructuredData = {
-  "@context": "https://schema.org",
-  "@type": ["LocalBusiness", "AutomotiveBusiness"],
-  "@id": "https://urbanautoexpress.com/#urban-auto-express",
-  name: "Urban Auto Express",
-  url: "https://urbanautoexpress.com/",
-  sameAs: ["https://share.google/ZdWo21gYJtZTMMqSz"],
-  telephone: "+254785860753",
-  description:
-    "Urban Auto Express is a car wash and automotive care business in Nakuru, Kenya, with auto accessories and customer lounge services.",
-  address: {
-    "@type": "PostalAddress",
-    addressLocality: "Nakuru",
-    addressCountry: "KE",
-  },
-  areaServed: {
-    "@type": "City",
-    name: "Nakuru",
-  },
-  openingHoursSpecification: [
-    {
-      "@type": "OpeningHoursSpecification",
-      dayOfWeek: [
-        "Monday",
-        "Tuesday",
-        "Wednesday",
-        "Thursday",
-        "Friday",
-        "Saturday",
-        "Sunday",
-      ],
-      opens: "06:30",
-      closes: "23:00",
-    },
-  ],
-  knowsAbout: [
-    "Car washing",
-    "Automotive care",
-    "Auto accessories",
-    "Customer lounge services",
-  ],
-};
-
 export const metadata: Metadata = {
-  metadataBase: new URL("https://urbanautoexpress.com"),
-  applicationName: "Urban Auto Express",
   title: {
-    default: "Urban Auto Express | Car Wash, Auto Accessories & Lounge in Nakuru",
+    default: "Urban Auto Express",
     template: "%s | Urban Auto Express",
   },
-  description:
-    "Discover Urban Auto Express in Nakuru, Kenya. Explore professional car wash and vehicle detailing, quality auto accessories, and our customer lounge.",
-  keywords: [
-    "Urban Auto Express",
-    "car wash Nakuru",
-    "car detailing Nakuru",
-    "auto accessories Nakuru",
-    "car care Kenya",
-    "vehicle detailing Kenya",
-    "lounge Nakuru",
-  ],
-  category: "automotive",
-  openGraph: {
-    type: "website",
-    url: "https://urbanautoexpress.com/",
-    siteName: "Urban Auto Express",
-    title: "Urban Auto Express | Car Wash, Auto Accessories & Lounge in Nakuru",
-    description:
-      "Professional vehicle care, auto accessories and a welcoming customer lounge in Nakuru, Kenya.",
-    locale: "en_KE",
-    images: [
-      {
-        url: "/assets/hero3.png",
-        width: 1200,
-        height: 630,
-        alt: "Urban Auto Express vehicle detailing services in Nakuru",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Urban Auto Express | Nakuru, Kenya",
-    description:
-      "Vehicle detailing, auto accessories and customer lounge services in Nakuru, Kenya.",
-    images: ["/assets/hero3.png"],
-  },
-  robots: {
-    index: true,
-    follow: true,
-    googleBot: {
-      index: true,
-      follow: true,
-      "max-image-preview": "large",
-      "max-snippet": -1,
-      "max-video-preview": -1,
-    },
-  },
+  description: "Premium Lounge, Shop & Detailing Service in Nakuru, Kenya.",
+  metadataBase: new URL('https://www.urbanautoexpress.com'),
   icons: {
-    icon: [{ url: '/assets/pwa.png', type: 'image/png' }],
+    icon: [
+      { url: '/assets/pwa.png', type: 'image/png' },
+    ],
     shortcut: '/assets/pwa.png',
-    apple: [{ url: '/assets/pwa.png', sizes: '180x180', type: 'image/png' }],
+    apple: [
+      { url: '/assets/pwa.png', sizes: '180x180', type: 'image/png' },
+    ],
   },
 };
 
@@ -132,12 +47,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} ${spaceGrotesk.variable} font-sans bg-background text-foreground antialiased`}>
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{
-            __html: JSON.stringify(businessStructuredData).replace(/</g, "\\u003c"),
-          }}
+        {/* reCAPTCHA Enterprise Script */}
+        <Script 
+          src={`https://www.google.com/recaptcha/enterprise.js?render=${process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY}`}
+          strategy="beforeInteractive"
         />
+        
         <FirebaseClientProvider>
           <ProfileProvider>
             <TerminalProvider>

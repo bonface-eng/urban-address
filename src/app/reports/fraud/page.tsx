@@ -1,7 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
   ShieldAlert, 
@@ -79,7 +77,7 @@ export default function FraudSecurityDashboard() {
             <Fingerprint className="w-3.5 h-3.5 text-primary" />
             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-primary">System Security Monitor</span>
           </div>
-          <PageHeader title="Security & Risk" breadcrumb={["Security", "Security & Risk"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tight">Security & Risk</h1>
           <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">AI risk detection and detailed activity logs</p>
         </div>
         <div className="flex gap-2">

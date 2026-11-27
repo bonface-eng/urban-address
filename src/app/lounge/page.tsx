@@ -1,6 +1,5 @@
-'use client';
 
-import { useBusinessClock } from '@/hooks/use-business-clock';
+'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
@@ -31,21 +30,19 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Product, Order, OrderItem, UserProfile } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, addDoc, doc, getDoc, updateDoc, onSnapshot, orderBy, limit, writeBatch, increment } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, where, addDoc, doc, updateDoc, onSnapshot, orderBy, limit, writeBatch, increment } from 'firebase/firestore';
 import { HardwareService } from '@/lib/hardware-service';
 import { useProfile } from '@/hooks/use-profile';
 import { POSProductCard } from '@/components/pos/pos-product-card';
 import { POSCartItem } from '@/components/pos/pos-cart-item';
 import { PaymentView } from '@/components/pos/payment-view';
 import { VoidDialog } from '@/components/pos/void-dialog';
-import { MobileCartButton } from '@/components/pos/mobile-cart-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { CustomerLookup } from '@/components/pos/customer-lookup';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { useTerminal } from '@/hooks/use-terminal';
-import { notifyCommittedSale } from '@/lib/telegram/client-notifications';
 import { 
   Select,
   SelectContent,
@@ -58,7 +55,6 @@ const CATEGORIES = ['Popular', 'Drinks', 'Food', 'Liquor', 'Tobacco', 'Other'];
 
 export default function LoungePOS() {
   const firestore = useFirestore();
-  const { user } = useUser();
   const { role, isSuperAdmin } = useProfile();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
   
@@ -72,7 +68,6 @@ export default function LoungePOS() {
   const [recallSearch, setRecallSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<UserProfile | null>(null);
   const [tableNumber, setTableNumber] = useState('');
-  const [isTableSelectorOpen, setIsTableSelectorOpen] = useState(false);
   const [editingOrderId, setEditingOrderId] = useState<string | null>(null);
 
   const [isReportOpen, setIsReportOpen] = useState(false);
@@ -124,11 +119,12 @@ export default function LoungePOS() {
     if (!firestore || !activeCashier?.uid) return null;
     return query(
       collection(firestore, 'users', activeCashier.uid, 'held_bills'),
-      where('type', '==', 'LOUNGE')
+      where('type', '==', 'LOUNGE'),
+      limit(500)
     );
   }, [firestore, activeCashier?.uid]);
 
-  const { startOfToday } = useBusinessClock();
+  const startOfToday = new Date().setHours(0, 0, 0, 0);
   const todayOrdersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
@@ -139,7 +135,7 @@ export default function LoungePOS() {
     );
   }, [firestore, startOfToday]);
 
-  const { data: products, loading: productsLoading, error: productsError } = useCollection<Product>(loungeQuery);
+  const { data: products } = useCollection<Product>(loungeQuery);
   const { data: rawPendingOrders } = useCollection<Order>(ordersBaseQuery);
   const { data: todayOrders } = useCollection<Order>(todayOrdersQuery);
 
@@ -151,33 +147,25 @@ export default function LoungePOS() {
   }, [rawPendingOrders, recallSearch]);
 
   useEffect(() => {
-    if (!firestore || !isAuthorized || !activeCashier?.uid) return;
-    // READY orders enter this filtered result set when the kitchen changes their
-    // preparation status, so the listener does not need to scan unrelated orders.
-    const q = query(collection(firestore, 'orders'), where('type', '==', 'LOUNGE'));
-    const observedPrepStates = new Map<string, string | undefined>();
-    let initialSnapshot = true;
+    if (!firestore || !isAuthorized || !activeCashier) return;
+    const q = query(collection(firestore, 'orders'), where('type', '==', 'LOUNGE'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       snapshot.docChanges().forEach((change) => {
-        if (change.type !== 'added' && change.type !== 'modified') return;
-        const order = change.doc.data() as Order;
-        const orderId = change.doc.id;
-        const previousStatus = observedPrepStates.get(orderId);
-        observedPrepStates.set(orderId, order.prepStatus);
-        if (initialSnapshot || order.prepStatus !== 'READY' || previousStatus === 'READY') return;
-        if (order.cashierId !== activeCashier.uid || notifiedReadyOrders.has(orderId)) return;
-        notifiedReadyOrders.add(orderId);
-        toast({
-          title: "Kitchen Alert: Order Ready",
-          description: `Table ${order.tableNumber || 'WALK-IN'} is ready.`,
-        });
+        if (change.type === "added" || change.type === "modified") {
+          const order = change.doc.data() as Order;
+          const orderId = change.doc.id;
+          if (order.prepStatus === 'READY' && order.cashierId === activeCashier.uid && !notifiedReadyOrders.has(orderId)) {
+            notifiedReadyOrders.add(orderId);
+            toast({
+              title: "Kitchen Alert: Order Ready",
+              description: `Table ${order.tableNumber || 'WALK-IN'} is ready.`,
+            });
+          }
+        }
       });
-      initialSnapshot = false;
-    }, (error) => {
-      console.error('[LOUNGE] Ready-order subscription failed:', error);
     });
     return () => unsubscribe();
-  }, [firestore, isAuthorized, notifiedReadyOrders, activeCashier?.uid]);
+  }, [firestore, isAuthorized, notifiedReadyOrders, activeCashier]);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -203,6 +191,7 @@ export default function LoungePOS() {
       return [...prev, { productId: product.id!, name: product.name, price: product.price, quantity: 1, category: product.category, status: 'DRAFT' }];
     });
     setCheckoutStep('CART');
+    if (!isCartOpen) setIsCartOpen(true);
   };
 
   useBarcodeScanner((barcode) => {
@@ -212,15 +201,10 @@ export default function LoungePOS() {
   });
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.flatMap(item => {
-      if (item.productId !== id) return [item];
-      const quantity = item.quantity + delta;
-      return quantity > 0 ? [{ ...item, quantity }] : [];
+    setCart(prev => prev.map(item => {
+      if (item.productId === id) return { ...item, quantity: Math.max(1, item.quantity + delta) };
+      return item;
     }));
-  };
-
-  const removeCartItem = (id: string) => {
-    setCart(prev => prev.filter(item => item.productId !== id));
   };
 
   const executeVoid = async (reason: string, pin: string) => {
@@ -247,8 +231,7 @@ export default function LoungePOS() {
   const handleHoldOrder = (isTicket: boolean = false) => {
     if (!firestore || !activeCashier || cart.length === 0) return;
     if (!tableNumber) {
-      setIsTableSelectorOpen(true);
-      toast({ title: "Select a table", description: "Choose a lounge table before holding this bill." });
+      toast({ variant: "destructive", title: "Table Required" });
       return;
     }
 
@@ -322,25 +305,14 @@ export default function LoungePOS() {
       tableNumber: tableNumber || 'WALK-IN',
       cashierId: activeCashier.uid,
       cashierName: activeCashier.displayName,
-      terminalId: activeTerminal?.id || 'UAX-NODE',
-      terminalName: activeTerminal?.name || 'Unassigned POS',
-      registerSessionId: activeRegisterSession?.id || null,
-      branchId: activeCashier.activeBranchId || activeCashier.branchIds?.[0] || null,
       timestamp: Date.now(),
-      paidAt: Date.now(),
-      cashTendered: method === 'CASH' ? (metadata?.cashReceived ?? totalValue) : null,
-      changeDue: method === 'CASH' ? (metadata?.change ?? 0) : null,
       inventorySynced: true,
       items: cart.map(item => ({ ...item, status: 'COMMITTED' as const }))
     };
 
     const batch = writeBatch(firestore);
-    const orderRef = editingOrderId
-      ? doc(firestore, 'orders', editingOrderId)
-      : doc(collection(firestore, 'orders'));
-    // Recalled held bills already have a PENDING master order. Finalize that
-    // same record instead of creating a second order with a different ref.
-    batch.set(orderRef, orderData, { merge: true });
+    const orderRef = doc(collection(firestore, 'orders'));
+    batch.set(orderRef, orderData);
 
     // Deduct stock for physical inventory
     for (const item of cart) {
@@ -361,7 +333,6 @@ export default function LoungePOS() {
     batch.commit()
       .then(async () => {
         const finalReceipt = { ...orderData, id: orderRef.id };
-        await notifyCommittedSale(user, orderRef.id);
         await HardwareService.printReceipt(finalReceipt);
         setReceiptData(finalReceipt);
         setCheckoutStep('SUCCESS');
@@ -375,76 +346,6 @@ export default function LoungePOS() {
       });
   };
 
-
-  const handleMpesaInitiate = async (phone: string): Promise<string> => {
-    if (!firestore || !activeCashier || cart.length === 0 || !user) throw new Error('The cashier session is not ready.');
-    setIsProcessing(true);
-    try {
-      const totalValue = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const orderData: any = {
-        type: 'LOUNGE',
-        status: 'PENDING',
-        total: totalValue,
-        paymentMethod: 'MPESA',
-        paymentStatus: 'AWAITING_PAYMENT',
-        paymentAmount: totalValue,
-        amountCurrency: 'KES',
-        cashierId: activeCashier.uid,
-        cashierName: activeCashier.displayName,
-        terminalId: activeTerminal?.id || 'UAX-NODE',
-        terminalName: activeTerminal?.name || 'Unassigned POS',
-        registerSessionId: activeRegisterSession?.id || null,
-        branchId: activeCashier.activeBranchId || activeCashier.branchIds?.[0] || null,
-        timestamp: Date.now(),
-        items: cart.map(item => ({ ...item, status: 'COMMITTED' })),
-        inventorySynced: false,
-        tableNumber: tableNumber || 'WALK-IN',
-        
-      };
-      const orderRef = editingOrderId ? doc(firestore, 'orders', editingOrderId) : doc(collection(firestore, 'orders'));
-      const batch = writeBatch(firestore);
-      batch.set(orderRef, orderData, { merge: true });
-      await batch.commit();
-      const token = await user.getIdToken();
-      const response = await fetch('/api/payments/mpesa/initiate', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: orderRef.id, phone }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        await updateDoc(orderRef, { paymentStatus: 'FAILED', paymentFailureReason: String(result.message || 'Unable to start M-Pesa payment.'), paymentFailedAt: Date.now() });
-        throw new Error(result.message || 'Unable to start M-Pesa payment.');
-      }
-      toast({ title: 'M-Pesa prompt sent', description: result.message || 'Check the phone and enter the M-Pesa PIN.' });
-      return orderRef.id;
-    } catch (error) {
-      setIsProcessing(false);
-      throw error;
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleMpesaPaid = async (orderId: string) => {
-    if (!firestore) return;
-    const snapshot = await getDoc(doc(firestore, 'orders', orderId));
-    if (!snapshot.exists()) return;
-    const finalReceipt = { ...snapshot.data(), id: snapshot.id };
-    // Dispatch only after the server-confirmed M-Pesa order is marked PAID.
-    await notifyCommittedSale(user, orderId);
-    await HardwareService.printReceipt(finalReceipt);
-    setReceiptData(finalReceipt);
-    setCheckoutStep('SUCCESS');
-    setCart([]);
-    setEditingOrderId(null);
-    setTableNumber('');
-    
-    setSelectedCustomer(null);
-    setIsProcessing(false);
-    toast({ title: 'M-Pesa payment confirmed', description: 'Safaricom verified the payment and the sale is complete.' });
-  };
-
   const handleNewTransaction = () => {
     setCart([]);
     setTableNumber('');
@@ -452,24 +353,6 @@ export default function LoungePOS() {
     setReceiptData(null);
     setCheckoutStep('CART');
     setSelectedCustomer(null);
-  };
-
-  const handleCancelHeldBill = async (order: Order) => {
-    if (!firestore || !activeCashier || !order.id) return;
-    if (!window.confirm(`Cancel held bill #${order.id.slice(-6).toUpperCase()}?`)) return;
-    setIsProcessing(true);
-    try {
-      const batch = writeBatch(firestore);
-      batch.delete(doc(firestore, 'users', activeCashier.uid, 'held_bills', order.id));
-      batch.set(doc(firestore, 'orders', order.id), { status: 'CANCELLED', cancelledAt: Date.now() }, { merge: true });
-      await batch.commit();
-      toast({ title: 'Held bill cancelled' });
-    } catch (error) {
-      console.error('[CANCEL_HELD_BILL_ERROR]', error);
-      toast({ variant: 'destructive', title: 'Could not cancel held bill' });
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const loadPendingOrder = (order: Order) => {
@@ -483,17 +366,10 @@ export default function LoungePOS() {
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  if (!isHydrated) {
-    return (
-      <div role="status" aria-live="polite" className="flex min-h-[calc(100dvh-5.5rem)] flex-col items-center justify-center gap-3 bg-white text-zinc-400">
-        <span className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-primary" />
-        <span className="text-[10px] font-bold uppercase tracking-widest">Restoring terminal and connecting to items…</span>
-      </div>
-    );
-  }
+  if (!isHydrated) return null;
 
   return (
-    <div className="ua-pos-workspace h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
+    <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
         <header className="space-y-4 px-1">
           <div className="flex items-center justify-between">
@@ -517,11 +393,8 @@ export default function LoungePOS() {
               <Input placeholder="Search..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-12 h-14 bg-white border-zinc-100 shadow-sm rounded-xl font-bold" />
             </div>
             <div className="md:col-span-2 relative">
-              <Button type="button" variant="outline" onClick={() => setIsTableSelectorOpen(true)} className="w-full h-14 justify-start gap-3 bg-white border-zinc-100 shadow-sm rounded-xl font-black uppercase">
-                <TableIcon className="w-4 h-4 text-primary" />
-                <span>{tableNumber ? `TABLE ${tableNumber}` : 'SELECT TABLE'}</span>
-                <ChevronRight className="w-4 h-4 ml-auto text-zinc-400" />
-              </Button>
+              <TableIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-primary" />
+              <Input placeholder="TABLE" value={tableNumber} onChange={(e) => setTableNumber(e.target.value.toUpperCase())} className="pl-12 h-14 bg-white border-zinc-100 shadow-sm rounded-xl font-black uppercase" />
             </div>
             <div className="md:col-span-6">
                <CustomerLookup onSelect={setSelectedCustomer} selectedCustomer={selectedCustomer} />
@@ -538,37 +411,21 @@ export default function LoungePOS() {
         </header>
 
         <div className="flex-1 flex flex-col gap-2 overflow-y-auto pr-1 no-scrollbar pb-8">
-          {productsLoading || products === null ? (
-              <div role="status" aria-live="polite" className="flex min-h-36 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-zinc-200 bg-white text-center">
-                <span className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-primary" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Loading items from inventory…</span>
-              </div>
-            ) : productsError ? (
-              <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-center text-xs font-semibold text-red-700">
-                Could not load items. Check the connection and reload this page.
-              </div>
-            ) : products.length === 0 ? (
-              <div className="py-12 text-center text-xs font-semibold text-zinc-400">No items are configured for this station yet.</div>
-            ) : filteredProducts.map((p) => (
+          {filteredProducts.map((p) => (
             <POSProductCard key={p.id} product={p} onAdd={() => addToCart(p)} />
           ))}
         </div>
       </div>
 
-      {!isCartOpen && <MobileCartButton itemCount={cart.reduce((count, item) => count + item.quantity, 0)} onClick={() => { setCheckoutStep('CART'); setIsCartOpen(true); }} />}
-      <div className={cn("ua-staff-cart fixed inset-0 z-[1200] md:relative md:inset-auto md:z-0 md:w-[420px] md:flex shrink-0 transition-transform duration-300 md:translate-x-0", isCartOpen ? "translate-x-0" : "translate-x-full md:translate-x-0")}>
+      <div className={cn("fixed inset-0 z-50 md:relative md:inset-auto md:z-0 md:w-[420px] md:flex shrink-0 transition-transform duration-300 md:translate-x-0", isCartOpen ? "translate-x-0" : "translate-x-full md:translate-x-0")}>
         <div className="absolute inset-0 bg-black/40 md:hidden" onClick={() => setIsCartOpen(false)} />
-        <Card className="relative h-full flex flex-col shadow-2xl md:shadow-mobile border-none rounded-none md:rounded-xl overflow-hidden bg-white ml-auto w-full max-w-[420px] border border-zinc-100">
+        <Card className="relative h-full flex flex-col shadow-2xl md:shadow-mobile border-none rounded-[3rem] overflow-hidden bg-white ml-auto w-full max-w-[420px] border border-zinc-100">
           
           <CardHeader className="border-b border-zinc-50 p-6 flex flex-row items-center justify-between shrink-0 h-20">
             {(checkoutStep === 'CART' || checkoutStep === 'RECALL') && (
               <>
                 <div className="flex items-center gap-3">
-                   {checkoutStep === 'RECALL' ? (
-                     <Button type="button" variant="ghost" size="icon" aria-label="Back to cart" onClick={() => setCheckoutStep('CART')} className="h-11 w-11 shrink-0 rounded-lg bg-zinc-50"><ArrowLeft className="w-4 h-4" /></Button>
-                   ) : (
-                     <Button type="button" variant="ghost" size="icon" aria-label="Back to products" onClick={() => setIsCartOpen(false)} className="h-11 w-11 shrink-0 rounded-lg bg-zinc-50 text-zinc-600 md:hidden"><ArrowLeft className="w-4 h-4" /></Button>
-                   )}
+                   {checkoutStep === 'RECALL' && <Button variant="ghost" size="icon" onClick={() => setCheckoutStep('CART')} className="h-8 w-8 rounded-full bg-zinc-50"><ArrowLeft className="w-4 h-4" /></Button>}
                    <CardTitle className="text-sm font-black uppercase tracking-widest text-zinc-900"> {checkoutStep === 'RECALL' ? 'Active Tabs' : 'Cart'} </CardTitle>
                 </div>
                 {checkoutStep === 'CART' ? (
@@ -607,7 +464,7 @@ export default function LoungePOS() {
                     <Input placeholder="Search table..." value={recallSearch} onChange={e => setRecallSearch(e.target.value)} className="h-10 pl-9 bg-zinc-50 border-none rounded-xl text-[10px] font-bold" />
                   </div>
                   {pendingOrders.map(order => (
-                    <div key={order.id} className="ua-held-bill p-5 bg-white border border-zinc-100 rounded-xl shadow-none space-y-3 group hover:border-primary/20 transition-all">
+                    <div key={order.id} className="p-5 bg-white border border-zinc-100 rounded-2xl shadow-sm space-y-4 group hover:border-primary/20 transition-all">
                        <div className="flex items-center justify-between">
                           <div className="flex items-center gap-4">
                              <div className="w-10 h-10 rounded-xl bg-zinc-50 border border-zinc-100 flex flex-col items-center justify-center text-zinc-400 group-hover:bg-primary/5 group-hover:text-primary group-hover:border-primary/10 transition-all">
@@ -617,14 +474,11 @@ export default function LoungePOS() {
                              <div>
                                 <p className="text-[10px] font-black text-zinc-900">KES {order.total.toLocaleString()}</p>
                                 <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest mt-1">Ref #{order.id?.slice(-6).toUpperCase()}</p>
-                                <p className="mt-1 text-[10px] text-zinc-500">{order.items?.length || 0} items · {new Date(order.timestamp || Date.now()).toLocaleString()}</p>
                              </div>
                           </div>
                           <div className="flex gap-2">
-                             <Button type="button" onClick={() => HardwareService.printReceipt(order)} variant="outline" size="icon" aria-label="Print held bill" className="h-8 w-8 rounded-lg border-zinc-100 text-zinc-500 hover:text-primary"><Printer className="w-4 h-4" /></Button>
-
                              <Button onClick={() => loadPendingOrder(order)} size="sm" className="h-8 px-3 bg-zinc-900 text-white rounded-lg text-[9px] font-black uppercase">Open</Button>
-                             <Button type="button" onClick={() => handleCancelHeldBill(order)} disabled={isProcessing} variant="ghost" size="icon" aria-label="Cancel held tab" className="h-10 w-10 rounded-lg text-zinc-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></Button>
+                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-200 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></Button>
                           </div>
                        </div>
                     </div>
@@ -639,7 +493,7 @@ export default function LoungePOS() {
               cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4 opacity-50"><ShoppingBag className="w-10 h-10" /><p className="text-[10px] font-black uppercase tracking-widest">Cart Empty</p></div>
               ) : (
-                cart.map((item, idx) => <POSCartItem key={`${item.productId}-${idx}`} item={{...item, id: item.productId}} onUpdate={updateQuantity} onRemove={removeCartItem} />)
+                cart.map((item, idx) => <POSCartItem key={`${item.productId}-${idx}`} item={{...item, id: item.productId}} onUpdate={updateQuantity} onRemove={(id) => { setPendingVoidAction({ type: 'SINGLE', id }); setIsVoidOpen(true); }} />)
               )
             )}
             
@@ -647,9 +501,7 @@ export default function LoungePOS() {
               <div className="animate-in slide-in-from-right-4 duration-300">
                 <PaymentView 
                   total={total} 
-                  onComplete={handleFinalizeSale}
-                  onMpesa={handleMpesaInitiate}
-                  onMpesaPaid={handleMpesaPaid}
+                  onComplete={handleFinalizeSale} 
                   isProcessing={isProcessing} 
                   previewData={receiptData} 
                 />
@@ -691,35 +543,6 @@ export default function LoungePOS() {
           )}
         </Card>
       </div>
-
-      <Dialog open={isTableSelectorOpen} onOpenChange={setIsTableSelectorOpen}>
-        <DialogContent className="w-[calc(100%-1rem)] max-w-2xl max-h-[90dvh] overflow-y-auto rounded-2xl p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="text-base font-black uppercase tracking-wide">Select lounge table</DialogTitle>
-            <DialogDescription>Choose one of the 18 customer tables. The pool table is not selectable.</DialogDescription>
-          </DialogHeader>
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-2 sm:p-4">
-            <p className="mb-3 text-center text-[9px] font-black tracking-[0.2em] text-zinc-400">LOUNGE FLOOR PLAN</p>
-            <div className="grid grid-cols-6 grid-rows-5 gap-1.5 sm:gap-2">
-              {[
-                ...Array.from({ length: 6 }, (_, i) => ({ n: i + 1, row: 1, col: i + 1 })),
-                ...[7, 8, 9].map((n, i) => ({ n, row: i + 2, col: 1 })),
-                ...[10, 11, 12].map((n, i) => ({ n, row: i + 2, col: 6 })),
-                ...Array.from({ length: 6 }, (_, i) => ({ n: i + 13, row: 5, col: i + 1 })),
-              ].map(({ n, row, col }) => (
-                <Button key={n} type="button" variant="outline" onClick={() => setTableNumber(String(n).padStart(2, '0'))} style={{ gridRow: row, gridColumn: col }} className={cn("h-10 min-w-0 rounded-lg border-zinc-200 bg-white px-1 text-xs font-black sm:h-12", tableNumber === String(n).padStart(2, '0') && "border-primary bg-primary text-white hover:bg-primary hover:text-white")}>{String(n).padStart(2, '0')}</Button>
-              ))}
-              <div style={{ gridColumn: '2 / span 4', gridRow: '2 / span 3' }} className="flex min-h-28 items-center justify-center rounded-lg border-2 border-blue-300 bg-blue-100 px-2 text-center text-xs font-black tracking-widest text-blue-900 sm:min-h-36">
-                POOL TABLE<br />CENTRE
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-xs font-bold text-zinc-600">{tableNumber ? `Selected: Table ${tableNumber}` : 'No table selected'}</p>
-            <Button type="button" onClick={() => setIsTableSelectorOpen(false)} disabled={!tableNumber} className="h-11 rounded-lg bg-primary px-5 text-xs font-black uppercase text-white">Use table</Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
       <VoidDialog isOpen={isVoidOpen} onClose={() => setIsVoidOpen(false)} onConfirm={executeVoid} />
 

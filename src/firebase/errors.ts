@@ -6,13 +6,17 @@ export type SecurityRuleContext = {
   requestResourceData?: any;
 };
 
-/** Keeps detailed context for internal diagnostics, but not in Error.message. */
 export class FirestorePermissionError extends Error {
   context: SecurityRuleContext;
 
   constructor(context: SecurityRuleContext) {
-    super('Varban Ltd Server could not authorize this request.');
-    this.name = 'ServiceAccessError';
+    const message = `FirestoreError: Missing or insufficient permissions: The following request was denied by Firestore Security Rules:
+{
+  "method": "${context.operation}",
+  "path": "${context.path}"${context.requestResourceData ? `,\n  "request": ${JSON.stringify(context.requestResourceData, null, 2)}` : ''}
+}`;
+    super(message);
+    this.name = 'FirestorePermissionError';
     this.context = context;
   }
 }

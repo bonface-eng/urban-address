@@ -10,35 +10,26 @@ import {
 } from 'firebase/firestore';
 import { errorEmitter } from '../error-emitter';
 import { FirestorePermissionError } from '../errors';
-import { toPublicServiceError } from '@/lib/public-errors';
 
 /**
  * Hook to listen to a Firestore collection.
- * Publishes rows only for the initial snapshot or snapshots with document changes.
- * This avoids serializing the full collection on every Firestore update.
+ * Uses deep-comparison stringification to prevent re-render cascades.
  * Handles errors gracefully to prevent UI crashes.
  */
-export function shouldPublishSnapshot(isFirstSnapshot: boolean, changedDocumentCount: number) {
-  return isFirstSnapshot || changedDocumentCount > 0;
-}
-
 export function useCollection<T = DocumentData>(query: Query<T> | null) {
   const [data, setData] = useState<T[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<FirestoreError | null>(null);
-  const hasReceivedSnapshotRef = useRef(false);
+  const prevDataRef = useRef<string>('');
 
   useEffect(() => {
     let active = true;
 
-    // A new query is a new data source. Never carry the previous query's
-    // comparison token or rows into the new subscription.
-    hasReceivedSnapshotRef.current = false;
-    setError(null);
-    setData(null);
-
     if (!query) {
-      setLoading(false);
+      if (active) {
+        setLoading(false);
+        setData(null);
+      }
       return;
     }
 
@@ -57,9 +48,10 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
             id: doc.id
           } as T));
 
-          const changedDocuments = snapshot.docChanges().length;
-          if (shouldPublishSnapshot(!hasReceivedSnapshotRef.current, changedDocuments)) {
-            hasReceivedSnapshotRef.current = true;
+          const itemsString = JSON.stringify(items);
+
+          if (itemsString !== prevDataRef.current) {
+            prevDataRef.current = itemsString;
             setData(items);
           }
           
@@ -82,21 +74,16 @@ export function useCollection<T = DocumentData>(query: Query<T> | null) {
             errorEmitter.emit('permission-error', permissionError);
           }
 
-          // Reset the equality token so the first successful snapshot after
-          // recovery always repopulates the view, even if rows are unchanged.
-          hasReceivedSnapshotRef.current = false;
-          setError(toPublicServiceError(err) as FirestoreError);
+          setError(err);
           setLoading(false);
-          setData([]); // Keep the UI safe while exposing the subscription error
+          setData([]); // Fallback to empty list on error to keep UI alive
         }
       );
     } catch (e: any) {
       console.error('Failed to establish snapshot listener:', e);
       if (active) {
-        hasReceivedSnapshotRef.current = false;
         setLoading(false);
-        setError(toPublicServiceError(e) as FirestoreError);
-        setData([]);
+        setError(e);
       }
     }
 

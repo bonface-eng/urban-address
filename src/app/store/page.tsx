@@ -1,6 +1,5 @@
-'use client';
 
-import { useBusinessClock } from '@/hooks/use-business-clock';
+'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
@@ -17,7 +16,6 @@ import {
   PlusCircle,
   Smartphone,
   Trash2,
-  Printer,
   Hash,
   Check
 } from 'lucide-react';
@@ -26,8 +24,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, addDoc, doc, getDoc, updateDoc, orderBy, limit, writeBatch, setDoc, increment } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { collection, query, where, addDoc, doc, updateDoc, orderBy, limit, writeBatch, setDoc, increment } from 'firebase/firestore';
 import { Product, Order, OrderItem, UserProfile } from '@/lib/types';
 import { useBarcodeScanner } from '@/hooks/use-barcode-scanner';
 import { HardwareService } from '@/lib/hardware-service';
@@ -37,18 +35,15 @@ import { POSProductCard } from '@/components/pos/pos-product-card';
 import { POSCartItem } from '@/components/pos/pos-cart-item';
 import { PaymentView } from '@/components/pos/payment-view';
 import { VoidDialog } from '@/components/pos/void-dialog';
-import { MobileCartButton } from '@/components/pos/mobile-cart-button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { CustomerLookup } from '@/components/pos/customer-lookup';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
 import { useTerminal } from '@/hooks/use-terminal';
-import { notifyCommittedSale } from '@/lib/telegram/client-notifications';
 
 const CATEGORIES = ['All', 'Accessories', 'Oils', 'Cleaning', 'Tyres', 'Parts'];
 
 export default function StorePOS() {
   const firestore = useFirestore();
-  const { user } = useUser();
   const { role, isSuperAdmin } = useProfile();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
   
@@ -111,11 +106,12 @@ export default function StorePOS() {
     if (!firestore || !activeCashier?.uid) return null;
     return query(
       collection(firestore, 'users', activeCashier.uid, 'held_bills'),
-      where('type', '==', 'STORE')
+      where('type', '==', 'STORE'),
+      limit(500)
     );
   }, [firestore, activeCashier?.uid]);
 
-  const { startOfToday } = useBusinessClock();
+  const startOfToday = new Date().setHours(0, 0, 0, 0);
   const todayOrdersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(
@@ -126,7 +122,7 @@ export default function StorePOS() {
     );
   }, [firestore, startOfToday]);
 
-  const { data: products, loading: productsLoading, error: productsError } = useCollection<Product>(productsQuery);
+  const { data: products } = useCollection<Product>(productsQuery);
   const { data: rawPendingOrders } = useCollection<Order>(ordersBaseQuery);
   const { data: todayOrders } = useCollection<Order>(todayOrdersQuery);
 
@@ -161,6 +157,7 @@ export default function StorePOS() {
       return [...prev, { productId: product.id!, name: product.name, price: product.price, quantity: 1, category: product.category, status: 'DRAFT' }];
     });
     setCheckoutStep('CART');
+    if (!isCartOpen) setIsCartOpen(true);
   };
 
   useBarcodeScanner((barcode) => {
@@ -170,15 +167,10 @@ export default function StorePOS() {
   });
 
   const updateQuantity = (id: string, delta: number) => {
-    setCart(prev => prev.flatMap(item => {
-      if (item.productId !== id) return [item];
-      const quantity = item.quantity + delta;
-      return quantity > 0 ? [{ ...item, quantity }] : [];
+    setCart(prev => prev.map(item => {
+      if (item.productId === id) return { ...item, quantity: Math.max(1, item.quantity + delta) };
+      return item;
     }));
-  };
-
-  const removeCartItem = (id: string) => {
-    setCart(prev => prev.filter(item => item.productId !== id));
   };
 
   const executeVoid = async (reason: string, pin: string) => {
@@ -255,25 +247,14 @@ export default function StorePOS() {
       paymentRef: metadata?.reference || null,
       cashierId: activeCashier.uid,
       cashierName: activeCashier.displayName,
-      terminalId: activeTerminal?.id || 'UAX-NODE',
-      terminalName: activeTerminal?.name || 'Unassigned POS',
-      registerSessionId: activeRegisterSession?.id || null,
-      branchId: activeCashier.activeBranchId || activeCashier.branchIds?.[0] || null,
       timestamp: Date.now(),
-      paidAt: Date.now(),
-      cashTendered: method === 'CASH' ? (metadata?.cashReceived ?? totalValue) : null,
-      changeDue: method === 'CASH' ? (metadata?.change ?? 0) : null,
       inventorySynced: true,
       items: cart.map(i => ({ ...i, status: 'COMMITTED' as const }))
     };
 
     const batch = writeBatch(firestore);
-    const orderRef = editingOrderId
-      ? doc(firestore, 'orders', editingOrderId)
-      : doc(collection(firestore, 'orders'));
-    // Recalled held bills already have a PENDING master order. Finalize that
-    // same record instead of creating a second order with a different ref.
-    batch.set(orderRef, orderData, { merge: true });
+    const orderRef = doc(collection(firestore, 'orders'));
+    batch.set(orderRef, orderData);
 
     // Deduct Stock Levels for all physical items
     for (const item of cart) {
@@ -294,7 +275,6 @@ export default function StorePOS() {
     batch.commit()
       .then(async () => {
         const finalReceipt = { ...orderData, id: orderRef.id };
-        await notifyCommittedSale(user, orderRef.id);
         await HardwareService.printReceipt(finalReceipt);
         setReceiptData(finalReceipt);
         setCheckoutStep('SUCCESS');
@@ -308,100 +288,12 @@ export default function StorePOS() {
       });
   };
 
-
-  const handleMpesaInitiate = async (phone: string): Promise<string> => {
-    if (!firestore || !activeCashier || cart.length === 0 || !user) throw new Error('The cashier session is not ready.');
-    setIsProcessing(true);
-    try {
-      const totalValue = cart.reduce((sum, item) => sum + item.price * item.quantity, 0);
-      const orderData: any = {
-        type: 'STORE',
-        status: 'PENDING',
-        total: totalValue,
-        paymentMethod: 'MPESA',
-        paymentStatus: 'AWAITING_PAYMENT',
-        paymentAmount: totalValue,
-        amountCurrency: 'KES',
-        cashierId: activeCashier.uid,
-        cashierName: activeCashier.displayName,
-        terminalId: activeTerminal?.id || 'UAX-NODE',
-        terminalName: activeTerminal?.name || 'Unassigned POS',
-        registerSessionId: activeRegisterSession?.id || null,
-        branchId: activeCashier.activeBranchId || activeCashier.branchIds?.[0] || null,
-        timestamp: Date.now(),
-        items: cart.map(item => ({ ...item, status: 'COMMITTED' })),
-        inventorySynced: false,
-        
-        
-      };
-      const orderRef = editingOrderId ? doc(firestore, 'orders', editingOrderId) : doc(collection(firestore, 'orders'));
-      const batch = writeBatch(firestore);
-      batch.set(orderRef, orderData, { merge: true });
-      await batch.commit();
-      const token = await user.getIdToken();
-      const response = await fetch('/api/payments/mpesa/initiate', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orderId: orderRef.id, phone }),
-      });
-      const result = await response.json();
-      if (!response.ok || !result.success) {
-        await updateDoc(orderRef, { paymentStatus: 'FAILED', paymentFailureReason: String(result.message || 'Unable to start M-Pesa payment.'), paymentFailedAt: Date.now() });
-        throw new Error(result.message || 'Unable to start M-Pesa payment.');
-      }
-      toast({ title: 'M-Pesa prompt sent', description: result.message || 'Check the phone and enter the M-Pesa PIN.' });
-      return orderRef.id;
-    } catch (error) {
-      setIsProcessing(false);
-      throw error;
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleMpesaPaid = async (orderId: string) => {
-    if (!firestore) return;
-    const snapshot = await getDoc(doc(firestore, 'orders', orderId));
-    if (!snapshot.exists()) return;
-    const finalReceipt = { ...snapshot.data(), id: snapshot.id };
-    // Dispatch only after the server-confirmed M-Pesa order is marked PAID.
-    await notifyCommittedSale(user, orderId);
-    await HardwareService.printReceipt(finalReceipt);
-    setReceiptData(finalReceipt);
-    setCheckoutStep('SUCCESS');
-    setCart([]);
-    setEditingOrderId(null);
-    
-    
-    setSelectedCustomer(null);
-    setIsProcessing(false);
-    toast({ title: 'M-Pesa payment confirmed', description: 'Safaricom verified the payment and the sale is complete.' });
-  };
-
   const handleNewTransaction = () => {
     setCart([]);
     setEditingOrderId(null);
     setReceiptData(null);
     setCheckoutStep('CART');
     setSelectedCustomer(null);
-  };
-
-  const handleCancelHeldBill = async (order: Order) => {
-    if (!firestore || !activeCashier || !order.id) return;
-    if (!window.confirm(`Cancel held bill #${order.id.slice(-6).toUpperCase()}?`)) return;
-    setIsProcessing(true);
-    try {
-      const batch = writeBatch(firestore);
-      batch.delete(doc(firestore, 'users', activeCashier.uid, 'held_bills', order.id));
-      batch.set(doc(firestore, 'orders', order.id), { status: 'CANCELLED', cancelledAt: Date.now() }, { merge: true });
-      await batch.commit();
-      toast({ title: 'Held bill cancelled' });
-    } catch (error) {
-      console.error('[CANCEL_HELD_BILL_ERROR]', error);
-      toast({ variant: 'destructive', title: 'Could not cancel held bill' });
-    } finally {
-      setIsProcessing(false);
-    }
   };
 
   const loadPendingOrder = (order: Order) => {
@@ -414,17 +306,10 @@ export default function StorePOS() {
 
   const total = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-  if (!isHydrated) {
-    return (
-      <div role="status" aria-live="polite" className="flex min-h-[calc(100dvh-5.5rem)] flex-col items-center justify-center gap-3 bg-white text-zinc-400">
-        <span className="h-7 w-7 animate-spin rounded-full border-2 border-zinc-200 border-t-primary" />
-        <span className="text-[10px] font-bold uppercase tracking-widest">Restoring terminal and connecting to items…</span>
-      </div>
-    );
-  }
+  if (!isHydrated) return null;
 
   return (
-      <div className="ua-pos-workspace h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
+      <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
         <div className="flex-1 flex flex-col gap-6 overflow-hidden">
           <header className="space-y-4 px-1 shrink-0">
             <div className="flex items-center justify-between">
@@ -459,33 +344,18 @@ export default function StorePOS() {
             </div>
           </header>
           <div className="flex-1 flex flex-col gap-2 overflow-y-auto pr-1 no-scrollbar pb-8">
-            {productsLoading || products === null ? (
-              <div role="status" aria-live="polite" className="flex min-h-36 flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-zinc-200 bg-white text-center">
-                <span className="h-6 w-6 animate-spin rounded-full border-2 border-zinc-200 border-t-primary" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-400">Loading items from inventory…</span>
-              </div>
-            ) : productsError ? (
-              <div role="alert" className="rounded-xl border border-red-100 bg-red-50 p-4 text-center text-xs font-semibold text-red-700">
-                Could not load items. Check the connection and reload this page.
-              </div>
-            ) : products.length === 0 ? (
-              <div className="py-12 text-center text-xs font-semibold text-zinc-400">No items are configured for this station yet.</div>
-            ) : filteredProducts.map((p) => <POSProductCard key={p.id} product={p} onAdd={() => addToCart(p)} />)}
+            {filteredProducts.map((p) => <POSProductCard key={p.id} product={p} onAdd={() => addToCart(p)} />)}
           </div>
         </div>
 
-        {!isCartOpen && <MobileCartButton itemCount={cart.reduce((count, item) => count + item.quantity, 0)} onClick={() => { setCheckoutStep('CART'); setIsCartOpen(true); }} />}
-        <div className={cn("ua-staff-cart fixed inset-0 z-[1200] md:relative md:inset-auto md:z-0 md:w-[420px] md:flex shrink-0 transition-transform duration-300 md:translate-x-0", isCartOpen ? "translate-x-0" : "translate-x-full md:translate-x-0")}>
+        <div className={cn("fixed inset-0 z-50 md:relative md:inset-auto md:z-0 md:w-[420px] md:flex shrink-0 transition-transform duration-300 md:translate-x-0", isCartOpen ? "translate-x-0" : "translate-x-full md:translate-x-0")}>
           <div className="absolute inset-0 bg-black/40 md:hidden" onClick={() => setIsCartOpen(false)} />
-          <Card className="relative h-full flex flex-col shadow-2xl md:shadow-mobile border-none rounded-none md:rounded-xl overflow-hidden bg-white ml-auto w-full max-w-[420px] border border-zinc-100">
+          <Card className="relative h-full flex flex-col shadow-2xl md:shadow-mobile border-none rounded-[3rem] overflow-hidden bg-white ml-auto w-full max-w-[420px] border border-zinc-100">
             
             <CardHeader className="border-b border-zinc-50 p-6 flex flex-row items-center justify-between shrink-0 h-20">
               {checkoutStep === 'CART' && (
                 <>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Button type="button" variant="ghost" size="icon" aria-label="Back to products" onClick={() => setIsCartOpen(false)} className="h-11 w-11 shrink-0 rounded-lg bg-zinc-50 text-zinc-600 md:hidden"><ArrowLeft className="h-4 w-4" /></Button>
-                    <CardTitle className="text-sm font-black uppercase tracking-widest text-zinc-900">Cart</CardTitle>
-                  </div>
+                  <CardTitle className="text-sm font-black uppercase tracking-widest text-zinc-900"> Cart </CardTitle>
                   <Button variant="ghost" size="sm" onClick={() => { setPendingVoidAction({ type: 'CLEAR' }); setIsVoidOpen(true); }} className="text-primary text-[10px] font-bold uppercase tracking-tighter">Clear</Button>
                 </>
               )}
@@ -527,21 +397,18 @@ export default function StorePOS() {
                        <Input placeholder="Search Ref ID..." value={recallSearch} onChange={e => setRecallSearch(e.target.value)} className="h-10 pl-9 bg-zinc-50 border-none rounded-xl text-[10px] font-bold" />
                     </div>
                     {pendingOrders.map(order => (
-                       <div key={order.id} className="ua-held-bill p-5 bg-white border border-zinc-100 rounded-xl shadow-none space-y-3 group hover:border-primary/20 transition-all">
+                       <div key={order.id} className="p-5 bg-white border border-zinc-100 rounded-2xl shadow-sm space-y-4 group hover:border-primary/20 transition-all">
                           <div className="flex items-center justify-between">
                              <div className="flex items-center gap-4">
                                 <div className="w-10 h-10 rounded-xl bg-zinc-900 flex items-center justify-center text-primary shadow-sm"><ShoppingBag className="w-5 h-5" /></div>
                                 <div>
                                    <p className="text-xs font-black uppercase text-zinc-900">Ref #{order.id?.slice(-6).toUpperCase()}</p>
                                    <p className="text-sm font-black text-primary mt-0.5">KES {order.total.toLocaleString()}</p>
-                                   <p className="mt-1 text-[10px] text-zinc-500">{order.items?.length || 0} items · {new Date(order.timestamp || Date.now()).toLocaleString()}</p>
                                 </div>
                              </div>
                              <div className="flex gap-2">
-                                <Button type="button" onClick={() => HardwareService.printReceipt(order)} variant="outline" size="icon" aria-label="Print held bill" className="h-8 w-8 rounded-lg border-zinc-100 text-zinc-500 hover:text-primary"><Printer className="w-4 h-4" /></Button>
-
                                 <Button onClick={() => loadPendingOrder(order)} size="sm" className="h-8 px-3 bg-zinc-900 text-white rounded-lg text-[9px] font-black uppercase">Recall</Button>
-                                <Button type="button" onClick={() => handleCancelHeldBill(order)} disabled={isProcessing} variant="ghost" size="icon" aria-label="Cancel held bill" className="h-10 w-10 rounded-lg text-zinc-400 hover:text-red-600"><Trash2 className="w-4 h-4" /></Button>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-zinc-200 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></Button>
                              </div>
                           </div>
                        </div>
@@ -556,13 +423,13 @@ export default function StorePOS() {
               cart.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-zinc-300 gap-4 opacity-50"><ShoppingBag className="w-10 h-10" /><p className="text-[10px] font-black uppercase tracking-widest">Cart Empty</p></div>
               ) : (
-                cart.map((item, idx) => <POSCartItem key={`${item.productId}-${idx}`} item={{...item, id: item.productId}} onUpdate={updateQuantity} onRemove={removeCartItem} />)
+                cart.map((item, idx) => <POSCartItem key={`${item.productId}-${idx}`} item={{...item, id: item.productId}} onUpdate={updateQuantity} onRemove={(id) => { setPendingVoidAction({ type: 'SINGLE', id }); setIsVoidOpen(true); }} />)
               )
             )}
 
             {checkoutStep === 'PAYMENT' && (
               <div className="animate-in slide-in-from-right-4 duration-300">
-                <PaymentView total={total} onComplete={handleFinalizeSale} onMpesa={handleMpesaInitiate} onMpesaPaid={handleMpesaPaid} isProcessing={isProcessing} previewData={receiptData} />
+                <PaymentView total={total} onComplete={handleFinalizeSale} isProcessing={isProcessing} previewData={receiptData} />
               </div>
             )}
 

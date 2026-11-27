@@ -5,70 +5,54 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useAuth, useFirestore } from '@/firebase';
 import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { doc, getDoc, addDoc, collection, setDoc } from 'firebase/firestore';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 import { Mail, Lock, Eye, EyeOff, RefreshCcw, ShieldCheck, ArrowLeft } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { UserProfile } from '@/lib/types';
+import { isLoginRecaptchaEnabled, verifyLoginRecaptcha } from '@/lib/login-security';
+import { getRecaptchaToken } from '@/lib/recaptcha-client';
 import Link from 'next/link';
-import { notifyTelegramClientEvent, notifyTelegramFailedSignIn } from '@/lib/telegram/client-events';
+import { loginFailure, type LoginStage } from '@/lib/login-errors';
 
 export default function LoginPage() {
   const auth = useAuth();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const firestore = useFirestore();
-
-  // Only allow same-origin customer destinations; never accept external redirect URLs.
-  const getPostLoginDestination = (role?: string) => {
-    const requested = searchParams.get('redirect');
-    if (requested && requested.startsWith('/client/') && !requested.startsWith('//') && !requested.includes(String.fromCharCode(92))) {
-      return requested;
-    }
-    return role && role !== 'CLIENT' ? '/dashboard' : '/';
-  };
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const continueAfterLogin = async (signedInUser: any, role?: string) => {
-    await signedInUser.reload();
-    if (role === 'CLIENT' && !signedInUser.emailVerified) {
-      const verificationToken = await signedInUser.getIdToken(true);
-      await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${verificationToken}` },
-      });
-      router.replace('/auth/verify-email');
-      return;
-    }
-    const token = await signedInUser.getIdToken(true);
-    const response = await fetch('/api/admin/otp/request', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Administrator verification could not start.');
-    if (data.required) {
-      router.replace('/admin-otp');
-      return;
-    }
-    router.replace(getPostLoginDestination(role));
+  const verifyLoginSecurity = async () => {
+    const enabled = await isLoginRecaptchaEnabled();
+    const token = enabled ? await getRecaptchaToken('LOGIN') : null;
+    // The server rechecks the switch; a client cannot authorize its own bypass.
+    return verifyLoginRecaptcha(token);
   };
 
   const handleGoogleLogin = async () => {
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
+    let stage: LoginStage = 'security';
     try {
+      // 1. Security Check
+      const captchaResult = await verifyLoginSecurity();
+      if (!captchaResult.success) {
+        toast({ variant: "destructive", title: "Security Alert", description: captchaResult.message });
+        setIsSubmitting(false);
+        return;
+      }
 
+      stage = 'authentication';
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       
+      stage = 'profile';
       const userRef = doc(firestore, 'users', result.user.uid);
       const userSnap = await getDoc(userRef);
       
@@ -90,6 +74,7 @@ export default function LoginPage() {
         profileData = userSnap.data() as UserProfile;
       }
       
+      stage = 'audit';
       await addDoc(collection(firestore, 'audit_logs'), {
         action: 'USER_SIGN_IN_GOOGLE',
         userId: profileData.uid,
@@ -98,16 +83,14 @@ export default function LoginPage() {
         severity: 'INFO'
       });
 
-      await notifyTelegramClientEvent(result.user, { type: 'SIGNIN', method: 'GOOGLE' });
-      await continueAfterLogin(result.user, profileData.role);
+      if (profileData.role !== 'CLIENT') {
+        router.replace('/dashboard');
+      } else {
+        router.replace('/');
+      }
     } catch (error: any) {
       if (error?.code !== 'auth/popup-closed-by-user') {
-        await notifyTelegramFailedSignIn(email);
-        toast({ 
-          variant: "destructive", 
-          title: "Login Failed", 
-          description: "Could not sign in with Google." 
-        });
+        toast({ variant: "destructive", ...loginFailure(stage, error, true) });
       }
     } finally {
       setIsSubmitting(false);
@@ -116,19 +99,40 @@ export default function LoginPage() {
 
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth || !email || !password || isSubmitting) return;
+    if (!auth || !firestore || !email || !password || isSubmitting) return;
     
     setIsSubmitting(true);
+    let stage: LoginStage = 'security';
     try {
+      // 1. Security Check
+      const captchaResult = await verifyLoginSecurity();
+      if (!captchaResult.success) {
+        toast({ variant: "destructive", title: "Security Alert", description: captchaResult.message });
+        setIsSubmitting(false);
+        return;
+      }
 
+      stage = 'authentication';
       const normalizedEmail = email.toLowerCase().trim();
       const cred = await signInWithEmailAndPassword(auth, normalizedEmail, password);
+      stage = 'profile';
       const userRef = doc(firestore!, 'users', cred.user.uid);
       const snap = await getDoc(userRef);
       
+      if (!snap.exists()) {
+        toast({
+          variant: "destructive",
+          title: "Staff profile missing",
+          description: "Authentication succeeded, but your account profile is missing. Contact your administrator to restore it. Ref: LOGIN_PROFILE_MISSING",
+        });
+        return;
+      }
+
       if (snap.exists()) {
         const profileData = snap.data() as UserProfile;
         
+
+        stage = 'audit';
         await addDoc(collection(firestore!, 'audit_logs'), {
           action: 'USER_SIGN_IN',
           userId: profileData.uid,
@@ -137,12 +141,14 @@ export default function LoginPage() {
           severity: 'INFO'
         });
 
-        await notifyTelegramClientEvent(cred.user, { type: 'SIGNIN', method: 'EMAIL' });
-        await continueAfterLogin(cred.user, profileData.role);
+        if (profileData.role !== 'CLIENT') {
+          router.replace('/dashboard');
+        } else {
+          router.replace('/');
+        }
       }
     } catch (error: any) {
-      await notifyTelegramFailedSignIn(email);
-      toast({ variant: "destructive", title: "Login Failed", description: "Invalid email or password." });
+      toast({ variant: "destructive", ...loginFailure(stage, error) });
     } finally {
       setIsSubmitting(false);
     }
@@ -150,6 +156,14 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen w-full flex overflow-hidden bg-white relative font-sans">
+      <Link 
+        href="/" 
+        className="absolute top-8 left-8 z-[100] flex items-center gap-3 py-2.5 px-6 bg-white/80 lg:bg-black/20 backdrop-blur-xl rounded-full border border-zinc-200 lg:border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-zinc-900 lg:text-white hover:bg-primary/20 hover:border-primary/40 transition-all shadow-xl active:scale-95 group"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        Back to Home
+      </Link>
+
       <div className="hidden lg:block w-1/2 relative overflow-hidden">
         <Image src={placeholderImages.auth.url} alt="Urban" fill className="object-cover brightness-90" priority />
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent" />
@@ -160,15 +174,6 @@ export default function LoginPage() {
       </div>
       
       <div className="flex-1 flex flex-col items-center justify-center p-8 relative bg-white">
-        <Link
-          href="/"
-          className="mb-5 self-end inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600 shadow-sm transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Home
-        </Link>
-
-
         <div className="w-full max-w-sm space-y-10">
           <div className="text-center">
             <img src="/assets/logo.png" alt="Urban" className="h-16 w-auto mx-auto mb-8" />
@@ -225,7 +230,9 @@ export default function LoginPage() {
             </Button>
 
             <div className="text-center pt-2">
-               
+               <p className="text-[8px] font-bold text-zinc-300 uppercase leading-relaxed tracking-wider px-4">
+                 This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" className="text-primary hover:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" className="text-primary hover:underline">Terms of Service</a> apply.
+               </p>
             </div>
           </form>
           

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useUser, useAuth, useFirestore } from '@/firebase';
 import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -15,7 +15,7 @@ import { User as UserIcon, Mail, Lock, ShieldCheck, Eye, EyeOff, ArrowLeft, Refr
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { cn } from '@/lib/utils';
-import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
+import { verifyRecaptcha } from '@/lib/actions';
 
 export default function SignUpPage() {
   const { user } = useUser();
@@ -23,16 +23,13 @@ export default function SignUpPage() {
   const firestore = useFirestore();
   const router = useRouter();
   const { isEmployee, loading, isSuperAdmin } = useProfile();
-  const TERMS_VERSION = '2024-08';
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
-  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   React.useEffect(() => {
@@ -44,6 +41,27 @@ export default function SignUpPage() {
       }
     }
   }, [user, isEmployee, isSuperAdmin, loading, router]);
+
+  const getRecaptchaToken = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const grecaptcha = (window as any).grecaptcha;
+      if (!grecaptcha?.enterprise) {
+        resolve(null);
+        return;
+      }
+      grecaptcha.enterprise.ready(async () => {
+        try {
+          const token = await grecaptcha.enterprise.execute(
+            process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY, 
+            { action: 'SIGNUP' }
+          );
+          resolve(token);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    });
+  };
 
   const passwordStrength = useMemo(() => {
     if (!password) return 0;
@@ -62,14 +80,12 @@ export default function SignUpPage() {
     return "bg-green-500";
   }, [passwordStrength]);
 
-  const strengthLabel = passwordStrength <= 25 ? 'Weak' : passwordStrength <= 50 ? 'Fair' : passwordStrength <= 75 ? 'Good' : 'Strong';
-
   const handleManualSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth || !firestore || !email || !password || isSubmitting) return;
 
-    if (password.length < 8 || passwordStrength < 50) {
-      toast({ variant: "destructive", title: "Password Too Weak", description: "Use at least 8 characters and add an uppercase letter, number or symbol." });
+    if (password.length < 8) {
+      toast({ variant: "destructive", title: "Password Too Short", description: "Use at least 8 characters." });
       return;
     }
 
@@ -85,6 +101,14 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
     try {
+      // 1. Security Check
+      const token = await getRecaptchaToken();
+      const captchaResult = await verifyRecaptcha(token);
+      if (!captchaResult.success) {
+        toast({ variant: "destructive", title: "Security Alert", description: captchaResult.message });
+        setIsSubmitting(false);
+        return;
+      }
 
       // 2. Create Firebase Account
       const cred = await createUserWithEmailAndPassword(auth, email, password);
@@ -98,34 +122,10 @@ export default function SignUpPage() {
         createdAt: Date.now(),
         accountType: 'CLIENT',
         loyaltyPoints: 0,
-        totalSpent: 0,
-        termsAcceptedAt: Date.now(),
-        termsVersion: TERMS_VERSION,
-        marketingOptIn,
-        marketingConsent: marketingOptIn,
-        ...(marketingOptIn ? { marketingConsentUpdatedAt: Date.now(), marketingConsentSource: 'signup' } : {})
+        totalSpent: 0
       });
 
-      await notifyTelegramClientEvent(cred.user, { type: 'SIGNUP', name });
-      try {
-        const idToken = await cred.user.getIdToken();
-        const verificationResponse = await fetch('/api/auth/send-verification', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (!verificationResponse.ok) throw new Error('Verification email could not be sent.');
-        toast({
-          title: "Account Created",
-          description: "A six-digit verification code has been sent to your email address.",
-        });
-        router.replace('/auth/verify-email');
-      } catch {
-        toast({
-          title: "Account Created",
-          description: "Your account is ready. Open the verification page to request a code.",
-        });
-        router.replace('/auth/verify-email');
-      }
+      toast({ title: "Welcome to Urban Express", description: "Your account has been created successfully." });
     } catch (error: any) {
       toast({
         variant: "destructive",
@@ -138,48 +138,36 @@ export default function SignUpPage() {
   };
 
   const handleGoogleSignUp = async () => {
-    if (!acceptTerms) {
-      toast({ variant: "destructive", title: "Accept Terms First", description: "Please review and accept the Terms and Conditions before continuing with Google." });
-      return;
-    }
     if (!auth || !firestore || isSubmitting) return;
     setIsSubmitting(true);
     try {
+      // 1. Security Check
+      const token = await getRecaptchaToken();
+      const captchaResult = await verifyRecaptcha(token);
+      if (!captchaResult.success) {
+        toast({ variant: "destructive", title: "Security Alert", description: captchaResult.message });
+        setIsSubmitting(false);
+        return;
+      }
 
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       const result = await signInWithPopup(auth, provider);
       
-      const userRef = doc(firestore, 'users', result.user.uid);
-      const userSnap = await getDoc(userRef);
-      const acceptedAt = Date.now();
-
-      if (!userSnap.exists()) {
-        await setDoc(userRef, {
+      const q = query(collection(firestore, 'users'), where('email', '==', result.user.email?.toLowerCase()));
+      const snap = await getDocs(q);
+      
+      if (snap.empty) {
+        await setDoc(doc(firestore, 'users', result.user.uid), {
           uid: result.user.uid,
-          email: result.user.email?.toLowerCase() || '',
+          email: result.user.email?.toLowerCase(),
           displayName: result.user.displayName || 'Urban Member',
           role: 'CLIENT',
-          createdAt: acceptedAt,
+          createdAt: Date.now(),
           accountType: 'CLIENT',
           loyaltyPoints: 0,
-          totalSpent: 0,
-          termsAcceptedAt: acceptedAt,
-          termsVersion: TERMS_VERSION,
-          marketingOptIn,
-          marketingConsent: marketingOptIn,
-          ...(marketingOptIn ? { marketingConsentUpdatedAt: acceptedAt, marketingConsentSource: 'signup' } : {})
+          totalSpent: 0
         });
-      } else {
-        await setDoc(userRef, {
-          termsAcceptedAt: acceptedAt,
-          termsVersion: TERMS_VERSION
-        }, { merge: true });
-      }
-      if (!userSnap.exists()) await notifyTelegramClientEvent(result.user, { type: 'SIGNUP', name: result.user.displayName || name });
-      if (marketingOptIn) {
-        const idToken = await result.user.getIdToken();
-        await fetch('/api/email/preferences', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + idToken }, body: JSON.stringify({ marketingOptIn: true }) });
       }
       toast({ title: "Welcome", description: "Your account is ready." });
     } catch (error: any) {
@@ -210,6 +198,14 @@ export default function SignUpPage() {
 
   return (
     <div className="min-h-screen w-full flex overflow-hidden bg-white relative">
+      <Link 
+        href="/" 
+        className="absolute top-8 left-8 z-[100] flex items-center gap-3 py-2.5 px-6 bg-white/80 lg:bg-black/20 backdrop-blur-xl rounded-full border border-zinc-200 lg:border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-zinc-900 lg:text-white hover:bg-primary/20 hover:border-primary/40 transition-all shadow-xl active:scale-95 group"
+      >
+        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+        Back to Home
+      </Link>
+
       <div className="hidden lg:block w-1/2 relative overflow-hidden">
         <Image 
           src={placeholderImages.auth.url}
@@ -223,16 +219,7 @@ export default function SignUpPage() {
       </div>
 
       <div className="flex-1 flex flex-col items-center justify-center p-6 relative overflow-y-auto">
-        <Link
-          href="/"
-          className="mb-5 self-end inline-flex min-h-10 items-center gap-2 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-[9px] font-black uppercase tracking-[0.18em] text-zinc-600 shadow-sm transition-colors hover:border-primary/40 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Back to Home
-        </Link>
-
-
-        <div className="w-full max-w-sm space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative z-10 py-4">
+        <div className="w-full max-sm space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 relative z-10 py-12">
           <div className="text-center">
             <img src="/assets/logo.png" alt="Urban Express" className="h-12 w-auto mx-auto mb-6 object-contain" />
             <h2 className="text-[11px] font-black uppercase tracking-[0.4em] text-zinc-900">Create Account</h2>
@@ -240,22 +227,9 @@ export default function SignUpPage() {
           </div>
 
           <div className="space-y-4">
-             <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
-               <Checkbox id="signup-terms" checked={acceptTerms} onCheckedChange={(checked) => setAcceptTerms(checked === true)} className="mt-0.5 rounded-md border-zinc-300" />
-               <label htmlFor="signup-terms" className="text-[10px] leading-relaxed font-semibold text-zinc-600 cursor-pointer">
-                 I have read and agree to the <Link href="/terms" className="font-black text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">Terms and Conditions</Link> and acknowledge the <Link href="/privacy" className="font-black text-primary underline underline-offset-2" target="_blank" rel="noopener noreferrer">Privacy Policy</Link>.
-               </label>
-             </div>
-             <div className="flex items-start gap-3 rounded-xl border border-zinc-200 bg-white p-3">
-               <Checkbox id="signup-marketing" checked={marketingOptIn} onCheckedChange={(checked) => setMarketingOptIn(checked === true)} className="mt-0.5 rounded-md border-zinc-300" />
-               <label htmlFor="signup-marketing" className="cursor-pointer text-[10px] leading-relaxed font-semibold text-zinc-600">
-                 I would like to receive occasional offers, service updates and news from Urban Auto Express by email. This is optional and I can unsubscribe at any time.
-               </label>
-             </div>
-
              <Button 
                onClick={handleGoogleSignUp} 
-               disabled={isSubmitting || !acceptTerms}
+               disabled={isSubmitting}
                variant="outline" 
                className="w-full h-14 rounded-2xl font-black uppercase text-[10px] tracking-widest gap-3 border-zinc-100 shadow-sm hover:bg-zinc-50 transition-all"
              >
@@ -301,28 +275,33 @@ export default function SignUpPage() {
                   <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden">
                     <div className={cn("h-full transition-all duration-500", strengthColor)} style={{ width: `${passwordStrength}%` }} />
                   </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="text-[9px] font-bold text-zinc-500">At least 8 characters, uppercase, number and symbol improve strength.</p>
-                    <p className={cn("text-[9px] font-black uppercase tracking-widest", passwordStrength <= 25 ? "text-red-600" : passwordStrength <= 50 ? "text-amber-600" : passwordStrength <= 75 ? "text-blue-600" : "text-green-600")}>{strengthLabel}</p>
-                  </div>
+                  <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest text-right">Password Strength</p>
                 </div>
               )}
 
               <div className="relative">
                 <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
-                <Input type={showConfirmPassword ? "text" : "password"} value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm Password" className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 pr-12 text-sm font-bold" required />
-                <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-900">
-                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+                <Input type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} placeholder="Confirm Password" className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 text-sm font-bold" required />
               </div>
             </div>
 
-            <Button type="submit" disabled={isSubmitting || !acceptTerms || passwordStrength < 50} className="w-full h-16 bg-primary hover:bg-primary/90 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-primary/20">
+            <div className="flex items-start space-x-3 py-2">
+              <Checkbox id="terms" checked={acceptTerms} onCheckedChange={(checked) => setAcceptTerms(!!checked)} className="mt-1 rounded-md border-zinc-200" />
+              <div className="grid gap-1.5 leading-none">
+                <label htmlFor="terms" className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest cursor-pointer">
+                  I accept the <Link href="/terms" className="text-primary font-black hover:underline">Terms of Service</Link>
+                </label>
+              </div>
+            </div>
+
+            <Button type="submit" disabled={isSubmitting} className="w-full h-16 bg-primary hover:bg-primary/90 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-[10px] shadow-xl shadow-primary/20">
               {isSubmitting ? <RefreshCcw className="w-4 h-4 animate-spin mr-2" /> : 'Sign Up'}
             </Button>
 
             <div className="text-center pt-2">
-               
+               <p className="text-[8px] font-bold text-zinc-300 uppercase leading-relaxed tracking-wider px-4">
+                 This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" className="text-primary hover:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" className="text-primary hover:underline">Terms of Service</a> apply.
+               </p>
             </div>
           </form>
 

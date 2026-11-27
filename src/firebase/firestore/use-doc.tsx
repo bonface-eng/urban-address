@@ -10,7 +10,6 @@ import {
 } from 'firebase/firestore';
 import { errorEmitter } from '../error-emitter';
 import { FirestorePermissionError } from '../errors';
-import { toPublicServiceError } from '@/lib/public-errors';
 
 /**
  * Hook to listen to a single Firestore document.
@@ -25,13 +24,11 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
   useEffect(() => {
     let active = true;
 
-    // Reset comparison state whenever the document source changes.
-    prevDataRef.current = '';
-    setError(null);
-    setData(null);
-
     if (!docRef) {
-      setLoading(false);
+      if (active) {
+        setLoading(false);
+        setData(null);
+      }
       return;
     }
 
@@ -66,8 +63,7 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
             errorEmitter.emit('permission-error', permissionError);
           }
 
-          prevDataRef.current = '';
-          setError(toPublicServiceError(err) as FirestoreError);
+          setError(err);
           setLoading(false);
           setData(null);
         }
@@ -75,10 +71,8 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<T> | null) {
     } catch (e: any) {
       console.error('Failed to establish document snapshot listener:', e);
       if (active) {
-        prevDataRef.current = '';
         setLoading(false);
-        setError(toPublicServiceError(e) as FirestoreError);
-        setData(null);
+        setError(e);
       }
       return;
     }

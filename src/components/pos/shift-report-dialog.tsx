@@ -74,9 +74,7 @@ export function ShiftReportDialog({
     });
   }, [reportType, cashierName, cashierId, periodLabel, orders, heldBills, stats]);
 
-  const paidOrders = useMemo(() => orders.filter(o =>
-    o.status === 'PAID' && o.type !== 'SYSTEM-REPORT' && (!cashierId || o.cashierId === cashierId)
-  ), [orders, cashierId]);
+  const paidOrders = useMemo(() => orders.filter(o => o.status === 'PAID'), [orders]);
   const totalVolume = useMemo(() => paidOrders.reduce((s, o) => s + (o.total || 0), 0), [paidOrders]);
 
   const handleDownloadTxt = () => {
@@ -96,8 +94,11 @@ export function ShiftReportDialog({
         cashierName,
         total: totalVolume,
         timestamp: Date.now(),
-        // Send the exact same fully calculated report shown in the preview.
-        reportText
+        items: paidOrders.map(o => ({
+          name: `#${o.id?.slice(0, 8).toUpperCase() || 'SALE'} ${o.type}`,
+          quantity: o.items?.length || 1,
+          price: o.total || 0
+        }))
       });
 
       if (!hwResult.success) {

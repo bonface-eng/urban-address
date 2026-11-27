@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { ClientLayout } from '../client/layout';
-import { ChevronRight, ShieldCheck, Lock, Eye, Gavel, Cookie } from 'lucide-react';
+import { ChevronRight, ShieldCheck, Lock, Eye, Gavel } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PrivacyPage() {
@@ -10,7 +10,7 @@ export default function PrivacyPage() {
     { 
       title: "1. Data Collection", 
       icon: Eye,
-      content: "Urban Auto Express collects essential information to facilitate your service bookings and reward tracking. This includes your name, contact phone number, vehicle details, and transaction history. We do not store sensitive payment information on our servers; all financial processing is handled by PCI-compliant partners like Paystack." 
+      content: "Urban Express collects essential information to facilitate your service bookings and reward tracking. This includes your name, contact phone number, vehicle details, and transaction history. We do not store sensitive payment information on our servers; all financial processing is handled by PCI-compliant partners like Paystack." 
     },
     { 
       title: "2. Purpose of Processing", 
@@ -20,17 +20,12 @@ export default function PrivacyPage() {
     { 
       title: "3. Information Sharing", 
       icon: Lock,
-      content: "Urban Auto Express does not sell, rent, or trade user data to third parties. Information is only shared with authorized employees (Administrators, Managers, and assigned Attendants) for the specific fulfillment of your service request." 
+      content: "Urban Express does not sell, rent, or trade user data to third parties. Information is only shared with authorized employees (Administrators, Managers, and assigned Attendants) for the specific fulfillment of your service request." 
     },
     { 
       title: "4. Digital Security", 
       icon: Gavel,
       content: "Our 'Business OS' utilizes industry-standard encryption and Firebase security protocols. Every staff action is logged to an immutable audit trail, and we enforce a zero-trust model for all financial and personnel records." 
-    },
-    {
-      title: "5. Cookie Preferences",
-      icon: Cookie,
-      content: "Essential storage technologies support security, sessions and core platform functions and cannot be disabled. Analytics preferences cover usage and performance measurement. Marketing preferences cover campaign measurement. Optional categories remain disabled unless you choose to allow them. Your category choices are saved against a browser-specific reference so they can be honoured and updated later using Cookie settings."
     }
   ];
 
@@ -40,7 +35,7 @@ export default function PrivacyPage() {
         <section className="bg-zinc-50 border-b border-zinc-100 py-12">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-2">
-              <Link href="/" className="mr-3 inline-flex items-center"><img src="/assets/logo.png" alt="Urban Auto Express" className="h-8 w-auto object-contain" /></Link><Link href="/" className="hover:text-primary transition-colors">HOME</Link> <ChevronRight className="w-2.5 h-2.5" /> <span className="text-primary">PRIVACY</span>
+              <Link href="/" className="hover:text-primary transition-colors">HOME</Link> <ChevronRight className="w-2.5 h-2.5" /> <span className="text-primary">PRIVACY</span>
             </div>
             <h1 className="text-5xl md:text-8xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">
               Privacy <br/> <span className="text-primary">Policy.</span>
@@ -74,12 +69,8 @@ export default function PrivacyPage() {
                    <Lock className="w-8 h-8" />
                 </div>
                 <p className="text-[10px] font-black text-zinc-300 uppercase tracking-[0.4em]">
-                  Urban Auto Express · Data Protection Protocol v2.5
+                  Urban Express Hospitality & Automotive <br/> Data Protection Protocol v2.5
                 </p>
-             </div>
-             <div className="border-t border-zinc-100 pt-8 text-center text-xs text-zinc-500">
-               <p>Privacy enquiries: <a className="font-semibold text-primary" href="mailto:mail@urbanautoexpress.com">mail@urbanautoexpress.com</a> · <a className="font-semibold text-primary" href="tel:+254785860753">+254 785 860 753</a></p>
-               <p className="mt-3"><Link href="/terms" className="text-primary hover:underline">Terms of Service</Link> · <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link></p>
              </div>
           </div>
         </section>

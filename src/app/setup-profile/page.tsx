@@ -44,10 +44,13 @@ export default function SetupProfilePage() {
 
   useEffect(() => {
     if (profile) {
-      const names = (profile.displayName || '').split(' ');
-      setFirstName(profile.firstName || names[0] || '');
-      setLastName(profile.lastName || names[names.length - 1] || '');
-      setMiddleName(profile.middleName || (names.length > 2 ? names.slice(1, -1).join(' ') : ''));
+      const stored = profile as typeof profile & { firstName?: string; middleName?: string; lastName?: string };
+      const combined = (profile.displayName || '').trim();
+      const parenthesized = combined.match(/\s*\(([^()]*)\)\s*$/);
+      const names = combined.replace(/\s*\([^()]*\)\s*$/, '').trim().split(/\s+/);
+      setFirstName(stored.firstName || names[0] || '');
+      setLastName(stored.lastName || (names.length > 1 ? names[names.length - 1] : '') || '');
+      setMiddleName(stored.middleName || parenthesized?.[1] || (names.length > 2 ? names.slice(1, -1).join(' ') : ''));
       setPhone(profile.phoneNumber || '');
       setMpesaPhone(profile.mpesaNumber || '');
       setPhoto(profile.photoURL || '');
@@ -56,7 +59,15 @@ export default function SetupProfilePage() {
 
   const handleSync = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firestore || !profile || !user) return;
+    if (!firestore || !profile || !user || isSubmitting) return;
+    if (profile.uid !== user.uid) {
+      toast({ variant: "destructive", title: "Profile session changed", description: "Please sign in again before updating your profile. Ref: PROFILE_SESSION_MISMATCH" });
+      return;
+    }
+    if (!firstName.trim() || !lastName.trim() || !phone.trim() || !mpesaPhone.trim()) {
+      toast({ variant: "destructive", title: "Details required", description: "Enter your name, contact phone and M-Pesa number." });
+      return;
+    }
     
     if (!photo) {
       toast({ variant: "destructive", title: "IMAGE REQUIRED" });
@@ -64,14 +75,12 @@ export default function SetupProfilePage() {
     }
 
     setIsSubmitting(true);
+    let stage: 'save' | 'auth' | 'audit' = 'save';
     try {
-      const fullDisplayName = `${firstName} ${lastName} ${middleName ? '(' + middleName + ')' : ''}`.trim();
-      const userRef = doc(firestore, 'users', profile.uid);
+      const fullDisplayName = `${firstName.trim()} ${lastName.trim()} ${middleName.trim() ? '(' + middleName.trim() + ')' : ''}`.trim();
+      const userRef = doc(firestore, 'users', user.uid);
       
       await updateDoc(userRef, {
-        firstName: firstName.trim(),
-        middleName: middleName.trim(),
-        lastName: lastName.trim(),
         displayName: fullDisplayName,
         phoneNumber: phone.trim(),
         mpesaNumber: mpesaPhone.trim(),
@@ -79,14 +88,16 @@ export default function SetupProfilePage() {
         updatedAt: Date.now()
       });
 
+      stage = 'auth';
       await updateProfile(user, {
         displayName: fullDisplayName,
         photoURL: photo
       });
 
+      stage = 'audit';
       await addDoc(collection(firestore, 'audit_logs'), {
         action: 'PROFILE_COMPLETION',
-        userId: profile.uid,
+        userId: user.uid,
         details: `Staff member finalized account identity: ${fullDisplayName}`,
         timestamp: Date.now(),
         severity: 'INFO'
@@ -95,7 +106,17 @@ export default function SetupProfilePage() {
       toast({ title: "ACCOUNT SYNCHRONIZED", description: "Details have been stored in the master registry." });
       router.push('/dashboard');
     } catch (err) {
-      toast({ variant: "destructive", title: "SYNC FAILED" });
+      const denied = !!err && typeof err === 'object' && 'code' in err && (err.code === 'permission-denied' || err.code === 'firestore/permission-denied');
+      const description = stage === 'save'
+        ? denied
+          ? 'Your profile update was denied. Contact your administrator. Ref: PROFILE_SAVE_DENIED'
+          : 'Your details could not be saved. Check your connection and retry. Ref: PROFILE_SAVE_FAILED'
+        : stage === 'auth'
+          ? 'Your details were saved, but sign-in profile synchronization failed. Retry to finish. Ref: PROFILE_AUTH_SYNC_FAILED'
+          : denied
+            ? 'Your details were saved, but the required audit record was denied. Contact your administrator. Ref: PROFILE_AUDIT_DENIED'
+            : 'Your details were saved, but the required audit record could not be stored. Retry to finish. Ref: PROFILE_AUDIT_FAILED';
+      toast({ variant: "destructive", title: "Profile finalization incomplete", description });
     } finally {
       setIsSubmitting(false);
     }

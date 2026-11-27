@@ -30,44 +30,5 @@
       "destination": "/api/:path*"
     }
   ],
-  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"security-hardening-bulk-fix-nov-2026\" ]; then exit 0; else exit 1; fi",
-  "buildCommand": "NODE_ENV=test npm run test:ui && npm run build",
-  "crons": [
-    {
-      "path": "/api/telegram/daily-summary?period=morning",
-      "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=evening",
-      "schedule": "0 15 * * *"
-    },
-    {
-      "path": "/api/telegram/monitor",
-      "schedule": "*/3 * * * *"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=hourly",
-      "schedule": "10 * * * *"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=weekly",
-      "schedule": "0 3 * * 1"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=station-sales",
-      "schedule": "*/15 * * * *"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=cashier-hourly",
-      "schedule": "0 * * * *"
-    },
-    {
-      "path": "/api/telegram/daily-summary?period=top-items-12h",
-      "schedule": "0 */12 * * *"
-    },
-    {
-      "path": "/api/telegram/stock-monitor",
-      "schedule": "*/15 * * * *"
-    }
-  ]
+  "ignoreCommand": "if [ \"$VERCEL_GIT_COMMIT_REF\" = \"security-hardening-bulk-fix-nov-2026\" ]; then exit 0; else exit 1; fi"
 }

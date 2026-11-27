@@ -1,45 +1,15 @@
 export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'CASHIER' | 'STOREKEEPER' | 'ATTENDANT' | 'KITCHEN' | 'CLIENT';
 export type BusinessUnit = 'LOUNGE' | 'STORE' | 'CARWASH';
 
-export interface BusinessBranch {
-  id: string;
-  businessId: 'urban-address';
-  name: string;
-  code: string;
-  status: 'ACTIVE' | 'INACTIVE';
-  isPrimary: boolean;
-  location: {
-    address: string;
-    town: string;
-    county: string;
-    country: string;
-    postalCode?: string;
-    landmark?: string;
-    latitude?: number | null;
-    longitude?: number | null;
-    mapsUrl?: string;
-  };
-  phone?: string;
-  createdAt: number;
-  createdBy: string;
-  updatedAt: number;
-  updatedBy: string;
-}
-
 export interface UserProfile {
   uid: string;
   email: string;
   displayName: string;
   role: UserRole;
   assignedUnits?: BusinessUnit[] | null;
-  /** Branch access for multi-branch operations. Empty/omitted remains legacy until staff are assigned. */
-  branchIds?: string[] | null;
-  activeBranchId?: string | null;
   createdAt: number;
   photoURL?: string | null;
   phoneNumber?: string | null;
-  address?: string | null;
-  deliveryLocation?: { latitude: number; longitude: number } | null;
   mpesaNumber?: string | null; // Dedicated M-Pesa Payout Destination
   mustChangePassword?: boolean;
   accountType?: 'STAFF' | 'CLIENT';
@@ -47,8 +17,6 @@ export interface UserProfile {
   baseSalary?: number;
   loyaltyPoints?: number;
   totalSpent?: number;
-  loyaltyReconciledAt?: number;
-  loyaltyReconciliationId?: string;
   masterKey?: string;
   seenVersions?: string[]; // Tracking which briefings the user has acknowledged
 }
@@ -142,38 +110,10 @@ export interface Order {
   paymentMethod?: string;
   cashierId?: string;
   cashierName?: string;
-  terminalId?: string;
-  terminalName?: string;
+  terminalId?: string; 
   registerSessionId?: string;
-  commission?: number;
   customerId?: string;
   customerName?: string;
-  customerPhone?: string | null;
-  fulfilment?: 'DELIVERY' | 'PICKUP';
-  deliveryAddress?: string | null;
-  deliveryLocation?: { latitude: number; longitude: number } | null;
-  branchId?: string | null;
-  branchName?: string | null;
-  paymentStatus?: 'AWAITING_PAYMENT' | 'PAID' | 'FAILED';
-  paymentProvider?: 'MPESA' | 'AIRTEL_MONEY';
-  paymentRef?: string | null;
-  paymentReceipt?: string | null;
-  providerTransactionId?: string | null;
-  paymentPhone?: string | null;
-  paidPhone?: string | null;
-  paymentAmount?: number;
-  amountCurrency?: 'KES';
-  checkoutRequestId?: string | null;
-  merchantRequestId?: string | null;
-  airtelTransactionId?: string | null;
-  paymentInitiatedAt?: number;
-  paymentFailureReason?: string | null;
-  paymentFailedAt?: number;
-  gatewayResponse?: string | null;
-  inventorySynced?: boolean;
-  paidAt?: number;
-  cashTendered?: number | null;
-  changeDue?: number | null;
   timestamp: number;
   servedAt?: number;
   items?: OrderItem[];

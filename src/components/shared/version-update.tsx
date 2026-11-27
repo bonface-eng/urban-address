@@ -1,6 +1,13 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { useProfile } from '@/hooks/use-profile';
 import { useFirestore, useUser } from '@/firebase';
@@ -8,6 +15,7 @@ import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { SYSTEM_CONFIG } from '@/lib/config';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
+import { X } from 'lucide-react';
 
 type UpdateCategory = 'CLIENT' | 'STAFF' | 'ADMIN';
 
@@ -20,154 +28,111 @@ interface UpdateItem {
 }
 
 const SYSTEM_UPDATES: UpdateItem[] = [
-  // Client-facing changes released today
+  // Client Side Updates
   {
     id: 'client-vehicle-recognition',
     title: 'Vehicle registration recognition',
-    description: 'When checking in a vehicle or booking detailing services, the vehicle make and model are matched with manufacturer insignias and visual shade indicators to make vehicle identification clearer.',
-    category: 'CLIENT',
-    audienceLabel: 'Client update'
-  },
-  {
-    id: 'client-account-security',
-    title: 'Improved account registration and recovery',
-    description: 'Registration now includes clearer password-strength guidance, show and hide password controls, terms acknowledgement for Google and manual sign-up, and a password recovery flow.',
+    description: 'When checking in a vehicle or booking detailing services, your vehicle manufacturer and model are now matched with official brand insignias and shade indicators for clear identification.',
     category: 'CLIENT',
     audienceLabel: 'Client update'
   },
   {
     id: 'client-queue-transparency',
     title: 'Service progress visibility',
-    description: 'Customers can view the status of active wash bay detailing stages and carwash job progress directly from the customer portal.',
+    description: 'Customers can now view the status of active wash bay detailing stages and carwash job progress directly from the customer portal.',
     category: 'CLIENT',
     audienceLabel: 'Client update'
   },
   {
     id: 'client-detailed-receipts',
     title: 'Itemized receipts with vehicle details',
-    description: 'Receipts display vehicle make, model, registration details and transaction references for easier service and expense tracking.',
+    description: 'Receipts now display full vehicle make, model, and registration numbers alongside transaction reference numbers for warranty and expense tracking.',
     category: 'CLIENT',
     audienceLabel: 'Client update'
   },
   {
     id: 'client-streamlined-ordering',
     title: 'Refined mobile self-service',
-    description: 'Customer-facing service and product browsing has been refined for clearer navigation on mobile screens.',
+    description: 'Navigation across lounge beverages, kitchen specialties, and auto accessories has been streamlined for quick mobile browsing and checkout.',
     category: 'CLIENT',
     audienceLabel: 'Client update'
   },
 
-  // Staff-facing operational changes released today
-  {
-    id: 'staff-mobile-pos-navigation',
-    title: 'Mobile POS navigation',
-    description: 'Staff can reach assigned POS stations and operational pages through grouped mobile navigation, with a persistent way back to the main workspace.',
-    category: 'STAFF',
-    audienceLabel: 'Staff update'
-  },
-  {
-    id: 'staff-responsive-pos-workspace',
-    title: 'Responsive POS workspace',
-    description: 'POS product cards, cart controls, workspace sizing, tabs, forms and sheets have been refined for narrow mobile screens.',
-    category: 'STAFF',
-    audienceLabel: 'Staff update'
-  },
-  {
-    id: 'staff-responsive-directory',
-    title: 'Mobile staff directory',
-    description: 'Personnel records now use compact mobile cards with clearer identity, role, salary and edit actions while retaining the desktop directory table.',
-    category: 'STAFF',
-    audienceLabel: 'Staff update'
-  },
-  {
-    id: 'staff-multi-station',
-    title: 'Multi-station operating mobility',
-    description: 'Assigned personnel can move between authorized lounge, retail and carwash stations through the role-aware mobile workspace.',
-    category: 'STAFF',
-    audienceLabel: 'Staff update'
-  },
-  {
-    id: 'staff-print-workflow',
-    title: 'Simplified local printing workflow',
-    description: 'The QZ Tray dependency has been removed while supported Direct Web Serial and local Python print-service workflows remain available.',
-    category: 'STAFF',
-    audienceLabel: 'Staff update'
-  },
+  // Staff Side Updates
   {
     id: 'staff-plate-suggestions',
     title: 'Automatic registration suggestions',
-    description: 'Typing a registration plate in the point of sale can suggest matching vehicle records, colour shades and models.',
+    description: 'Typing a registration plate in the point of sale instantly queries past records to suggest matching vehicles, color shades, and models.',
     category: 'STAFF',
     audienceLabel: 'Staff update'
   },
   {
     id: 'staff-brand-logos',
     title: 'Manufacturer brand insignias',
-    description: 'Manufacturer insignias appear alongside vehicle identification and selection details to help staff confirm the correct vehicle.',
+    description: 'Official brand logos are now integrated into plate suggestions, the vehicle make selection list, and the checkout cart summary.',
     category: 'STAFF',
     audienceLabel: 'Staff update'
   },
   {
     id: 'staff-held-bills',
     title: 'Visual held bill cards',
-    description: 'Parked orders in the recall register show vehicle identification and order totals for faster recognition and reconciliation.',
+    description: 'Parked orders in the recall register now display the vehicle brand insignia, registration plate, and total amount for swift identification and reconciliation.',
     category: 'STAFF',
     audienceLabel: 'Staff update'
   },
   {
     id: 'staff-kds-workflow',
     title: 'Dedicated kitchen display workflow',
-    description: 'Kitchen personnel receive orders on a focused kitchen display board without unnecessary cashier controls.',
+    description: 'Kitchen personnel receive orders directly on a focused kitchen display board without non-essential sales controls or cashier steps.',
+    category: 'STAFF',
+    audienceLabel: 'Staff update'
+  },
+  {
+    id: 'staff-multi-station',
+    title: 'Multi-station operating mobility',
+    description: 'Assigned personnel can move between the lounge, retail store, and carwash stations without losing current checkout selections.',
     category: 'STAFF',
     audienceLabel: 'Staff update'
   },
 
-  // Administrator-facing changes released today
+  // Admin Side Updates
   {
-    id: 'admin-responsive-navigation',
-    title: 'Mobile administration navigation',
-    description: 'Administrative destinations are grouped into a role-aware mobile menu, making management pages easier to reach without crowding the main screen.',
-    category: 'ADMIN',
-    audienceLabel: 'Administrator update'
-  },
-  {
-    id: 'admin-staff-registry',
-    title: 'Responsive staff registry and station access',
-    description: 'The staff registry now presents mobile-friendly cards and keeps station authorization controls available from each staff record.',
-    category: 'ADMIN',
-    audienceLabel: 'Administrator update'
-  },
-  {
-    id: 'admin-responsive-hubs',
-    title: 'Responsive administration pages',
-    description: 'Staff, Finance and Logistics administration views now use compact mobile layouts, improved tabs, safer dialog sizing and more accessible controls.',
+    id: 'admin-kitchen-role',
+    title: 'Kitchen role and permission controls',
+    description: 'Administrators can assign the dedicated kitchen role through the central access matrix, granting kitchen staff isolated access to live order boards.',
     category: 'ADMIN',
     audienceLabel: 'Administrator update'
   },
   {
     id: 'admin-security-rules',
-    title: 'Database security rules release',
-    description: 'Firestore rules continue to enforce role-based access for users, orders, held bills, inventory and POS operations. Version acknowledgements are restricted to the signed-in account.',
+    title: 'Database security rules release 2.8.0',
+    description: 'Updated cloud database security rules strictly enforce role verification across users, orders, held bills, inventory, and point of sale stations.',
+    category: 'ADMIN',
+    audienceLabel: 'Administrator update'
+  },
+  {
+    id: 'admin-stock-audit',
+    title: 'Inventory management and stock audit',
+    description: 'Store supervisors can review real-time stock balances and print immediate audit reports for low-stock and depleted items.',
     category: 'ADMIN',
     audienceLabel: 'Administrator update'
   },
   {
     id: 'admin-audit-logs',
-    title: 'Administrative activity auditing',
-    description: 'Administrative actions, station authorizations and operational handovers remain part of the activity audit workflow.',
+    title: 'Comprehensive activity auditing',
+    description: 'Administrative actions, station authorizations, broadcast messages, and shift handovers are permanently logged in the audit registry.',
     category: 'ADMIN',
     audienceLabel: 'Administrator update'
   }
 ];
 
 export function VersionUpdateBriefing() {
-  const { profile, role, isSuperAdmin, isEmployee, loading: profileLoading } = useProfile();
+  const { profile, role, isSuperAdmin, isEmployee } = useProfile();
   const { user } = useUser();
   const firestore = useFirestore();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isAcknowledging, setIsAcknowledging] = useState(false);
-  const [acknowledgementError, setAcknowledgementError] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | UpdateCategory>('ALL');
 
   const currentVersion = SYSTEM_CONFIG.BUSINESS.VERSION;
@@ -191,14 +156,10 @@ export function VersionUpdateBriefing() {
   useEffect(() => {
     const localKey = `urban_update_acknowledged_${currentVersion}`;
 
-    // Wait for the signed-in user's profile before deciding whether to show the briefing.
-    if (user && profileLoading) return;
-
-    if (user) {
-      const hasAcknowledgedInDb = Array.isArray(profile?.seenVersions)
-        && profile.seenVersions.includes(currentVersion);
+    if (profile) {
+      const hasAcknowledgedInDb = Array.isArray(profile.seenVersions) && profile.seenVersions.includes(currentVersion);
       if (!hasAcknowledgedInDb) {
-        const timer = setTimeout(() => setIsOpen(true), 900);
+        const timer = setTimeout(() => setIsOpen(true), 1200);
         return () => clearTimeout(timer);
       }
       return;
@@ -207,33 +168,32 @@ export function VersionUpdateBriefing() {
     if (!user && typeof window !== 'undefined') {
       const hasAcknowledgedLocally = localStorage.getItem(localKey) === 'true';
       if (!hasAcknowledgedLocally) {
-        const timer = setTimeout(() => setIsOpen(true), 1200);
+        const timer = setTimeout(() => setIsOpen(true), 1600);
         return () => clearTimeout(timer);
       }
     }
-  }, [profile, profileLoading, user, currentVersion]);
+  }, [profile, user, currentVersion]);
 
   const handleAcknowledge = async () => {
     setIsAcknowledging(true);
-    setAcknowledgementError('');
-
     const localKey = `urban_update_acknowledged_${currentVersion}`;
 
     try {
-      if (user?.uid) {
-        if (!firestore) throw new Error('The account database is not available. Please try again.');
-        const userRef = doc(firestore, 'users', user.uid);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(localKey, 'true');
+      }
+
+      if (firestore && profile?.uid) {
+        const userRef = doc(firestore, 'users', profile.uid);
         await updateDoc(userRef, {
           seenVersions: arrayUnion(currentVersion)
         });
-      } else if (typeof window !== 'undefined') {
-        localStorage.setItem(localKey, 'true');
       }
 
       setIsOpen(false);
     } catch (err) {
       console.error('[VERSION_UPDATE_ACK_ERROR]', err);
-      setAcknowledgementError('We could not save your acknowledgement. Check your connection and try again.');
+      setIsOpen(false);
     } finally {
       setIsAcknowledging(false);
     }
@@ -266,138 +226,148 @@ export function VersionUpdateBriefing() {
     return `Version ${currentVersion} feature overview.`;
   }, [viewerRole, currentVersion]);
 
-  if (!isOpen) return null;
-
   return (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center overflow-y-auto bg-zinc-950/55 p-3 backdrop-blur-[2px] sm:p-6"
-      onClick={(event) => {
-        if (event.target === event.currentTarget && !isAcknowledging) setIsOpen(false);
-      }}
-    >
-      <main
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="version-briefing-title"
-        aria-describedby="version-briefing-description"
-        className="flex max-h-[calc(100dvh-1.5rem)] w-full max-w-5xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-zinc-50 text-zinc-900 shadow-2xl sm:max-h-[min(88dvh,860px)]"
+    <Dialog open={isOpen} onOpenChange={(open) => !open && !isAcknowledging && setIsOpen(false)}>
+      <DialogContent 
+        hideCloseButton={true}
+        overlayClassName="bg-zinc-700/30 backdrop-blur-sm"
+        className="sm:max-w-[760px] w-[95vw] rounded-3xl border border-zinc-200 shadow-2xl p-0 overflow-hidden bg-white max-h-[95vh] flex flex-col"
       >
-      <header className="shrink-0 border-b border-zinc-200 bg-white px-4 py-4 sm:px-7 sm:py-5">
-        <div className="flex w-full items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-primary sm:text-xs">
-              Urban Auto Express · Platform release
+        {/* Responsive Header with Standard Close Positioning */}
+        <div className="bg-white p-5 sm:p-8 border-b border-zinc-100 relative shrink-0">
+          <button 
+            onClick={() => setIsOpen(false)}
+            disabled={isAcknowledging}
+            className="absolute top-4 right-4 sm:top-6 sm:right-6 w-10 h-10 rounded-full bg-zinc-50 flex items-center justify-center text-zinc-400 hover:bg-zinc-100 hover:text-zinc-900 transition-all z-10"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="pr-12 sm:pr-0">
+            <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wider text-primary mb-1">
+              System Update
             </p>
-            <h1 id="version-briefing-title" className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-              {viewerRole === 'ADMIN' ? 'Administrator briefing' : viewerRole === 'STAFF' ? 'Staff update' : 'What’s new for you'}
-            </h1>
-            <p id="version-briefing-description" className="mt-1 text-xs text-zinc-500 sm:text-sm">
-              {roleSubtitle}
-            </p>
-          </div>
-          <div className="shrink-0 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2 text-right">
-            <p className="text-[9px] font-semibold uppercase tracking-wider text-zinc-400">Current release</p>
-            <p className="text-sm font-bold tabular-nums text-zinc-900">{currentVersion}</p>
+            <DialogHeader className="text-left p-0 space-y-0">
+              <DialogTitle className="text-lg sm:text-2xl font-bold text-zinc-800 leading-tight">
+                {viewerRole === 'ADMIN' ? 'Administrator Briefing' : viewerRole === 'STAFF' ? 'Staff Operational Briefing' : 'Client Updates'}
+              </DialogTitle>
+              <DialogDescription className="text-[10px] sm:text-xs text-zinc-500 mt-1">
+                {roleSubtitle}
+              </DialogDescription>
+            </DialogHeader>
           </div>
         </div>
-      </header>
 
-      {viewerRole === 'ADMIN' && (
-        <nav aria-label="Update categories" className="shrink-0 border-b border-zinc-200 bg-white">
-          <div className="flex w-full gap-2 overflow-x-auto px-4 py-3 sm:px-7">
-            {([
-              ['ALL', `All (${counts.all})`],
-              ['CLIENT', `Client (${counts.client})`],
-              ['STAFF', `Staff (${counts.staff})`],
-              ['ADMIN', `Admin (${counts.admin})`]
-            ] as const).map(([category, label]) => (
-              <button
-                key={category}
-                type="button"
-                onClick={() => setSelectedCategory(category)}
-                aria-pressed={selectedCategory === category}
-                className={cn(
-                  "min-h-10 shrink-0 rounded-lg border px-4 text-xs font-semibold transition-colors",
-                  selectedCategory === category
-                    ? "border-primary bg-primary/5 text-primary"
-                    : "border-zinc-200 bg-white text-zinc-600 hover:bg-zinc-50"
-                )}
-              >
-                {label}
-              </button>
-            ))}
+        {/* Category Filters: Optimized for touch devices */}
+        {viewerRole === 'ADMIN' && (
+          <div className="bg-white px-5 sm:px-8 pt-4 pb-2 border-b border-zinc-100 flex items-center gap-2 overflow-x-auto no-scrollbar shrink-0">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('ALL')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-medium transition-colors border whitespace-nowrap",
+                selectedCategory === 'ALL'
+                  ? "border-primary text-primary font-semibold bg-white"
+                  : "border-zinc-200 text-zinc-600 hover:text-zinc-800 bg-white"
+              )}
+            >
+              All ({counts.all})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('ADMIN')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-medium transition-colors border whitespace-nowrap",
+                selectedCategory === 'ADMIN'
+                  ? "border-primary text-primary font-semibold bg-white"
+                  : "border-zinc-200 text-zinc-600 hover:text-zinc-800 bg-white"
+              )}
+            >
+              Admin ({counts.admin})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('STAFF')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-medium transition-colors border whitespace-nowrap",
+                selectedCategory === 'STAFF'
+                  ? "border-primary text-primary font-semibold bg-white"
+                  : "border-zinc-200 text-zinc-600 hover:text-zinc-800 bg-white"
+              )}
+            >
+              Staff ({counts.staff})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('CLIENT')}
+              className={cn(
+                "px-3.5 py-1.5 rounded-xl text-[10px] sm:text-xs font-medium transition-colors border whitespace-nowrap",
+                selectedCategory === 'CLIENT'
+                  ? "border-primary text-primary font-semibold bg-white"
+                  : "border-zinc-200 text-zinc-600 hover:text-zinc-800 bg-white"
+              )}
+            >
+              Client ({counts.client})
+            </button>
           </div>
-        </nav>
-      )}
+        )}
 
-      <ScrollArea className="min-h-0 flex-1 bg-zinc-50">
-        <div className="w-full space-y-4 px-4 py-4 sm:space-y-5 sm:px-7 sm:py-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-bold text-zinc-900 sm:text-base">
-                {viewerRole === 'CLIENT' ? 'Client features' : viewerRole === 'STAFF' ? 'Operational improvements' : selectedCategory === 'ALL' ? 'Release highlights' : `${selectedCategory.toLowerCase()} updates`}
-              </h2>
-              <p className="mt-1 text-xs text-zinc-500">
-                {viewerRole === 'ADMIN'
-                  ? 'Updates are separated by the people and workflows they affect.'
-                  : viewerRole === 'STAFF'
-                    ? 'These changes apply to your staff workspace and assigned operations.'
-                    : 'These changes apply to your customer account and service experience.'}
+        {/* Main Content: Scaled padding and better grid gaps */}
+        <ScrollArea className="flex-1 bg-white">
+          <div className="p-5 sm:p-8 space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+              {displayedUpdates.map((item) => (
+                <div
+                  key={item.id}
+                  className="bg-white border border-zinc-200 rounded-2xl p-4 sm:p-5 flex flex-col justify-between"
+                >
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-primary">
+                        {item.audienceLabel}
+                      </span>
+                    </div>
+                    <h3 className="text-xs sm:text-sm font-semibold text-zinc-800 leading-snug">
+                      {item.title}
+                    </h3>
+                    <p className="text-[11px] sm:text-xs text-zinc-600 leading-relaxed">
+                      {item.description}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-zinc-50 border border-zinc-200 rounded-2xl p-4 sm:p-5 text-left mt-4">
+              <p className="text-[11px] sm:text-xs font-semibold text-zinc-800">
+                Identity synchronization notice
+              </p>
+              <p className="text-[10px] sm:text-xs text-zinc-500 mt-1 leading-relaxed">
+                Acknowledgment records this briefing to the master database for your account role.
               </p>
             </div>
-            <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-semibold text-zinc-500 ring-1 ring-zinc-200">
-              {displayedUpdates.length} {displayedUpdates.length === 1 ? 'update' : 'updates'}
-            </span>
           </div>
+        </ScrollArea>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {displayedUpdates.map((item) => (
-              <article
-                key={item.id}
-                className="flex min-w-0 flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-sm sm:p-5"
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <span className="text-[9px] font-bold uppercase tracking-[0.14em] text-primary">
-                    {item.audienceLabel}
-                  </span>
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-label="Included in this release" />
-                </div>
-                <div className="space-y-1.5">
-                  <h3 className="text-sm font-semibold leading-snug text-zinc-900">{item.title}</h3>
-                  <p className="text-xs leading-relaxed text-zinc-600">{item.description}</p>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <section className="rounded-xl border border-zinc-200 bg-white p-4 sm:p-5">
-            <h2 className="text-xs font-bold text-zinc-900">Your account and update record</h2>
-            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
-              Acknowledging this briefing records {currentVersion} against your signed-in account. It does not change your role, permissions, or business data.
+        {/* Modal Action Footer: Stacked on mobile */}
+        <div className="p-5 sm:p-8 border-t border-zinc-100 bg-white flex flex-col sm:flex-row items-center justify-between gap-5 shrink-0">
+          <div className="text-center sm:text-left w-full sm:w-auto">
+            <p className="text-[10px] font-medium text-zinc-700">
+              Session: {profile?.role ? `${profile.role} account` : 'Guest'}
             </p>
-            <p className="mt-2 text-[10px] font-medium text-zinc-400">
-              Signed in as: {profile?.role ? `${profile.role} account` : user ? 'Account' : 'Guest'}
+            <p className="text-[10px] text-zinc-400">
+              Database security release {currentVersion}
             </p>
-          </section>
-        </div>
-      </ScrollArea>
-
-      <footer className="shrink-0 border-t border-zinc-200 bg-white px-4 py-3 sm:px-7 sm:py-4">
-        <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-xs font-semibold text-zinc-800">Release {currentVersion}</p>
-            <p className="mt-0.5 text-[10px] text-zinc-500">Review the changes before continuing.</p>
-            {acknowledgementError && (
-              <p role="alert" className="mt-2 text-xs font-medium text-red-600">{acknowledgementError}</p>
-            )}
           </div>
-          <div className="flex w-full flex-col-reverse gap-2 sm:w-auto sm:flex-row">
+
+          <div className="flex flex-col sm:flex-row items-center gap-2.5 w-full sm:w-auto">
             <Button
               type="button"
               variant="outline"
+              size="sm"
               onClick={() => setIsOpen(false)}
               disabled={isAcknowledging}
-              className="h-11 w-full rounded-lg border-zinc-300 bg-white px-6 text-xs font-semibold text-zinc-700 sm:w-auto"
+              className="bg-white border-zinc-200 text-zinc-700 hover:text-zinc-800 hover:bg-white text-xs font-medium h-11 px-6 rounded-xl w-full sm:w-auto"
             >
               Review later
             </Button>
@@ -405,14 +375,13 @@ export function VersionUpdateBriefing() {
               type="button"
               onClick={handleAcknowledge}
               disabled={isAcknowledging}
-              className="h-11 w-full rounded-lg px-7 text-xs font-semibold sm:w-auto"
+              className="bg-primary hover:bg-orange-600 text-white text-xs font-semibold h-11 px-8 rounded-xl shadow-sm transition-all w-full sm:w-auto"
             >
-              {isAcknowledging ? 'Saving acknowledgement…' : 'Acknowledge briefing'}
+              {isAcknowledging ? 'Saving...' : 'Acknowledge briefing'}
             </Button>
           </div>
         </div>
-      </footer>
-      </main>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

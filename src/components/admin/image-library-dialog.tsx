@@ -1,9 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FullPageEditor } from '@/components/admin/full-page-editor';
+import { 
+  Dialog, 
+  DialogContent, 
+  DialogHeader, 
+  DialogTitle, 
+  DialogDescription 
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { listImagesFromR2 } from '@/lib/actions';
@@ -19,7 +24,7 @@ interface ImageLibraryDialogProps {
   category?: string;
 }
 
-const CATEGORY_TABS = ['All', 'Profile Images', 'Product Images', 'System Images'];
+const CATEGORY_TABS = ['All', 'Store', 'Lounge', 'Carwash', 'Profile'];
 
 export function ImageLibraryDialog({ isOpen, onClose, onSelect, category }: ImageLibraryDialogProps) {
   const [images, setImages] = useState<any[]>([]);
@@ -52,17 +57,15 @@ export function ImageLibraryDialog({ isOpen, onClose, onSelect, category }: Imag
 
   const filteredImages = useMemo(() => {
     return images.filter(img => {
-      const assetKey = String(img?.key || '');
-      const assetCategory = String(img?.category || 'System Images');
-      const matchesSearch = !searchTerm || assetKey.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesTab = activeTab === 'All' || assetCategory.toLowerCase() === activeTab.toLowerCase();
+      const matchesSearch = !searchTerm || img.key.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesTab = activeTab === 'All' || img.category.toLowerCase() === activeTab.toLowerCase();
       return matchesSearch && matchesTab;
     });
   }, [images, searchTerm, activeTab]);
 
   return (
-    <FullPageEditor open={isOpen} title="Universal image library" description="Select an existing asset from shared storage." onClose={onClose}>
-      <div className="flex min-h-[70vh] flex-col">
+    <Dialog open={isOpen} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="sm:max-w-[1000px] rounded-[3rem] border-none shadow-2xl p-0 overflow-hidden bg-white h-[85vh] flex flex-col">
         {/* Header */}
         <div className="p-8 border-b border-zinc-100 bg-white flex flex-col md:flex-row md:items-center justify-between gap-6 shrink-0">
            <div className="flex items-center gap-4">
@@ -70,8 +73,8 @@ export function ImageLibraryDialog({ isOpen, onClose, onSelect, category }: Imag
                  <ImageIcon className="w-7 h-7" />
               </div>
               <div>
-                <h2 className="font-headline uppercase tracking-widest text-2xl text-zinc-900 leading-none">Universal Library</h2>
-                <p className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.4em] mt-2">Access assets from all business nodes.</p>
+                <DialogTitle className="font-headline uppercase tracking-widest text-2xl text-zinc-900 leading-none">Universal Library</DialogTitle>
+                <DialogDescription className="text-[10px] font-black uppercase text-zinc-400 tracking-[0.4em] mt-2">Access assets from all business nodes.</DialogDescription>
               </div>
            </div>
            
@@ -171,7 +174,7 @@ export function ImageLibraryDialog({ isOpen, onClose, onSelect, category }: Imag
            </div>
            <p className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.6em]">UAX INFRASTRUCTURE NODE</p>
         </div>
-      </div>
-    </FullPageEditor>
+      </DialogContent>
+    </Dialog>
   );
 }

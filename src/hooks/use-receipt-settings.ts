@@ -6,14 +6,6 @@ import { doc, onSnapshot, setDoc, addDoc, collection } from 'firebase/firestore'
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 
-export interface ReceiptCustomSection {
-  id: string;
-  title: string;
-  content: string;
-  enabled: boolean;
-  order: number;
-}
-
 export interface ReceiptSettings {
   storeHeader: string;
   loungeHeader: string;
@@ -28,7 +20,6 @@ export interface ReceiptSettings {
   vatNumber?: string;
   footerNote: string;
   footerTagline: string;
-  receiptSections?: ReceiptCustomSection[];
   updatedAt?: number;
   updatedBy?: string;
 }
@@ -47,7 +38,6 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
   vatNumber: 'P051234567Z',
   footerNote: 'Thank you for your patronage',
   footerTagline: 'Urban Express Business OS',
-  receiptSections: [],
 };
 
 export function useReceiptSettings() {
@@ -69,7 +59,6 @@ export function useReceiptSettings() {
         setSettings({
           ...DEFAULT_RECEIPT_SETTINGS,
           ...data,
-          receiptSections: Array.isArray(data.receiptSections) ? data.receiptSections : [],
         });
       } else {
         setSettings(DEFAULT_RECEIPT_SETTINGS);

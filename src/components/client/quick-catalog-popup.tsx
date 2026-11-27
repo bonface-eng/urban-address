@@ -37,14 +37,12 @@ export function QuickCatalogPopup({ isOpen, onClose, unit, initialCategory }: Qu
 
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
-  const [catalogueError, setCatalogueError] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
     const controller = new AbortController();
     async function loadProducts() {
       setLoading(true);
-      setCatalogueError('');
       try {
         const params = new URLSearchParams({
           unit,
@@ -64,7 +62,6 @@ export function QuickCatalogPopup({ isOpen, onClose, unit, initialCategory }: Qu
         if (!controller.signal.aborted) {
           console.error('[QUICK_CATALOGUE_LOAD_FAILED]', error);
           setProducts([]);
-          setCatalogueError(error instanceof Error ? error.message : 'Products are temporarily unavailable. Please try again shortly.');
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -142,14 +139,6 @@ export function QuickCatalogPopup({ isOpen, onClose, unit, initialCategory }: Qu
                       <Icon className="w-16 h-16 text-zinc-200" />
                    </div>
                    <p className="text-[10px] font-black uppercase tracking-[0.4em]">Updating Inventory...</p>
-                </div>
-              ) : catalogueError ? (
-                <div className="min-h-[240px] flex items-center justify-center px-6 text-center" role="alert">
-                  <p className="max-w-md text-sm font-semibold text-red-600">{catalogueError}</p>
-                </div>
-              ) : products.length === 0 ? (
-                <div className="min-h-[240px] flex items-center justify-center px-6 text-center" role="status">
-                  <p className="text-sm font-semibold text-zinc-400">No products are currently available in this category.</p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">

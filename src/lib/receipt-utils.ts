@@ -74,22 +74,12 @@ export function generateReceiptTxt(data: any, settings?: any): string {
   content += `TIME  : ${dateObj.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })}\n`;
   
   if (data.cashierName) content += `CASHIER: ${data.cashierName.toUpperCase()}\n`;
-  if (isCarwash) content += `ATTENDANT: ${(data.attendantName || 'UNASSIGNED').toUpperCase()}\n`;
-  if (data.customerName) content += `CUSTOMER: ${data.customerName.toUpperCase()}\n`;
-  if (data.customerPhone) content += `PHONE: ${data.customerPhone}\n`;
-  if (data.vehicleMake || data.vehicleModel) content += `VEHICLE: ${[data.vehicleMake, data.vehicleModel].filter(Boolean).join(' ').toUpperCase()}\n`;
-  if (data.vehicleColor && isCarwash) content += `COLOUR: ${String(data.vehicleColor).toUpperCase()}\n`;
+  if (data.attendantName) content += `SERVED BY: ${data.attendantName.toUpperCase()}\n`;
   if (data.tableNumber) content += `TABLE: ${data.tableNumber}\n`;
   if (data.plateNumber) content += `${isCarpet ? 'REF' : 'VEHICLE'}: ${data.plateNumber}\n`;
   if (data.carpetDimensions) content += `SIZE  : ${data.carpetDimensions}\n`;
   
   content += "\n" + separator + "\n";
-
-  (settings?.receiptSections || []).filter((section: any) => section.enabled && (section.title || section.content)).sort((a: any, b: any) => a.order - b.order).forEach((section: any) => {
-    if (section.title) content += `${String(section.title).toUpperCase()}\n`;
-    if (section.content) content += `${section.content}\n`;
-    content += separator + "\n";
-  });
   
   if (isLowStockReport || data.reportType === 'INVENTORY-REPORT') {
     content += "DESCRIPTION".padEnd(25) + "QTY".padStart(17) + "\n";
@@ -126,10 +116,6 @@ export function generateReceiptTxt(data: any, settings?: any): string {
   
   content += separator + "\n";
   if (!isReport) {
-    if (Number(data.subtotal) > 0) content += "SUBTOTAL".padEnd(26) + `KES ${data.subtotal.toLocaleString()}`.padStart(16) + "\n";
-    if (Number(data.discount) > 0) content += "DISCOUNT".padEnd(26) + `-KES ${data.discount.toLocaleString()}`.padStart(16) + "\n";
-    if (Number(data.tax) > 0) content += "TAX".padEnd(26) + `KES ${data.tax.toLocaleString()}`.padStart(16) + "\n";
-    if (Number(data.tip) > 0) content += "TIP".padEnd(26) + `KES ${data.tip.toLocaleString()}`.padStart(16) + "\n";
     content += "GRAND TOTAL".padEnd(20) + " ".padEnd(6) + `KES ${data.total.toLocaleString()}`.padStart(16) + "\n";
   } else {
     content += "TOTAL VOLUME".padEnd(20) + " ".padEnd(6) + `KES ${data.total.toLocaleString()}`.padStart(16) + "\n";

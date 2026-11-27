@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Search, 
@@ -41,7 +37,8 @@ import {
   AlertCircle,
   Package,
   Calculator,
-  Terminal
+  Terminal,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -74,7 +71,7 @@ import { useTerminal } from '@/hooks/use-terminal';
 import { toast } from '@/hooks/use-toast';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
 
-type DatePreset = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'ALL_TIME' | 'CUSTOM';
+type DatePreset = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'ALL_TIME';
 
 export default function SalesHistoryPage() {
   const firestore = useFirestore();
@@ -107,19 +104,14 @@ export default function SalesHistoryPage() {
     return 'TODAY';
   });
 
-  const [dateFrom, setDateFrom] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('uax_sales_date_from') || '' : '');
-  const [dateTo, setDateTo] = useState(() => typeof window !== 'undefined' ? localStorage.getItem('uax_sales_date_to') || '' : '');
-
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
-  const { startOfToday, startOfMonth, dayOfWeek } = useBusinessClock();
   const itemsPerPage = 12;
 
   // Preview State
   const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([]);
 
   useEffect(() => {
     setMounted(true);
@@ -130,14 +122,12 @@ export default function SalesHistoryPage() {
       localStorage.setItem('uax_sales_active_tab', activeTab);
       localStorage.setItem('uax_sales_filter_unit', filterUnit);
       localStorage.setItem('uax_sales_date_preset', datePreset);
-      localStorage.setItem('uax_sales_date_from', dateFrom);
-      localStorage.setItem('uax_sales_date_to', dateTo);
     }
-  }, [activeTab, filterUnit, datePreset, dateFrom, dateTo, mounted]);
+  }, [activeTab, filterUnit, datePreset, mounted]);
 
   const ordersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
-    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'));
+    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'), limit(1000));
   }, [firestore]);
 
   const { data: orders, loading } = useCollection<Order>(ordersQuery);
@@ -182,39 +172,18 @@ export default function SalesHistoryPage() {
       
       if (!matchesSearch) return false;
 
-      if (datePreset === 'CUSTOM') {
-        // Date inputs represent local calendar days; include the full end date.
-        if (dateFrom) {
-          const from = new Date(`${dateFrom}T00:00:00`).getTime();
-          if (o.timestamp < from) return false;
-        }
-        if (dateTo) {
-          const to = new Date(`${dateTo}T23:59:59.999`).getTime();
-          if (o.timestamp > to) return false;
-        }
-        return true;
-      }
+      const startOfToday = new Date().setHours(0, 0, 0, 0);
       if (datePreset === 'TODAY') return o.timestamp >= startOfToday;
       if (datePreset === 'YESTERDAY') {
         const startOfYest = startOfToday - (24 * 60 * 60 * 1000);
         return o.timestamp >= startOfYest && o.timestamp < startOfToday;
       }
-      if (datePreset === 'THIS_WEEK') {
-        const startOfWeek = startOfToday - (dayOfWeek * 24 * 60 * 60 * 1000);
-        return o.timestamp >= startOfWeek && o.timestamp < startOfToday + (24 * 60 * 60 * 1000);
-      }
-      if (datePreset === 'THIS_MONTH') return o.timestamp >= startOfMonth;
+      if (datePreset === 'THIS_WEEK') return o.timestamp >= (startOfToday - (new Date().getDay() * 24 * 60 * 60 * 1000));
+      if (datePreset === 'THIS_MONTH') return o.timestamp >= new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime();
 
       return true;
     });
-  }, [orders, searchTerm, filterUnit, datePreset, dateFrom, dateTo, isSuperAdmin, role, profile, activeTab, isAdmin, startOfToday, startOfMonth, dayOfWeek]);
-
-  const selectableFilteredOrders = filteredOrders.filter(order => order.status === 'PENDING' && Boolean(order.id));
-  const allFilteredSelected = selectableFilteredOrders.length > 0 && selectableFilteredOrders.every(order => selectedOrderIds.includes(order.id!));
-
-  useEffect(() => {
-    setSelectedOrderIds([]);
-  }, [activeTab, filterUnit, searchTerm, datePreset, dateFrom, dateTo]);
+  }, [orders, searchTerm, filterUnit, datePreset, isSuperAdmin, role, profile, activeTab, isAdmin]);
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
@@ -223,74 +192,13 @@ export default function SalesHistoryPage() {
     return filteredOrders.slice(start, start + itemsPerPage);
   }, [filteredOrders, currentPage]);
 
-  // KPI totals follow the same selected unit, date and search filters as the
-  // transaction list, regardless of whether the Audit or Backlog tab is open.
-  const metricOrders = useMemo(() => {
-    if (!orders) return [];
-
-    let baseList = orders;
-
-    // Match the visibility rules used by the transaction list.
-    if (!isSuperAdmin && (role === 'CASHIER' || role === 'STOREKEEPER' || role === 'ATTENDANT')) {
-      const units = profile?.assignedUnits || [];
-      if (units.length > 0) {
-        baseList = baseList.filter(order => units.includes(order.type));
-      }
-    }
-
-    return baseList.filter(order => {
-      if (order.status === 'PENDING' && (order.type === 'LOUNGE' || order.type === 'STORE')) {
-        if (!isAdmin && order.cashierId !== profile?.uid) return false;
-      }
-
-      if (filterUnit !== 'ALL' && order.type !== filterUnit) return false;
-
-      const normalizedSearch = searchTerm.trim().toLowerCase();
-      const matchesSearch = !normalizedSearch ||
-        order.id?.toLowerCase().includes(normalizedSearch) ||
-        order.plateNumber?.toLowerCase().includes(normalizedSearch) ||
-        order.cashierName?.toLowerCase().includes(normalizedSearch) ||
-        order.items?.some(item => item.name.toLowerCase().includes(normalizedSearch));
-
-      if (!matchesSearch) return false;
-
-      if (datePreset === 'CUSTOM') {
-        if (dateFrom) {
-          const from = new Date(`${dateFrom}T00:00:00`).getTime();
-          if (order.timestamp < from) return false;
-        }
-        if (dateTo) {
-          const to = new Date(`${dateTo}T23:59:59.999`).getTime();
-          if (order.timestamp > to) return false;
-        }
-        return true;
-      }
-
-      if (datePreset === 'TODAY') return order.timestamp >= startOfToday;
-      if (datePreset === 'YESTERDAY') {
-        const startOfYesterday = startOfToday - (24 * 60 * 60 * 1000);
-        return order.timestamp >= startOfYesterday && order.timestamp < startOfToday;
-      }
-      if (datePreset === 'THIS_WEEK') {
-        const startOfWeek = startOfToday - (dayOfWeek * 24 * 60 * 60 * 1000);
-        return order.timestamp >= startOfWeek && order.timestamp < startOfToday + (24 * 60 * 60 * 1000);
-      }
-      if (datePreset === 'THIS_MONTH') return order.timestamp >= startOfMonth;
-
-      return true;
-    });
-  }, [orders, isSuperAdmin, role, profile, isAdmin, filterUnit, searchTerm, datePreset, dateFrom, dateTo, startOfToday, startOfMonth, dayOfWeek]);
-
   const stats = useMemo(() => {
-    const paid = metricOrders.filter(order => order.status === 'PAID');
-    const pending = metricOrders.filter(order => order.status === 'PENDING');
-    return {
-      volume: paid.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
-      paidCount: paid.length,
-      pendingVolume: pending.reduce((sum, order) => sum + (Number(order.total) || 0), 0),
-      pendingCount: pending.length,
-    };
-  }, [metricOrders]);
+    const paid = (orders || []).filter(o => o.status === 'PAID');
+    const pending = (orders || []).filter(o => o.status === 'PENDING');
+    const volume = paid.reduce((sum, o) => sum + o.total, 0);
+    const pendingVolume = pending.reduce((sum, o) => sum + o.total, 0);
+    return { volume, paidCount: paid.length, pendingVolume, pendingCount: pending.length };
+  }, [orders]);
 
   const handleClearOrder = async (order: Order) => {
     if (!firestore || !profile || !isAdmin) return;
@@ -320,42 +228,32 @@ export default function SalesHistoryPage() {
     }
   };
 
-  const handlePurgeSelected = async () => {
-    if (!firestore || !profile || !isAdmin || selectedOrderIds.length === 0) return;
-    const selectedOrders = selectableFilteredOrders.filter(order => selectedOrderIds.includes(order.id!));
-    if (selectedOrders.length === 0) return;
-    if (!confirm(`Permanently purge ${selectedOrders.length} selected pending records? Paid sales and transaction history will not be touched.`)) return;
+  const handleClearAllFiltered = async () => {
+    if (!firestore || !profile || !isAdmin || filteredOrders.length === 0) return;
+    if (!confirm(`CAUTION: Permanently delete ALL ${filteredOrders.length} currently filtered held bills? This action cannot be reversed.`)) return;
 
     setIsProcessing(true);
-    let purgedCount = 0;
     try {
-      // Firestore allows at most 500 writes per batch. Two deletes plus one
-      // audit record per chunk keeps each batch safely below that limit.
-      for (let offset = 0; offset < selectedOrders.length; offset += 200) {
-        const chunk = selectedOrders.slice(offset, offset + 200);
-        const batch = writeBatch(firestore);
-        chunk.forEach(order => {
-          batch.delete(doc(firestore, 'orders', order.id!));
-          if (order.cashierId) {
-            batch.delete(doc(firestore, 'users', order.cashierId, 'held_bills', order.id!));
-          }
-        });
-        const auditRef = doc(collection(firestore, 'audit_logs'));
-        batch.set(auditRef, {
-          action: 'ADMIN_BULK_PURGE_BACKLOG',
-          userId: profile.uid,
-          details: `Admin purged ${chunk.length} selected pending backlog records: ${chunk.map(order => order.id).join(', ')}.`,
-          timestamp: Date.now(),
-          severity: 'CRITICAL'
-        });
-        await batch.commit();
-        purgedCount += chunk.length;
-      }
-      setSelectedOrderIds([]);
+      const batch = writeBatch(firestore);
+      filteredOrders.forEach(order => {
+        batch.delete(doc(firestore, 'orders', order.id!));
+        if (order.cashierId) {
+          batch.delete(doc(firestore, 'users', order.cashierId, 'held_bills', order.id!));
+        }
+      });
+      const auditRef = doc(collection(firestore, 'audit_logs'));
+      batch.set(auditRef, {
+        action: 'ADMIN_MASS_CLEAR_BACKLOG',
+        userId: profile.uid,
+        details: `Admin performed mass purge of ${filteredOrders.length} held bills from the backlog.`,
+        timestamp: Date.now(),
+        severity: 'CRITICAL'
+      });
+      await batch.commit();
+      toast({ title: "Backlog Cleared", description: `${filteredOrders.length} records purged.` });
       setCurrentPage(1);
-      toast({ title: "Selected records purged", description: `${purgedCount} pending records removed.` });
     } catch (err) {
-      toast({ variant: "destructive", title: "Purge incomplete", description: `${purgedCount} records were purged before an error. Refresh and review the remaining backlog.` });
+      toast({ variant: "destructive", title: "Mass Clear Failed" });
     } finally {
       setIsProcessing(false);
     }
@@ -364,15 +262,15 @@ export default function SalesHistoryPage() {
   if (!mounted) return null;
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 px-2 ua-compact-page">
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 px-2">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
-          <PageHeader title="Sales History" breadcrumb={["Finance", "Sales History"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Sales History</h1>
           <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">Authorized transaction logs and clearance</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ua-metric-strip">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPIBox title="SALES VOLUME" value={`KES ${stats.volume.toLocaleString()}`} sub={`${stats.paidCount} PAID ORDERS`} icon={TrendingUp} />
         <KPIBox title="PENDING BACKLOG" value={`KES ${stats.pendingVolume.toLocaleString()}`} sub={`${stats.pendingCount} BILLS HELD`} icon={Clock} color="text-primary" />
         <KPIBox title="NODE STATUS" value="ONLINE" sub="STATION SYNC ACTIVE" icon={ShieldCheck} color="text-green-600" />
@@ -386,23 +284,10 @@ export default function SalesHistoryPage() {
             <UnitPill label="STORE" active={filterUnit === 'STORE'} onClick={() => { setFilterUnit('STORE'); setCurrentPage(1); }} icon={ShoppingBag} />
             <UnitPill label="CARWASH" active={filterUnit === 'CARWASH'} onClick={() => { setFilterUnit('CARWASH'); setCurrentPage(1); }} icon={Car} />
          </div>
-         <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-2 w-full lg:w-auto">
-            <div className="flex gap-1.5 p-1.5 bg-white rounded-xl border border-zinc-100 shadow-sm overflow-x-auto no-scrollbar">
-              {(['TODAY', 'YESTERDAY', 'THIS_WEEK', 'THIS_MONTH', 'ALL_TIME'] as DatePreset[]).map(p => (
-                <DatePill key={p} label={p.replace('_', ' ')} active={datePreset === p} onClick={() => { setDatePreset(p); setDateFrom(''); setDateTo(''); setCurrentPage(1); }} />
-              ))}
-            </div>
-            <div className="flex items-center gap-2 p-2 bg-white rounded-xl border border-zinc-100 shadow-sm">
-              <div className="min-w-0 flex-1">
-                <Label htmlFor="sales-date-from" className="block text-[8px] font-bold uppercase tracking-wider text-zinc-400 mb-1">From</Label>
-                <Input id="sales-date-from" type="date" value={dateFrom} max={dateTo || undefined} onChange={e => { setDateFrom(e.target.value); setDatePreset('CUSTOM'); setCurrentPage(1); }} className="h-9 min-w-0 border-zinc-100 bg-zinc-50 text-xs" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <Label htmlFor="sales-date-to" className="block text-[8px] font-bold uppercase tracking-wider text-zinc-400 mb-1">To</Label>
-                <Input id="sales-date-to" type="date" value={dateTo} min={dateFrom || undefined} onChange={e => { setDateTo(e.target.value); setDatePreset('CUSTOM'); setCurrentPage(1); }} className="h-9 min-w-0 border-zinc-100 bg-zinc-50 text-xs" />
-              </div>
-              {(dateFrom || dateTo) && <Button type="button" variant="ghost" onClick={() => { setDateFrom(''); setDateTo(''); setDatePreset('ALL_TIME'); setCurrentPage(1); }} className="mt-4 h-9 px-2 text-[9px] font-bold uppercase text-zinc-500">Clear</Button>}
-            </div>
+         <div className="flex gap-2 p-1.5 bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-x-auto no-scrollbar w-full lg:w-auto">
+            {['TODAY', 'YESTERDAY', 'THIS_WEEK', 'ALL_TIME'].map(p => (
+              <DatePill key={p} label={p.replace('_', ' ')} active={datePreset === p} onClick={() => { setDatePreset(p as any); setCurrentPage(1); }} />
+            ))}
          </div>
       </div>
 
@@ -424,16 +309,13 @@ export default function SalesHistoryPage() {
                 />
               </div>
               {activeTab === 'clearance' && isAdmin && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-zinc-400 whitespace-nowrap">{selectedOrderIds.length} selected</span>
-                  <Button
-                    onClick={handlePurgeSelected}
-                    disabled={isProcessing || selectedOrderIds.length === 0}
-                    className="h-10 px-4 bg-red-600 hover:bg-red-700 text-white font-black uppercase text-[9px] tracking-widest rounded-xl gap-2 transition-all active:scale-95"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Purge selected
-                  </Button>
-                </div>
+                <Button 
+                  onClick={handleClearAllFiltered}
+                  disabled={isProcessing || filteredOrders.length === 0}
+                  className="h-10 px-4 bg-red-500 hover:bg-red-600 text-white font-black uppercase text-[9px] tracking-widest rounded-xl shadow-lg shadow-red-100 gap-2 transition-all active:scale-95"
+                >
+                  <AlertTriangle className="w-3.5 h-3.5" /> Purge All
+                </Button>
               )}
            </div>
         </div>
@@ -441,18 +323,7 @@ export default function SalesHistoryPage() {
           <Table>
             <TableHeader className="bg-zinc-50/50">
               <TableRow className="border-zinc-100">
-                {activeTab === 'clearance' && isAdmin && (
-                  <TableHead className="pl-5 h-16">
-                    <input
-                      type="checkbox"
-                      aria-label="Select all filtered pending records"
-                      checked={allFilteredSelected}
-                      onChange={(event) => setSelectedOrderIds(event.target.checked ? selectableFilteredOrders.map(order => order.id!) : [])}
-                      className="h-4 w-4 accent-red-600"
-                    />
-                  </TableHead>
-                )}
-                <TableHead className="pl-4 h-16 text-[10px] uppercase font-black text-zinc-400">Order Context</TableHead>
+                <TableHead className="pl-8 h-16 text-[10px] uppercase font-black text-zinc-400">Order Context</TableHead>
                 <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-center">Unit</TableHead>
                 <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-right">Revenue</TableHead>
                 <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-center">Status</TableHead>
@@ -462,18 +333,7 @@ export default function SalesHistoryPage() {
             <TableBody>
               {paginatedOrders.map((order) => (
                 <TableRow key={order.id} className="border-zinc-50 hover:bg-zinc-50/50 transition-colors">
-                  {activeTab === 'clearance' && isAdmin && (
-                    <TableCell className="pl-5 py-5">
-                      <input
-                        type="checkbox"
-                        aria-label={`Select pending order ${order.id}`}
-                        checked={selectedOrderIds.includes(order.id!)}
-                        onChange={(event) => setSelectedOrderIds(current => event.target.checked ? [...current, order.id!] : current.filter(id => id !== order.id))}
-                        className="h-4 w-4 accent-red-600"
-                      />
-                    </TableCell>
-                  )}
-                  <TableCell className="pl-4 py-5">
+                  <TableCell className="pl-8 py-5">
                     <div>
                       <p className="text-xs font-black uppercase text-zinc-900">UAX-{order.id?.slice(-8).toUpperCase()}</p>
                       <p className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest mt-1">By {order.cashierName || 'Staff'} • {new Date(order.timestamp).toLocaleString()}</p>
@@ -503,7 +363,7 @@ export default function SalesHistoryPage() {
                 </TableRow>
               ))}
               {filteredOrders.length === 0 && (
-                <TableRow><TableCell colSpan={activeTab === 'clearance' && isAdmin ? 6 : 5} className="py-20 text-center opacity-30 text-[10px] font-black uppercase">No records matching filters</TableCell></TableRow>
+                <TableRow><TableCell colSpan={5} className="py-20 text-center opacity-30 text-[10px] font-black uppercase">No records matching filters</TableCell></TableRow>
               )}
             </TableBody>
           </Table>

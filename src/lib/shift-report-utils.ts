@@ -53,12 +53,7 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
   const reportDate = new Date();
 
   // Aggregate metrics from orders
-  // An individual shift report must never include another cashier's sales.
-  const paidOrders = orders.filter(o =>
-    o.status === 'PAID' &&
-    o.type !== 'SYSTEM-REPORT' &&
-    (!cashierId || o.cashierId === cashierId)
-  );
+  const paidOrders = orders.filter(o => o.status === 'PAID');
   const loungeOrders = paidOrders.filter(o => o.type === 'LOUNGE');
   const storeOrders = paidOrders.filter(o => o.type === 'STORE');
   const carwashOrders = paidOrders.filter(o => o.type === 'CARWASH');
@@ -68,38 +63,10 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
   const carwashTotal = carwashOrders.reduce((sum, o) => sum + (o.total || 0), 0);
   const totalSales = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
 
-  // Payment method breakdowns. Cash drawer value is the sale total, not the
-  // tendered notes; change given is deducted from tendered cash.
-  const normalizePaymentMethod = (value?: string) => {
-    const raw = (value || 'CASH').trim().toUpperCase().replace(/[\s-]+/g, '_');
-    if (['MOBILE', 'MPESA', 'M_PESA'].includes(raw)) return 'MPESA';
-    if (['AIRTEL', 'AIRTEL_MONEY'].includes(raw)) return 'AIRTEL_MONEY';
-    if (['CASH_ON_DELIVERY', 'CASH'].includes(raw)) return 'CASH';
-    return raw;
-  };
-  const resolvePaymentMethod = (order: Order) => {
-    if (order.paymentProvider === 'AIRTEL_MONEY') return 'AIRTEL_MONEY';
-    if (order.paymentProvider === 'MPESA') return 'MPESA';
-    return normalizePaymentMethod(order.paymentMethod);
-  };
-  const cashOrders = paidOrders.filter(o => resolvePaymentMethod(o) === 'CASH');
-  const cashSalesTotal = cashOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-  const cashTenderedTotal = cashOrders.reduce((sum, o) => {
-    const currentTendered = o.cashTendered == null ? NaN : Number(o.cashTendered);
-    // Older checkout records stored the same value as cashReceived.
-    const legacyTendered = (o as any).cashReceived == null ? NaN : Number((o as any).cashReceived);
-    const tendered = Number.isFinite(currentTendered) ? currentTendered : legacyTendered;
-    return sum + (Number.isFinite(tendered) && tendered >= 0 ? tendered : (o.total || 0));
-  }, 0);
-  const cashChangeTotal = cashOrders.reduce((sum, o) => {
-    const recordedChange = o.changeDue == null ? NaN : Number(o.changeDue);
-    if (Number.isFinite(recordedChange) && recordedChange >= 0) return sum + recordedChange;
-    const legacyChange = (o as any).change == null ? NaN : Number((o as any).change);
-    return sum + (Number.isFinite(legacyChange) && legacyChange >= 0 ? legacyChange : 0);
-  }, 0);
+  // Payment method breakdowns
   const paymentBreakdown: Record<string, { total: number; count: number }> = {};
   paidOrders.forEach(o => {
-    const method = resolvePaymentMethod(o);
+    const method = (o.paymentMethod || 'CASH').toUpperCase();
     if (!paymentBreakdown[method]) {
       paymentBreakdown[method] = { total: 0, count: 0 };
     }
@@ -160,8 +127,7 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
     out += center("NO TRANSACTIONS RECORDED") + "\n";
   } else {
     paymentEntries.forEach(([method, data]) => {
-      const displayMethod = method === 'MPESA' ? 'M-PESA' : method === 'AIRTEL_MONEY' ? 'AIRTEL MONEY' : method;
-      const label = `${displayMethod} (${data.count})`;
+      const label = `${method} (${data.count})`;
       out += label.padEnd(25) + `KES ${data.total.toLocaleString()}`.padStart(17) + "\n";
     });
   }
@@ -195,13 +161,10 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
   } else {
     paidOrders.forEach((o, index) => {
       const receiptNo = o.id || `RCP-${index + 1}`;
-      const timeStr = new Date(o.paidAt || o.timestamp).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
+      const timeStr = new Date(o.timestamp).toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' });
       const orderType = o.type || 'SALE';
       const target = o.tableNumber ? `TBL ${o.tableNumber}` : (o.plateNumber ? o.plateNumber : (o.customerName || ''));
-      const rawPayMethod = (o.paymentMethod || 'CASH').trim().toUpperCase().replace(/[\s-]+/g, '_');
-      const payMethod = ['MOBILE', 'MPESA', 'M_PESA'].includes(rawPayMethod)
-        ? 'M-PESA'
-        : ['AIRTEL', 'AIRTEL_MONEY'].includes(rawPayMethod) ? 'AIRTEL MONEY' : rawPayMethod;
+      const payMethod = (o.paymentMethod || 'CASH').toUpperCase();
 
       out += `[${(index + 1).toString().padStart(3, '0')}] RECEIPT #: ${receiptNo}\n`;
       out += `      TIME    : ${timeStr} | ${orderType}${target ? ` (${target})` : ''}\n`;
@@ -222,30 +185,24 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
 
   out += "\n";
 
-  // 8. Cash and settlement reconciliation is printed on BOTH X and Z reports.
-  const mpesaTotal = paymentBreakdown['MPESA']?.total || 0;
-  const airtelTotal = paymentBreakdown['AIRTEL_MONEY']?.total || 0;
-  out += dSep + "\n";
-  out += center(type === 'Z' ? "END-OF-SHIFT CASHIER RECONCILIATION" : "MID-SHIFT CASH POSITION") + "\n";
-  out += dSep + "\n";
-  out += `CASH TRANSACTIONS      : ${cashOrders.length}\n`;
-  out += `CASH SALES TOTAL       : KES ${cashSalesTotal.toLocaleString()}\n`;
-  out += `CASH TENDERED          : KES ${cashTenderedTotal.toLocaleString()}\n`;
-  out += `CHANGE RETURNED        : KES ${cashChangeTotal.toLocaleString()}\n`;
-  out += `EXPECTED CASH FROM SALES: KES ${cashSalesTotal.toLocaleString()}\n`;
-  out += `EXPECTED M-PESA VOLUME : KES ${mpesaTotal.toLocaleString()}\n`;
-  out += `EXPECTED AIRTEL VOLUME : KES ${airtelTotal.toLocaleString()}\n`;
+  // 8. Closing or Interim Declaration
   if (type === 'Z') {
-    out += "PHYSICAL CASH COUNTED  : KES __________________\n";
-    out += "CASH VARIANCE (+ / -)  : KES __________________\n";
-  }
-  out += "\n";
+    const cashTotal = paymentBreakdown['CASH']?.total || 0;
+    const mpesaTotal = paymentBreakdown['MPESA']?.total || 0;
 
-  if (type === 'Z') {
+    out += dSep + "\n";
+    out += center("END-OF-SHIFT CASHIER RECONCILIATION") + "\n";
+    out += dSep + "\n";
+    out += `EXPECTED CASH IN DRAWER: KES ${cashTotal.toLocaleString()}\n`;
+    out += `EXPECTED M-PESA VOLUME : KES ${mpesaTotal.toLocaleString()}\n`;
+    out += "PHYSICAL CASH COUNTED  : KES __________________\n";
+    out += "CASH VARIANCE (+ / -)  : KES __________________\n\n";
+
     if (heldBills.length > 0) {
       out += `WARNING: ${heldBills.length} UNSETTLED HELD BILL(S) REMAIN!\n`;
       out += "ENSURE ALL TICKETS ARE PROCESSED OR HANDED OVER.\n\n";
     }
+
     out += "CASHIER DECLARATION:\n";
     out += "I certify that this closure report represents\n";
     out += "a full and accurate accounting of my shift.\n\n";
@@ -255,11 +212,14 @@ export function generateShiftReportTxt(params: ShiftReportParams): string {
     out += "VERIFIED BY  : ___________________________\n";
     out += "SIGNATURE    : ___________________________\n";
     out += `CLOSED AT    : ${reportDate.toLocaleTimeString('en-KE')}\n`;
+    out += dSep + "\n";
   } else {
+    out += dSep + "\n";
+    out += center("MID-SHIFT INTERIM STATUS") + "\n";
     out += center("* SHIFT REMAINS OPEN & ACTIVE *") + "\n";
     out += center("DO NOT DISCARD - RETAIN FOR SHIFT END") + "\n";
+    out += dSep + "\n";
   }
-  out += dSep + "\n";
 
   out += "\n" + center("DRIVEN BY PRECISION") + "\n";
   out += center("URBAN EXPRESS BUSINESS OS") + "\n";

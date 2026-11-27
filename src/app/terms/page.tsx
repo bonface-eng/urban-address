@@ -7,37 +7,37 @@ import Link from 'next/link';
 
 export default function TermsPage() {
   const clauses = [
-    { title: "1. Acceptance of Terms", content: "By creating an account or using any service provided by Urban Auto Express, you agree to be bound by these Terms and Conditions. If you do not agree, please do not use our facilities or digital platforms." },
+    { title: "1. Acceptance of Terms", content: "By creating an account or using any service provided by Urban Express, you agree to be bound by these Terms and Conditions. If you do not agree, please do not use our facilities or digital platforms." },
     { title: "2. Eligibility", content: "You must be at least 18 years of age to establish a member account. Use of the Lounge services involving alcohol strictly requires valid identification." },
     { title: "3. Account Security", content: "Users are responsible for maintaining the confidentiality of their credentials. Any activity performed under your account is your legal responsibility." },
     { title: "4. Personal Information", content: "We collect data as outlined in our Privacy Policy to enhance your experience. We do not sell user data to third parties." },
-    { title: "5. Service Accuracy", content: "While we strive for 100% accuracy, Urban Auto Express is not liable for technical errors in the digital catalog or minor discrepancies in estimated service times." },
-    { title: "6. Pricing and Currency", content: "All prices are listed in Kenya Shillings (KES). Urban Auto Express reserves the right to adjust pricing without prior notice based on market conditions." },
+    { title: "5. Service Accuracy", content: "While we strive for 100% accuracy, Urban Express is not liable for technical errors in the digital catalog or minor discrepancies in estimated service times." },
+    { title: "6. Pricing and Currency", content: "All prices are listed in Kenya Shillings (KES). Urban Express reserves the right to adjust pricing without prior notice based on market conditions." },
     { title: "7. Taxation", content: "Listed prices are inclusive of the standard 16% Value Added Tax (VAT) as required by Kenyan law, unless stated otherwise." },
-    { title: "8. Payment Processing", content: "We utilize Paystack for secure cashless transactions. Urban Auto Express does not store full credit card details on its servers." },
+    { title: "8. Payment Processing", content: "We utilize Paystack for secure cashless transactions. Urban Express does not store full credit card details on its servers." },
     { title: "9. Cash Transactions", content: "Cash payments are accepted at physical terminals. It is the user's responsibility to verify the change issued before leaving the counter." },
     { title: "10. Loyalty Program", content: "Points earned have no cash value and cannot be exchanged for currency. Points expire after 12 months of account inactivity." },
     { title: "11. Appointment Cancellation", content: "Cancellations for carwash or detailing must be made at least 2 hours prior to the scheduled slot to avoid a processing fee." },
     { title: "12. VALET INSURANCE DISCLAIMER", content: "URBAN EXPRESS DOES NOT PROVIDE VALET INSURANCE. All vehicles handled, parked, or transported by our team must be fully insured by the owner. We are not liable for any third-party accidents." },
-    { title: "13. Vehicle Risk", content: "Vehicle owners assume all inherent risks associated with high-pressure washing and mechanical detailing. Urban Auto Express is not liable for pre-existing mechanical failures." },
-    { title: "14. Personal Property", content: "Urban Auto Express is NOT responsible for any personal items, electronics, or valuables left inside vehicles during service or while parked on our premises." },
-    { title: "15. Pre-Service Inspection", content: "Our staff will conduct a visual inspection. Pre-existing scratches, dents, or paint defects will be logged and are not the responsibility of Urban Auto Express." },
-    { title: "16. Damage Claims", content: "Any claims for damage caused during service must be reported and documented BEFORE the vehicle leaves the Urban Auto Express premises." },
+    { title: "13. Vehicle Risk", content: "Vehicle owners assume all inherent risks associated with high-pressure washing and mechanical detailing. Urban Express is not liable for pre-existing mechanical failures." },
+    { title: "14. Personal Property", content: "Urban Express is NOT responsible for any personal items, electronics, or valuables left inside vehicles during service or while parked on our premises." },
+    { title: "15. Pre-Service Inspection", content: "Our staff will conduct a visual inspection. Pre-existing scratches, dents, or paint defects will be logged and are not the responsibility of Urban Express." },
+    { title: "16. Damage Claims", content: "Any claims for damage caused during service must be reported and documented BEFORE the vehicle leaves the Urban Express premises." },
     { title: "17. Right to Refuse", content: "We reserve the right to refuse service to any individual displaying abusive behavior or vehicles in a condition that poses a hazard to our staff." },
     { title: "18. Lounge Conduct", content: "Professional decorum is expected in the Executive Lounge. Intoxicated individuals will be denied further service and asked to vacate for safety." },
     { title: "19. Digital Usage", content: "Use of our complimentary high-speed fiber is for legal business and personal use only. Unauthorized network activities will result in immediate termination of access." },
     { title: "20. Accessory Returns", content: "Store items may be returned within 7 days if they are in original, unopened packaging and accompanied by a valid system receipt." },
     { title: "21. Product Warranty", content: "Warranty for lubricants, tires, and parts is strictly limited to the manufacturer’s specific terms and conditions." },
-    { title: "22. Service Completion", content: "Estimated completion times are targets. Urban Auto Express is not liable for delays caused by unforeseen technical requirements or weather conditions." },
-    { title: "23. Intellectual Property", content: "All branding, logos, and 'Business OS' software interfaces are the exclusive property of Urban Auto Express Engineering." },
+    { title: "22. Service Completion", content: "Estimated completion times are targets. Urban Express is not liable for delays caused by unforeseen technical requirements or weather conditions." },
+    { title: "23. Intellectual Property", content: "All branding, logos, and 'Business OS' software interfaces are the exclusive property of Urban Express Engineering." },
     { title: "24. User Conduct", content: "Users shall not attempt to reverse engineer our POS systems or bypass security protocols in the Employee Portal." },
-    { title: "25. Indemnification", content: "You agree to indemnify and hold Urban Auto Express harmless from any claims, losses, or damages resulting from your violation of these terms." },
+    { title: "25. Indemnification", content: "You agree to indemnify and hold Urban Express harmless from any claims, losses, or damages resulting from your violation of these terms." },
     { title: "26. Limitation of Liability", content: "Our total liability for any claim shall not exceed the amount paid for the specific service that is the subject of the dispute." },
     { title: "27. Force Majeure", content: "We are not liable for failure to perform due to acts of God, power outages, network failures, or civil unrest." },
     { title: "28. Governing Law", content: "These terms are governed by the laws of the Republic of Kenya. Any legal proceedings will be held in the courts of Nakuru." },
     { title: "29. Severability", content: "If any part of these terms is found invalid by a court, the remaining clauses shall continue in full force and effect." },
-    { title: "30. Modifications", content: "Urban Auto Express may update these terms at any time. Continued use of the platform constitutes acceptance of the revised terms." },
-    { title: "31. Contact Information", content: "Legal inquiries can be directed to mail@urbanautoexpress.com or our Flagship Branch in Nakuru." }
+    { title: "30. Modifications", content: "Urban Express may update these terms at any time. Continued use of the platform constitutes acceptance of the revised terms." },
+    { title: "31. Contact Information", content: "Legal inquiries can be directed to legal@urbanautoexpress.com or our Flagship Branch in Nakuru." }
   ];
 
   return (
@@ -46,7 +46,7 @@ export default function TermsPage() {
         <section className="bg-zinc-50 border-b border-zinc-100 py-12">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-2">
-              <Link href="/" className="mr-3 inline-flex items-center"><img src="/assets/logo.png" alt="Urban Auto Express" className="h-8 w-auto object-contain" /></Link><Link href="/" className="hover:text-primary transition-colors">HOME</Link> <ChevronRight className="w-2.5 h-2.5" /> <span className="text-primary">LEGAL</span>
+              <Link href="/" className="hover:text-primary transition-colors">HOME</Link> <ChevronRight className="w-2.5 h-2.5" /> <span className="text-primary">LEGAL</span>
             </div>
             <h1 className="text-5xl md:text-8xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">
               Terms of <br/> <span className="text-primary">Service.</span>
@@ -87,12 +87,8 @@ export default function TermsPage() {
                    <ShieldCheck className="w-8 h-8" />
                 </div>
                 <p className="text-[10px] font-black text-zinc-300 uppercase tracking-[0.4em]">
-                  Urban Auto Express · Nakuru, Kenya <br/> Last Updated: August 2024
+                  Urban Express Hospitality & Automotive <br/> Last Updated: August 2024
                 </p>
-             </div>
-             <div className="mt-10 border-t border-zinc-100 pt-8 text-center text-xs text-zinc-500">
-               <p>Legal enquiries: <a className="font-semibold text-primary" href="mailto:mail@urbanautoexpress.com">mail@urbanautoexpress.com</a> · <a className="font-semibold text-primary" href="tel:+254785860753">+254 785 860 753</a></p>
-               <p className="mt-3"><Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link> · <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link></p>
              </div>
           </div>
         </section>

@@ -2,6 +2,8 @@
 
 import { Firestore } from 'firebase/firestore';
 import EscPosEncoder from 'esc-pos-encoder';
+import qz from 'qz-tray';
+import { signQzMessage, getQzCertificate } from './actions';
 
 /**
  * HardwareService
@@ -12,15 +14,12 @@ export class HardwareService {
   private static isInitialized = false;
   private static serialPort: any = null;
 
-  static getMode(): 'SERIAL' | 'PROXY' | 'NETWORK' {
+  static getMode(): 'QZ' | 'SERIAL' | 'PROXY' | 'NETWORK' {
     if (typeof window === 'undefined') return 'PROXY';
-    const storedMode = localStorage.getItem('pos_print_mode');
-    // Unknown legacy printer settings safely fall back to the existing local proxy mode.
-    if (storedMode !== 'SERIAL' && storedMode !== 'PROXY' && storedMode !== 'NETWORK') return 'PROXY';
-    return storedMode;
+    return (localStorage.getItem('pos_print_mode') as any) || 'PROXY';
   }
 
-  static setMode(mode: 'SERIAL' | 'PROXY' | 'NETWORK') {
+  static setMode(mode: 'QZ' | 'SERIAL' | 'PROXY' | 'NETWORK') {
     if (typeof window !== 'undefined') {
       localStorage.setItem('pos_print_mode', mode);
     }
@@ -59,6 +58,23 @@ export class HardwareService {
     }
   }
 
+  private static async initQz() {
+    if (this.isInitialized && qz.websocket.isActive()) return;
+    try {
+      const cert = await getQzCertificate();
+      if (cert) qz.security.setCertificatePromise(() => Promise.resolve(cert));
+      qz.security.setSignaturePromise(async (toSign) => {
+        const sig = await signQzMessage(toSign);
+        return sig || '';
+      });
+      if (!qz.websocket.isActive()) await qz.websocket.connect();
+      this.isInitialized = true;
+    } catch (err) {
+      console.error('[QZ] Handshake failed:', err);
+      throw err;
+    }
+  }
+
   private static encodeReceipt(orderData: any, settings?: any): Uint8Array {
     const is80mm = this.getPaperWidth() === '80mm';
     const cols = is80mm ? 42 : 32;
@@ -91,23 +107,6 @@ export class HardwareService {
 
     encoder.initialize()
            .align('center');
-
-    // X/Z reports already contain their complete, reconciled ledger. Print that
-    // exact text instead of rebuilding it as ordinary receipt line-items.
-    if (typeof orderData.reportText === 'string' && orderData.reportText.trim()) {
-      encoder.align('left');
-      orderData.reportText.replace(/\r\n/g, '\n').split('\n').forEach((line: string) => {
-        if (!line) {
-          encoder.newline();
-          return;
-        }
-        for (let offset = 0; offset < line.length; offset += cols) {
-          encoder.line(line.slice(offset, offset + cols));
-        }
-      });
-      encoder.newline().cut();
-      return encoder.encode();
-    }
 
     // Prominent Status Tag
     encoder.size('double')
@@ -249,6 +248,16 @@ export class HardwareService {
         const writer = this.serialPort.writable.getWriter();
         await writer.write(bytes);
         writer.releaseLock();
+        return { success: true };
+      } catch (err: any) { return { success: false, error: err.message }; }
+    }
+
+    if (mode === 'QZ') {
+      try {
+        await this.initQz();
+        const config = qz.configs.create(this.getConfiguredPrinter() || 'POS-80');
+        const base64Data = btoa(String.fromCharCode(...bytes));
+        await qz.print(config, [{ type: 'raw', format: 'base64', data: base64Data }]);
         return { success: true };
       } catch (err: any) { return { success: false, error: err.message }; }
     }

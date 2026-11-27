@@ -3,6 +3,8 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { useAuth, useFirestore } from '@/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
@@ -11,23 +13,21 @@ import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
 
 export default function ForgotPasswordPage() {
+  const auth = useAuth();
   const [email, setEmail] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSent] = useState(false);
 
   const handleResetRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email || isSubmitting) return;
+    if (!auth || !email || isSubmitting) return;
     
     setIsSubmitting(true);
     try {
       const normalizedEmail = email.toLowerCase().trim();
-      const response = await fetch('/api/auth/forgot-password', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: normalizedEmail }),
+      await sendPasswordResetEmail(auth, normalizedEmail, {
+        url: `${window.location.origin}/auth/reset-password`
       });
-      if (!response.ok) throw new Error('Password reset request failed.');
       setIsSent(true);
       toast({ title: "Email Sent", description: "Instructions have been sent to your email address." });
     } catch (error: any) {

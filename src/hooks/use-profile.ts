@@ -4,6 +4,7 @@ import React, { createContext, useContext, useMemo, useState, useEffect } from '
 import { doc } from 'firebase/firestore';
 import { useFirestore, useUser, useDoc } from '@/firebase';
 import { UserProfile, UserRole } from '@/lib/types';
+import { ROOT_ADMIN_EMAILS } from '@/lib/admin-identity';
 
 interface ProfileContextType {
   profile: UserProfile | null;
@@ -49,15 +50,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     if (!user?.email) return null;
     const email = user.email.toLowerCase().trim();
     
-    const rootAdmins = [
-      'urbanautoexpressnakuru@gmail.com',
-      'urbanaautoexpressnakuru@gmail.com',
-      'samuelkarani044@gmail.com',
-      'gmaina424@gmail.com',
-      'bonfacewana3072@gmail.com'
-    ];
-
-    if (rootAdmins.includes(email)) return { role: 'ADMIN' as UserRole };
+    if (ROOT_ADMIN_EMAILS.includes(email)) return { role: 'ADMIN' as UserRole };
     return null;
   }, [user?.email]);
 
@@ -91,11 +84,7 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     profile: firestoreProfile || null,
-    // Once a user profile role is known, the staff workspace can render without
-    // waiting for the secondary admin-whitelist lookup. That lookup still runs
-    // and can elevate a whitelisted account when its snapshot arrives. If the
-    // profile is missing, keep waiting so whitelist-only administrators resolve safely.
-    loading: authLoading || profileLoading || (!envStatus && !firestoreProfile?.role && adminLoading) || !mounted,
+    loading: authLoading || profileLoading || adminLoading || !mounted,
     role: resolvedRole,
     isEmployee,
     isSuperAdmin,

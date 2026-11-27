@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useMemo, useState } from 'react';
 import { 
   Wallet, 
@@ -43,18 +39,16 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection, useMemoFirebase, useAuth } from '@/firebase';
+import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
 import { collection, query, orderBy, limit, addDoc, where, doc, updateDoc } from 'firebase/firestore';
 import { PettyCashRequest, Order, Reconciliation } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 import { exportAsReceiptText } from '@/lib/csv-export';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
-import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 
 export default function FinanceDashboard() {
   const firestore = useFirestore();
-  const auth = useAuth();
   const { profile, role, isSuperAdmin } = useProfile();
   const canManageExpenses = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER' || role === 'SUPERVISOR';
   
@@ -72,7 +66,6 @@ export default function FinanceDashboard() {
   const [voucherData, setVoucherData] = useState<any>(null);
   const [requestToDeny, setRequestToDeny] = useState<PettyCashRequest | null>(null);
   const [denialReason, setDenialReason] = useState('');
-  const { startOfToday } = useBusinessClock();
 
   const requestsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -81,13 +74,15 @@ export default function FinanceDashboard() {
 
   const ordersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     return query(
       collection(firestore, 'orders'),
-      where('timestamp', '>=', startOfToday),
+      where('timestamp', '>=', today.getTime()),
       where('paymentMethod', '==', 'CASH'),
       where('status', '==', 'PAID')
     );
-  }, [firestore, startOfToday]);
+  }, [firestore]);
 
   const reconciliationsQuery = useMemo(() => {
     if (!firestore) return null;
@@ -177,19 +172,13 @@ export default function FinanceDashboard() {
     if (!firestore || !profile || !amount || !reason) return;
     setIsSubmitting(true);
     try {
-      const branchId = profile.activeBranchId || profile.branchIds?.[0] || null;
-      const expenseRef = await addDoc(collection(firestore, 'petty_cash'), {
+      await addDoc(collection(firestore, 'petty_cash'), {
         amount: Number(amount),
         reason,
         status: 'PENDING',
         requesterId: profile.uid,
         requesterName: profile.displayName,
-        branchId,
         timestamp: Date.now()
-      });
-      void notifyTelegramClientEvent(auth?.currentUser || null, {
-        type: 'EXPENSE_CREATED', reference: expenseRef.id, amount: Number(amount), reason,
-        ...(branchId ? { branchId } : {})
       });
       setIsDialogOpen(false);
       setAmount('');
@@ -208,7 +197,7 @@ export default function FinanceDashboard() {
     setIsReconciling(true);
     const variance = Number(actualCash) - expectedCash;
     try {
-      const reconciliationRef = await addDoc(collection(firestore, 'reconciliations'), {
+      await addDoc(collection(firestore, 'reconciliations'), {
         userId: profile.uid,
         timestamp: Date.now(),
         expectedCash,
@@ -216,14 +205,6 @@ export default function FinanceDashboard() {
         variance,
         status: Math.abs(variance) < 1 ? 'STABLE' : 'DISCREPANCY',
       });
-      if (Math.abs(variance) >= 1) {
-        const branchId = profile.activeBranchId || profile.branchIds?.[0] || undefined;
-        void notifyTelegramClientEvent(auth?.currentUser || null, {
-          type: 'PAYMENT_RECONCILIATION', reference: reconciliationRef.id, expected: expectedCash,
-          received: Number(actualCash), details: `Cash reconciliation variance: KES ${variance.toLocaleString()}`,
-          ...(branchId ? { branchId } : {})
-        });
-      }
       setIsReconcileOpen(false);
       setActualCash('');
       toast({ title: "Audit Sync Complete", description: `Variance: KES ${variance}` });
@@ -235,10 +216,10 @@ export default function FinanceDashboard() {
   };
 
   return (
-    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto ua-compact-page">
+    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 pt-4">
         <div>
-          <PageHeader title="Financial Treasury" breadcrumb={["Finance", "Financial Treasury"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Financial Treasury</h1>
           <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">Expense management and shift reconciliation</p>
         </div>
         <div className="flex gap-2">

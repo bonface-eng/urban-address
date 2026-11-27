@@ -7,7 +7,6 @@ import type {
   ToastActionElement,
   ToastProps,
 } from "@/components/ui/toast"
-import { sanitizeToastCopy } from "@/lib/public-errors"
 
 const TOAST_LIMIT = 1
 const TOAST_REMOVE_DELAY = 1000 // 1 second after dismissal for state cleanup
@@ -144,36 +143,19 @@ type Toast = Omit<ToasterToast, "id">
 
 function toast({ ...props }: Toast) {
   const id = genId()
-  const safeProps = {
-    ...props,
-    title: sanitizeToastCopy(props.title, "Varban Ltd Server"),
-    description: sanitizeToastCopy(
-      props.description,
-      "We could not complete your request. Please try again. If the issue continues, contact Varban Ltd support."
-    ),
-  } as Toast
 
-  const update = (props: ToasterToast) => {
-    const safeUpdate = {
-      ...props,
-      title: sanitizeToastCopy(props.title, "Varban Ltd Server"),
-      description: sanitizeToastCopy(
-        props.description,
-        "We could not complete your request. Please try again. If the issue continues, contact Varban Ltd support."
-      ),
-    } as ToasterToast;
+  const update = (props: ToasterToast) =>
     dispatch({
       type: "UPDATE_TOAST",
-      toast: { ...safeUpdate, id },
-    });
-  }
+      toast: { ...props, id },
+    })
     
   const dismiss = () => dispatch({ type: "DISMISS_TOAST", toastId: id })
 
   dispatch({
     type: "ADD_TOAST",
     toast: {
-      ...safeProps,
+      ...props,
       id,
       open: true,
       onOpenChange: (open) => {
@@ -185,7 +167,7 @@ function toast({ ...props }: Toast) {
   // AUTO DISMISSAL TRIGGER with support for custom duration
   setTimeout(() => {
     dismiss()
-  }, safeProps.duration || AUTO_DISMISS_DELAY)
+  }, props.duration || AUTO_DISMISS_DELAY)
 
   return {
     id: id,
