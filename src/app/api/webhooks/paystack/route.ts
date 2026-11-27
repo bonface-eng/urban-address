@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as admin from 'firebase-admin';
 import crypto from 'crypto';
-import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 
 export const runtime = 'nodejs';
 
@@ -52,9 +51,6 @@ export async function POST(req: NextRequest) {
         break;
       case 'refund.processed':
         await handleRefundProcessed(db, event.data);
-        break;
-      case 'charge.failed':
-        await handleChargeFailed(db, event.data);
         break;
       case 'transfer.success':
         await handleTransferSuccess(db, event.data);
@@ -123,7 +119,6 @@ async function handleRefundProcessed(db: admin.firestore.Firestore, data: any) {
   const query = await db.collection('orders').where('paymentRef', '==', reference).limit(1).get();
   if (query.empty) return;
   await query.docs[0].ref.update({ status: 'REFUNDED', refundedAt: Date.now() });
-  await notifyTelegramOperations({ type: 'PAYMENT', title: 'Payment refund processed', message: `Refund confirmed for payment reference ${reference}.`, severity: 'WARNING' });
   await db.collection('audit_logs').add({
     action: 'REFUND_WEBHOOK_SYNC',
     userId: 'SYSTEM',
@@ -131,16 +126,6 @@ async function handleRefundProcessed(db: admin.firestore.Firestore, data: any) {
     timestamp: Date.now(),
     severity: 'WARNING'
   });
-}
-
-async function handleChargeFailed(db: admin.firestore.Firestore, data: any) {
-  const reference = typeof data?.reference === 'string' ? data.reference : '';
-  if (!reference) return;
-  const query = await db.collection('orders').where('paymentRef', '==', reference).limit(1).get();
-  if (query.empty) return;
-  const order = query.docs[0];
-  await order.ref.update({ paymentStatus: 'FAILED', paymentFailureReason: String(data?.gateway_response || data?.message || 'Payment failed').slice(0, 240), paymentFailedAt: Date.now() });
-  await notifyTelegramOperations({ type: 'PAYMENT', title: 'Paystack payment failed', message: `Order ${order.id} payment failed: ${String(data?.gateway_response || data?.message || 'Payment failed').slice(0, 180)}.`, severity: 'WARNING' });
 }
 
 async function handleTransferSuccess(db: admin.firestore.Firestore, data: any) {

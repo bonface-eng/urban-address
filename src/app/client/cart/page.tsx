@@ -24,7 +24,7 @@ export default function ClientCartPage() {
   if (items.length === 0) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-20 bg-white text-center space-y-8 animate-in fade-in duration-700 h-[70vh]">
-        <div className="w-32 h-32 rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-200 border border-zinc-100">
+        <div className="w-32 h-32 rounded-[2rem] bg-zinc-50 flex items-center justify-center text-zinc-200 border border-zinc-100">
            <ShoppingBag className="w-12 h-12" />
         </div>
         <div className="space-y-2">
@@ -46,15 +46,15 @@ export default function ClientCartPage() {
             <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-2">
               <Link href="/" className="hover:text-primary transition-colors">HOME</Link> <ChevronRight className="w-2.5 h-2.5" /> <span className="text-primary">YOUR SELECTION</span>
             </div>
-            <h1 className="text-3xl md:text-4xl font-black font-headline uppercase text-zinc-900 tracking-tighter">
+            <h1 className="text-5xl font-black font-headline uppercase text-zinc-900 tracking-tighter">
               Your <span className="text-primary">Cart.</span>
             </h1>
           </div>
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 w-full py-8 md:py-10 pb-[calc(13rem+env(safe-area-inset-bottom))] md:pb-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 md:gap-10 items-start">
+      <section className="max-w-7xl mx-auto px-6 w-full py-12 pb-32">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
           <div className="lg:col-span-8 space-y-12">
             <div className="flex items-center justify-between border-b border-zinc-100 pb-4">
               <h3 className="text-[10px] font-black uppercase tracking-[0.3em] text-zinc-400">Selected Items</h3>
@@ -115,8 +115,8 @@ export default function ClientCartPage() {
             </div>
           </div>
 
-          <aside className="lg:col-span-4 lg:sticky lg:top-32">
-            <div className="bg-white text-zinc-900 rounded-xl p-10 shadow-2xl border border-zinc-100 space-y-10 overflow-hidden relative">
+          <aside className="lg:col-span-4 sticky top-32">
+            <div className="bg-white text-zinc-900 rounded-[2rem] p-10 shadow-2xl border border-zinc-100 space-y-10 overflow-hidden relative">
               <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full translate-x-1/2 -translate-y-1/2" />
               
               <h3 className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 border-b border-zinc-50 pb-6 relative z-10">Order Summary</h3>
@@ -140,11 +140,11 @@ export default function ClientCartPage() {
               <div className="space-y-4 pt-4 relative z-10">
                 <Button 
                   onClick={() => router.push('/client/payment')}
-                  className="hidden lg:flex w-full min-h-16 h-16 bg-zinc-900 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-xl shadow-xl shadow-zinc-100 transition-transform active:scale-95 group touch-manipulation"
+                  className="w-full h-16 bg-zinc-900 text-white font-black uppercase text-[10px] tracking-[0.2em] rounded-xl shadow-xl shadow-zinc-100 transition-transform active:scale-95 group"
                 >
                   Proceed to Payment <ArrowRight className="w-4 h-4 ml-3 group-hover:translate-x-1 transition-transform" />
                 </Button>
-                <div className="hidden lg:flex items-center justify-center gap-3 text-[8px] font-black text-zinc-300 uppercase tracking-[0.3em]">
+                <div className="flex items-center justify-center gap-3 text-[8px] font-black text-zinc-300 uppercase tracking-[0.3em]">
                   <Lock className="w-3 h-3" /> Secured Checkout
                 </div>
               </div>
@@ -160,21 +160,6 @@ export default function ClientCartPage() {
           </aside>
         </div>
       </section>
-
-      <div className="lg:hidden fixed inset-x-0 z-[1050] bottom-[calc(4rem+env(safe-area-inset-bottom))] border-t border-zinc-200 bg-white/95 backdrop-blur-md px-4 py-3 shadow-[0_-8px_24px_rgba(0,0,0,0.08)]">
-        <div className="mx-auto flex max-w-xl items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-400">Total</p>
-            <p className="text-lg font-black tracking-tight text-zinc-900">KES {total.toLocaleString()}</p>
-          </div>
-          <Button
-            onClick={() => router.push('/client/payment')}
-            className="h-12 min-w-[56%] rounded-lg bg-zinc-900 px-4 text-[10px] font-black uppercase tracking-widest text-white shadow-lg touch-manipulation"
-          >
-            Proceed to Payment <ArrowRight className="ml-2 h-4 w-4" />
-          </Button>
-        </div>
-      </div>
     </div>
   );
 }

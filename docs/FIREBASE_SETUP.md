@@ -17,12 +17,12 @@ You MUST add the following exactly as shown to **Firebase Console > Authenticati
 Your `.env` file should contain these verified values:
 
 ```env
-NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_api_key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your_project_id.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=your_project_id
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your_project_id.firebasestorage.app
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
-NEXT_PUBLIC_FIREBASE_APP_ID=your_firebase_app_id
+NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyCBG-imyZ2UVnU2oDX-S2j03gcFrmjwO70
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=studio-4371382043-96293.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=studio-4371382043-96293
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=studio-4371382043-96293.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=461148427857
+NEXT_PUBLIC_FIREBASE_APP_ID=1:461148427857:web:c1b25e9a782e0920300a70
 ```
 
 ## 3. Troubleshooting "API Key Not Valid"

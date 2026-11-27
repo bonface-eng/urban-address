@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useMemo, Suspense } from 'react';
-import { ShoppingCart, LogOut, Package, User, LayoutDashboard, ArrowUpRight, Home, Store, Car, Coffee, LogIn } from 'lucide-react';
+import { ShoppingCart, LogOut, Package, Menu, ChevronRight, User, LayoutDashboard, ArrowUpRight, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -17,9 +17,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
 import { CartDrawer } from '@/components/cart/cart-drawer';
-import { Notifications } from '@/components/layout/notifications';
 import { useCart } from '@/hooks/use-cart';
 import { useProfile } from '@/hooks/use-profile';
 import { doc } from 'firebase/firestore';
@@ -29,38 +36,15 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { user, loading: authLoading } = useUser();
+  const { user } = useUser();
   const { isEmployee, isSuperAdmin, role } = useProfile();
   const { totalItems } = useCart();
   const auth = useAuth();
   const firestore = useFirestore();
+  const [isMenuOpen, setIsMenuOpen] = React.useState(false);
 
   // Check if we are in "Preview Mode" (rendered inside the mobile mockup)
   const isPreviewMode = searchParams?.get('uax_preview') === 'true';
-
-  // Customer data and payment workflows must never render for signed-out visitors.
-  const isPrivateCustomerRoute = useMemo(() => {
-    const protectedRoots = ['/client/orders', '/client/profile', '/client/payment', '/client/success'];
-    return protectedRoots.some((root) => pathname === root || pathname.startsWith(root + '/'));
-  }, [pathname]);
-
-  // Revalidate protected customer pages after a browser back/forward cache restore.
-  React.useEffect(() => {
-    if (isPreviewMode || !isPrivateCustomerRoute) return;
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (!event.persisted) return;
-      document.documentElement.style.visibility = 'hidden';
-      window.location.reload();
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, [isPreviewMode, isPrivateCustomerRoute]);
-
-  React.useEffect(() => {
-    if (isPreviewMode || authLoading || !isPrivateCustomerRoute || user) return;
-    const returnTo = pathname + (typeof window !== 'undefined' ? window.location.search : '');
-    router.replace('/login?redirect=' + encodeURIComponent(returnTo));
-  }, [authLoading, isPrivateCustomerRoute, isPreviewMode, pathname, router, user]);
 
   const configRef = useMemo(() => {
     if (!firestore || !user) return null;
@@ -74,6 +58,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
       await signOut(auth);
       router.replace('/login');
     }
+    setIsMenuOpen(false);
   };
 
   const navLinks = [
@@ -85,16 +70,6 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
     { href: 'https://www.nakurucutclippers.com/', label: 'Spa' },
   ];
 
-  const mobileLinks = [
-    { href: '/', label: 'Home', icon: Home },
-    { href: '/client/store', label: 'Shop', icon: Store },
-    { href: '/client/carwash', label: 'Carwash', icon: Car },
-    { href: '/client/lounge', label: 'Lounge', icon: Coffee },
-    user
-      ? { href: '/client/profile', label: 'Profile', icon: User }
-      : { href: '/login', label: 'Sign In', icon: LogIn },
-  ];
-
   const canAccessStaffPortal = (isEmployee || isSuperAdmin);
   const visualTheme = globalConfig?.visualTheme || 'NONE';
 
@@ -103,25 +78,14 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
     return <main className="flex-1 bg-white">{children}</main>;
   }
 
-  if (isPrivateCustomerRoute && (authLoading || !user)) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center px-6">
-        <div className="text-center space-y-3" role="status" aria-live="polite">
-          <div className="mx-auto h-8 w-8 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" />
-          <p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Verifying your account…</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#FDFDFD] flex flex-col relative text-zinc-900 selection:bg-primary/10">
       {visualTheme === 'SNOW' && <Snowfall style={{ position: 'fixed', width: '100vw', height: '100vh', zIndex: 10000, pointerEvents: 'none' }} />}
       {visualTheme === 'CELEBRATION' && <Snowfall color="#FFD700" snowflakeCount={150} style={{ position: 'fixed', width: '100vw', height: '100vh', zIndex: 10000, pointerEvents: 'none' }} />}
       
-      <header className="bg-white/95 backdrop-blur-md border-b border-zinc-200/80 h-16 md:h-[72px] flex items-center sticky top-0 z-[1000]">
-        <div className="w-full px-4 sm:px-6 lg:px-8 flex items-center justify-between gap-5">
-          <Link href="/" className="flex items-center gap-3 shrink-0">
+      <header className="bg-white border-b border-zinc-100 h-20 flex items-center sticky top-0 z-[1000] shadow-sm">
+        <div className="max-w-7xl mx-auto w-full px-6 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-3">
             <img 
               src="/assets/logo.png" 
               alt={SYSTEM_CONFIG.BUSINESS.NAME} 
@@ -129,7 +93,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
             />
           </Link>
 
-          <nav className="hidden lg:flex flex-1 min-w-0 items-center justify-start gap-4 xl:gap-7 pl-5 whitespace-nowrap">
+          <nav className="hidden lg:flex items-center gap-10">
             {navLinks.map((link) => (
               <HeaderLink key={link.href} href={link.href} active={pathname === link.href || (link.href !== '/' && pathname.startsWith(link.href))}>
                 {link.label}
@@ -137,54 +101,41 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
             ))}
           </nav>
           
-          <div className="flex items-center gap-2 xl:gap-3 shrink-0 whitespace-nowrap">
+          <div className="flex items-center gap-4">
             {canAccessStaffPortal && (
               <Button 
                 onClick={() => router.push('/dashboard')}
-                className="hidden md:flex h-9 px-3.5 bg-white text-zinc-600 border border-zinc-200 rounded-md font-semibold normal-case text-xs tracking-normal gap-2 shadow-none hover:bg-zinc-50 hover:text-primary hover:border-orange-200 transition-colors active:scale-[.98] whitespace-nowrap"
+                className="hidden md:flex h-11 px-6 bg-primary text-white rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 shadow-xl shadow-primary/20 hover:bg-orange-600 transition-all active:scale-95 border-none"
               >
                 <LayoutDashboard className="w-3.5 h-3.5 text-white" />
-                Staff Workspace
+                Staff Hub
               </Button>
             )}
 
-            {user && <Notifications />}
-            <div className="lg:hidden">
-              <Button asChild variant="ghost" size="icon" aria-label="Open cart" className="relative rounded-xl hover:bg-zinc-50">
-                <Link href="/client/cart">
-                  <ShoppingCart className="w-5 h-5 text-zinc-700" />
-                  {totalItems > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-lg flex items-center justify-center animate-in zoom-in">
-                      {totalItems}
-                    </span>
-                  )}
-                </Link>
+            <CartDrawer>
+              <Button variant="ghost" size="icon" className="relative rounded-xl hover:bg-zinc-50">
+                <ShoppingCart className="w-5 h-5 text-zinc-700" />
+                {totalItems > 0 && (
+                  <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-lg flex items-center justify-center animate-in zoom-in">
+                    {totalItems}
+                  </span>
+                )}
               </Button>
-            </div>
-            <div className="hidden lg:block">
-              <CartDrawer>
-                <Button variant="ghost" size="icon" aria-label="Open cart drawer" className="relative rounded-xl hover:bg-zinc-50">
-                  <ShoppingCart className="w-5 h-5 text-zinc-700" />
-                  {totalItems > 0 && (
-                    <span className="absolute -top-1 -right-1 w-5 h-5 bg-primary text-white text-[9px] font-black rounded-lg flex items-center justify-center animate-in zoom-in">
-                      {totalItems}
-                    </span>
-                  )}
-                </Button>
-              </CartDrawer>
-            </div>
+            </CartDrawer>
             
             <div className="hidden lg:flex items-center gap-3">
               {!user ? (
-                <Button variant="ghost" onClick={() => router.push('/login')} className="text-[10px] font-black uppercase tracking-widest px-5 h-11 rounded-xl">Sign In</Button>
+                <>
+                  <Button variant="ghost" onClick={() => router.push('/login')} className="text-[10px] font-black uppercase tracking-widest px-4 h-11 rounded-xl">Sign In</Button>
+                  <Button onClick={() => router.push('/signup')} className="bg-primary text-white text-[10px] font-black uppercase tracking-widest px-6 h-11 rounded-xl shadow-lg shadow-primary/20">Join</Button>
+                </>
               ) : (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <button aria-label="Open profile menu" className="flex items-center gap-2 hover:bg-zinc-50 px-2 py-1 rounded-xl transition-all group shrink-0 active:scale-95 ml-1">
-                      <span className="text-[10px] font-black uppercase tracking-widest text-zinc-700">Profile</span>
-                      <Avatar className="h-10 w-10 rounded-full border-2 border-white shadow-sm ring-1 ring-zinc-200 transition-all group-hover:ring-primary/40">
-                        <AvatarImage src={user.photoURL || undefined} alt={user.displayName || 'Profile avatar'} />
-                        <AvatarFallback className="bg-orange-50 text-primary text-xs font-semibold">{(user.displayName || user.email || 'U').trim().charAt(0).toUpperCase()}</AvatarFallback>
+                    <button className="flex items-center gap-2 hover:bg-zinc-50 p-1 rounded-xl transition-all group shrink-0 active:scale-95 ml-1">
+                      <Avatar className="h-10 w-10 rounded-xl border-2 border-transparent group-hover:border-primary/20 transition-all">
+                        <AvatarImage src={user.photoURL || undefined} />
+                        <AvatarFallback className="bg-primary/10 text-primary text-[10px] font-black">{user.displayName?.[0] || 'U'}</AvatarFallback>
                       </Avatar>
                     </button>
                   </DropdownMenuTrigger>
@@ -215,38 +166,123 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
               )}
             </div>
 
+            <div className="lg:hidden">
+              <Sheet open={isMenuOpen} onOpenChange={setIsMenuOpen}>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="rounded-xl hover:bg-zinc-50">
+                    <Menu className="w-5 h-5 text-zinc-700" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="w-[300px] border-none bg-white p-0 shadow-2xl flex flex-col">
+                  <SheetHeader className="p-6 border-b border-zinc-50">
+                    <SheetTitle className="text-left flex items-center gap-3">
+                      {user ? (
+                        <>
+                          <Avatar className="h-10 w-10 rounded-xl border border-zinc-100">
+                            <AvatarImage src={user.photoURL || undefined} />
+                            <AvatarFallback className="bg-primary/10 text-primary font-black text-[10px]">{user.displayName?.[0] || 'U'}</AvatarFallback>
+                          </Avatar>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black uppercase text-zinc-900 truncate tracking-tight">{user.displayName || 'Member'}</p>
+                            <p className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">{role}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="py-2">
+                          <p className="text-xl font-black uppercase font-headline tracking-tighter text-zinc-900">Welcome.</p>
+                        </div>
+                      )}
+                    </SheetTitle>
+                  </SheetHeader>
 
+                  <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+                    {canAccessStaffPortal && (
+                      <div className="px-1 mb-4">
+                        <Button 
+                          onClick={() => { router.push('/dashboard'); setIsMenuOpen(false); }}
+                          className="w-full h-14 bg-primary text-white rounded-xl font-black uppercase text-[10px] tracking-widest gap-2 shadow-xl shadow-primary/20 active:scale-95 transition-all"
+                        >
+                          <LayoutDashboard className="w-4 h-4 text-white" />
+                          Staff Hub
+                        </Button>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      {navLinks.map((link) => {
+                        const isExternal = link.href.startsWith('http');
+                        const content = (
+                          <div className={cn(
+                            "flex items-center justify-between py-3 px-4 rounded-xl transition-all cursor-pointer",
+                            pathname === link.href ? "bg-primary/5 text-primary" : "text-zinc-600 hover:bg-zinc-50"
+                          )}>
+                            <span className="text-[11px] font-black uppercase tracking-widest">{link.label}</span>
+                            {isExternal ? (
+                              <ArrowUpRight className="w-4 h-4 text-primary" />
+                            ) : (
+                              <ChevronRight className={cn("w-4 h-4", pathname === link.href ? "text-primary" : "text-zinc-200")} />
+                            )}
+                          </div>
+                        );
+
+                        if (isExternal) {
+                          return (
+                            <a key={link.href} href={link.href} target="_blank" rel="noopener noreferrer" onClick={() => setIsMenuOpen(false)}>
+                              {content}
+                            </a>
+                          );
+                        }
+
+                        return (
+                          <Link 
+                            key={link.href} 
+                            href={link.href} 
+                            onClick={() => setIsMenuOpen(false)}
+                          >
+                            {content}
+                          </Link>
+                        );
+                      })}
+                    </div>
+
+                    <Separator className="bg-zinc-50" />
+
+                    <div className="space-y-2">
+                      {user ? (
+                        <>
+                          <Link href="/client/profile" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 py-3 px-4 rounded-xl text-zinc-600 hover:bg-zinc-50">
+                            <User className="w-4 h-4 text-zinc-400" />
+                            <span className="text-[11px] font-black uppercase tracking-widest">My Profile</span>
+                          </Link>
+                          <Link href="/client/orders" onClick={() => setIsMenuOpen(false)} className="flex items-center gap-3 py-3 px-4 rounded-xl text-zinc-600 hover:bg-zinc-50">
+                            <Package className="w-4 h-4 text-zinc-400" />
+                            <span className="text-[11px] font-black uppercase tracking-widest">My Orders</span>
+                          </Link>
+                          <button onClick={handleLogout} className="w-full flex items-center gap-3 py-3 px-4 rounded-xl text-red-500 hover:bg-red-50 text-left">
+                            <LogOut className="w-4 h-4" />
+                            <span className="text-[11px] font-black uppercase tracking-widest">Sign Out</span>
+                          </button>
+                        </>
+                      ) : (
+                        <div className="grid grid-cols-2 gap-2">
+                          <Button onClick={() => { router.push('/login'); setIsMenuOpen(false); }} className="h-11 bg-zinc-900 text-white rounded-xl uppercase font-black text-[9px] tracking-widest">Sign In</Button>
+                          <Button onClick={() => { router.push('/signup'); setIsMenuOpen(false); }} variant="outline" className="h-11 border-zinc-100 text-zinc-600 rounded-xl uppercase font-black text-[9px] tracking-widest">Join</Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
           </div>
         </div>
       </header>
 
-      <main className="flex-1 relative pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0">
+      <main className="flex-1 relative">
         {children}
       </main>
 
-      <nav aria-label="Customer navigation" className="lg:hidden fixed bottom-0 inset-x-0 z-[1100] border-t border-zinc-200 bg-white/95 backdrop-blur-lg pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto grid max-w-xl grid-cols-5">
-          {mobileLinks.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || (href !== '/' && pathname.startsWith(href));
-            return (
-              <Link key={href} href={href} aria-current={active ? 'page' : undefined}
-                className={cn("min-h-[64px] flex flex-col items-center justify-center gap-1 text-[10px] font-semibold transition-colors", active ? "text-primary" : "text-zinc-500 hover:text-zinc-900")}>
-                {label === 'Profile' && user ? (
-                  <Avatar className={cn("h-7 w-7 rounded-full border border-white shadow-sm ring-1", active ? "ring-primary" : "ring-zinc-200")}>
-                    <AvatarImage src={user.photoURL || undefined} alt="Profile" />
-                    <AvatarFallback className="bg-orange-50 text-primary text-[9px] font-semibold">{(user.displayName || user.email || 'U').trim().charAt(0).toUpperCase()}</AvatarFallback>
-                  </Avatar>
-                ) : (
-                  <Icon className={cn("h-5 w-5", active && "stroke-[2.5px]")} />
-                )}
-                <span>{label}</span>
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      <footer className="py-4 bg-transparent text-center shrink-0 hidden lg:block">
+      <footer className="py-4 bg-transparent text-center shrink-0">
         <p className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.4em]">
           powered by milleast global
         </p>
@@ -287,7 +323,7 @@ function HeaderLink({ href, active, children }: { href: string; active?: boolean
     <Link 
       href={href} 
       className={cn(
-        "text-[10px] font-semibold uppercase tracking-[0.12em] whitespace-nowrap transition-colors",
+        "text-[10px] font-black uppercase tracking-[0.3em] transition-all",
         active ? "text-primary border-b-2 border-primary pb-1" : "text-zinc-400 hover:text-zinc-900"
       )}
     >

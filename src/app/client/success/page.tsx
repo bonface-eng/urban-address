@@ -98,7 +98,7 @@ export default function ClientSuccessPage() {
         </div>
 
         {/* Detailed Booking Summary Card */}
-        <Card className="border-none shadow-mobile rounded-xl bg-zinc-50 overflow-hidden text-left border border-zinc-100 mt-6">
+        <Card className="border-none shadow-mobile rounded-[2rem] bg-zinc-50 overflow-hidden text-left border border-zinc-100 mt-6">
           <CardContent className="p-8 md:p-10 space-y-8">
             <div className="flex items-center justify-between border-b border-zinc-200 pb-6">
                <div className="flex items-center gap-3">

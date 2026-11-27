@@ -31,7 +31,7 @@ export default function AdminHelpPage() {
           <div className="w-20 h-20 bg-red-50 rounded-3xl flex items-center justify-center text-red-500 mx-auto">
              <AlertTriangle className="w-10 h-10" />
           </div>
-          <div className="space-y-2 ua-compact-page">
+          <div className="space-y-2">
             <h2 className="text-2xl font-black uppercase font-headline">Admin Access Required</h2>
             <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-relaxed">This guide is reserved for system administrators.</p>
           </div>
@@ -42,7 +42,7 @@ export default function AdminHelpPage() {
   }
 
   return (
-    <div className="space-y-8 pb-20 max-w-[1200px] mx-auto pt-4 ua-compact-page">
+    <div className="space-y-8 pb-20 max-w-[1200px] mx-auto pt-4">
       <div className="px-2">
         <div className="flex items-center gap-2 mb-2">
           <BookOpen className="w-3.5 h-3.5 text-primary" />

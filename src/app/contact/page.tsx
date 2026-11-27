@@ -11,6 +11,7 @@ import { Mail, MapPin, Phone, MessageSquare, Send, CheckCircle2, RefreshCcw } fr
 import { toast } from '@/hooks/use-toast';
 import { useFirestore } from '@/firebase';
 import { collection, addDoc } from 'firebase/firestore';
+import { verifyRecaptcha } from '@/lib/actions';
 
 export function ContactPage() {
   const firestore = useFirestore();
@@ -23,6 +24,27 @@ export function ContactPage() {
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
 
+  const getRecaptchaToken = (): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const grecaptcha = (window as any).grecaptcha;
+      if (!grecaptcha?.enterprise) {
+        resolve(null);
+        return;
+      }
+      grecaptcha.enterprise.ready(async () => {
+        try {
+          const token = await grecaptcha.enterprise.execute(
+            process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY, 
+            { action: 'CONTACT' }
+          );
+          resolve(token);
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!firestore) return;
@@ -30,6 +52,15 @@ export function ContactPage() {
     setIsSubmitting(true);
     
     try {
+      // 1. Security Check
+      const token = await getRecaptchaToken();
+      const captchaResult = await verifyRecaptcha(token);
+      
+      if (!captchaResult.success) {
+        toast({ variant: "destructive", title: "Security Check Failed", description: captchaResult.message });
+        setIsSubmitting(false);
+        return;
+      }
 
       // 2. Persist Inquiry
       await addDoc(collection(firestore, 'support_queries'), {
@@ -205,7 +236,9 @@ export function ContactPage() {
                       </Button>
 
                       <div className="text-center px-4">
-                         
+                         <p className="text-[8px] font-bold text-zinc-300 uppercase leading-relaxed tracking-wider">
+                           This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" className="text-primary hover:underline">Privacy Policy</a> and <a href="https://policies.google.com/terms" className="text-primary hover:underline">Terms of Service</a> apply.
+                         </p>
                       </div>
                     </div>
                   </form>

@@ -1,4 +1,3 @@
-import { unstable_cache } from 'next/cache';
 import { NextRequest, NextResponse } from 'next/server';
 import { getDbAdmin } from '@/lib/firebase-admin';
 
@@ -7,9 +6,6 @@ export const dynamic = 'force-dynamic';
 
 const PUBLIC_UNITS = new Set(['LOUNGE', 'STORE', 'CARWASH']);
 const MAX_PAGE_SIZE = 96;
-const PUBLIC_CACHE_HEADERS = {
-  'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60',
-};
 
 function numberOr(value: unknown, fallback: number) {
   const parsed = typeof value === 'number' ? value : Number(value);
@@ -32,54 +28,10 @@ function publicProduct(id: string, data: Record<string, any>) {
   };
 }
 
-/**
- * Cache the Firestore read by business unit, not by search/filter/page.
- * This means homepage, category filters and pagination reuse the same
- * short-lived inventory snapshot instead of repeatedly scanning Firestore.
- */
-const getCachedUnitCatalogue = unstable_cache(
-  async (unit: string) => {
-    const snapshot = await getDbAdmin()
-      .collection('inventory')
-      .where('unit', 'in', [unit, unit.toLowerCase()])
-      .get();
-
-    const activeDocs = snapshot.docs.filter(doc => doc.data().archived !== true);
-    const products = activeDocs
-      .map(doc => publicProduct(doc.id, doc.data()))
-      .filter(product => product.unit === unit);
-
-    const categories = Array.from(new Set(
-      products.map(product => product.category).filter(Boolean)
-    )).sort((a, b) => a.localeCompare(b));
-
-    return { products, categories };
-  },
-  ['public-catalogue-v3'],
-  { revalidate: 30 }
-);
-
-/** Product detail pages share a short-lived cache with catalogue requests. */
-const getCachedPublicProduct = unstable_cache(
-  async (productId: string) => {
-    const snapshot = await getDbAdmin().collection('inventory').doc(productId).get();
-    if (!snapshot.exists) return null;
-
-    const data = snapshot.data() || {};
-    const productUnit = String(data.unit || '').toUpperCase();
-    if (!PUBLIC_UNITS.has(productUnit) || data.archived === true) return null;
-
-    return publicProduct(snapshot.id, data);
-  },
-  ['public-product-v2'],
-  { revalidate: 30 }
-);
-
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
   const unit = (params.get('unit') || '').toUpperCase();
   const productId = params.get('productId');
-
   if (productId && productId.length > 150) {
     return NextResponse.json({ error: 'Invalid product reference.' }, { status: 400 });
   }
@@ -88,9 +40,16 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const db = getDbAdmin();
     if (productId) {
-      const product = await getCachedPublicProduct(productId);
-      return NextResponse.json({ product }, { headers: PUBLIC_CACHE_HEADERS });
+      const snapshot = await db.collection('inventory').doc(productId).get();
+      if (!snapshot.exists) return NextResponse.json({ product: null }, { headers: { 'Cache-Control': 'no-store' } });
+      const data = snapshot.data() || {};
+      const productUnit = String(data.unit || '').toUpperCase();
+      if (!PUBLIC_UNITS.has(productUnit) || data.archived === true) {
+        return NextResponse.json({ product: null }, { headers: { 'Cache-Control': 'no-store' } });
+      }
+      return NextResponse.json({ product: publicProduct(snapshot.id, data) }, { headers: { 'Cache-Control': 'no-store' } });
     }
 
     const page = Math.max(1, Math.floor(numberOr(params.get('page'), 1)));
@@ -101,13 +60,19 @@ export async function GET(request: NextRequest) {
     const search = (params.get('search') || '').trim().toLocaleLowerCase().slice(0, 100);
     const sort = params.get('sort') || 'name';
 
-    const cached = await getCachedUnitCatalogue(unit);
-    let products = cached.products
+    // Read only the requested business unit. Search/category/price filtering is applied
+    // before pagination so every page represents the complete matching catalogue.
+    const snapshot = await db.collection('inventory')
+      .where('unit', 'in', [unit, unit.toLowerCase()])
+      .get();
+
+    let products = snapshot.docs
+      .filter(doc => doc.data().archived !== true)
+      .map(doc => publicProduct(doc.id, doc.data()))
+      .filter(product => product.unit === unit)
       .filter(product => !category || category === 'All' || product.category === category)
       .filter(product => product.price >= minPrice && product.price <= maxPrice)
-      .filter(product => !search ||
-        product.name.toLocaleLowerCase().includes(search) ||
-        product.category.toLocaleLowerCase().includes(search));
+      .filter(product => !search || product.name.toLocaleLowerCase().includes(search) || product.category.toLocaleLowerCase().includes(search));
 
     products.sort((a, b) => {
       if (sort === 'price-asc') return a.price - b.price || a.name.localeCompare(b.name);
@@ -116,21 +81,23 @@ export async function GET(request: NextRequest) {
     });
 
     const total = products.length;
+    const categories = Array.from(new Set(
+      snapshot.docs
+        .filter(doc => doc.data().archived !== true && String(doc.data().unit || '').toUpperCase() === unit)
+        .map(doc => typeof doc.data().category === 'string' ? doc.data().category : '')
+        .filter(Boolean)
+    )).sort((a, b) => a.localeCompare(b));
     const start = (page - 1) * pageSize;
     products = products.slice(start, start + pageSize);
 
     return NextResponse.json(
-      { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize), categories: cached.categories },
-      { headers: PUBLIC_CACHE_HEADERS }
+      { products, total, page, pageSize, totalPages: Math.ceil(total / pageSize), categories },
+      { headers: { 'Cache-Control': 'no-store, max-age=0' } }
     );
   } catch (error) {
-    const errorCode = typeof error === 'object' && error !== null && 'code' in error
-      ? String((error as { code?: unknown }).code)
-      : 'UNKNOWN';
-    console.error('[PUBLIC_CATALOGUE_API_FAILED]', { errorCode, message: error instanceof Error ? error.message : 'Unknown error' });
-
+    console.error('[PUBLIC_CATALOGUE_API_FAILED]', error);
     return NextResponse.json(
-      { error: 'The catalogue is temporarily unavailable. Please try again shortly.' },
+      { error: 'The product catalogue is temporarily unavailable. Please try again shortly.' },
       { status: 503, headers: { 'Cache-Control': 'no-store' } }
     );
   }

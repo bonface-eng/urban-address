@@ -89,7 +89,7 @@ export default function BranchOrderingPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, activeCategory, minPrice, maxPrice, itemsPerPage, sortBy]);
+  }, [searchTerm, activeCategory, minPrice, maxPrice, itemsPerPage]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -109,6 +109,7 @@ export default function BranchOrderingPage() {
         if (maxPrice !== '') params.set('maxPrice', maxPrice);
         const response = await fetch(`/api/public/catalogue?${params.toString()}`, {
           signal: controller.signal,
+          cache: 'no-store',
         });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error || 'The catalogue could not be loaded.');
@@ -118,8 +119,8 @@ export default function BranchOrderingPage() {
       } catch (error) {
         if (controller.signal.aborted) return;
         console.error('[CLIENT_CATALOGUE_LOAD_FAILED]', error);
-        // Keep the last successful result visible if a filter refresh fails.
-        // This avoids replacing usable catalogue content with a blank screen.
+        setProducts([]);
+        setTotalProducts(0);
         setCatalogueError(error instanceof Error ? error.message : 'The catalogue could not be loaded.');
       } finally {
         if (!controller.signal.aborted) setLoading(false);
@@ -244,21 +245,18 @@ export default function BranchOrderingPage() {
              </p>
           </div>
 
-          {loading && products.length === 0 ? (
-            <div className="py-40 text-center flex flex-col items-center gap-8" role="status" aria-live="polite">
+          {loading ? (
+            <div className="py-40 text-center flex flex-col items-center gap-8">
               <Loader2 className="w-10 h-10 animate-spin text-zinc-200" />
-              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-400">Loading catalogue...</p>
+              <p className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-200">Synchronizing Identity...</p>
             </div>
           ) : (
-            <>
-            {loading && <p className="mb-4 text-xs font-medium text-zinc-400" role="status" aria-live="polite">Updating results…</p>}
-            {catalogueError && <p role="alert" className="mb-4 text-sm text-red-600">{catalogueError} Showing the last available results.</p>}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-8">
               {paginatedProducts.map((product) => (
                 <div 
                   key={product.id} 
                   onClick={() => router.push(`/client/product/${product.id}`)}
-                  className="flex flex-col bg-white border border-zinc-100 rounded-[1.5rem] md:rounded-xl overflow-hidden group cursor-pointer hover:shadow-2xl transition-all duration-500 hover:-translate-y-1"
+                  className="flex flex-col bg-white border border-zinc-100 rounded-[1.5rem] md:rounded-[2rem] overflow-hidden group cursor-pointer hover:shadow-2xl transition-all duration-500 hover:-translate-y-1"
                 >
                   <div className="aspect-[4/5] bg-zinc-50 relative overflow-hidden">
                     <Image 
@@ -298,7 +296,6 @@ export default function BranchOrderingPage() {
                 </div>
               ))}
             </div>
-            </>
           )}
 
           {!loading && totalProducts > itemsPerPage && (
@@ -310,6 +307,7 @@ export default function BranchOrderingPage() {
                <p className="text-[8px] font-black uppercase text-zinc-300 tracking-[0.4em]">Page {currentPage} of {totalPages}</p>
             </div>
           )}
+          {!loading && catalogueError && <p role="alert" className="mt-8 text-center text-sm text-red-600">{catalogueError}</p>}
           {!loading && !catalogueError && totalProducts === 0 && <p className="py-20 text-center text-sm font-semibold text-zinc-400">No products match your filters right now.</p>}
         </div>
       </section>
@@ -318,7 +316,7 @@ export default function BranchOrderingPage() {
         <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-[90%] max-w-sm z-50 animate-in slide-in-from-bottom-12 duration-700">
           <Button 
             onClick={() => router.push('/client/cart')}
-            className="w-full h-18 py-8 bg-zinc-900 text-white rounded-2xl shadow-2xl flex items-center justify-between px-10 font-black uppercase text-[11px] tracking-[0.2em] group border-t border-white/5"
+            className="w-full h-18 py-8 bg-zinc-900 text-white rounded-3xl shadow-2xl flex items-center justify-between px-10 font-black uppercase text-[11px] tracking-[0.2em] group border-t border-white/5"
           >
             <div className="flex items-center gap-4">
               <div className="relative">

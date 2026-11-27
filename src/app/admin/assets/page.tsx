@@ -1,7 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ImageIcon, 
@@ -23,9 +21,7 @@ import {
   Wine,
   Zap,
   User,
-  MoreVertical,
-  History,
-  FolderOpen
+  MoreVertical
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -44,14 +40,9 @@ import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { useProfile } from '@/hooks/use-profile';
 
-const CATEGORIES = ['All', 'Profile Images', 'Product Images', 'System Images'];
-const ASSET_FOLDERS = [
-  { name: 'Profile Images', key: 'Profile Images', prefix: 'profile/', description: 'Customer, staff and administrator photos.', icon: User, tone: 'text-blue-600 bg-blue-50' },
-  { name: 'Product Images', key: 'Product Images', prefix: 'products/', description: 'Store, carwash and lounge product photography.', icon: ShoppingBag, tone: 'text-emerald-600 bg-emerald-50' },
-  { name: 'System Images', key: 'System Images', prefix: 'system/', description: 'Logos, banners and application graphics.', icon: Layers, tone: 'text-violet-600 bg-violet-50' },
-];
+const CATEGORIES = ['All', 'Store', 'Lounge', 'Carwash', 'Profile', 'Other'];
 
-export default function AssetLibraryPage() {
+export default function AssetHub() {
   const { isSuperAdmin } = useProfile();
   const [images, setImages] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,10 +72,8 @@ export default function AssetLibraryPage() {
 
   const filteredAssets = useMemo(() => {
     return images.filter(img => {
-      const assetKey = String(img?.key || '');
-      const assetCategory = String(img?.category || 'System Images');
-      const matchesSearch = !searchTerm || assetKey.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesCat = activeCategory === 'All' || assetCategory.toLowerCase() === activeCategory.toLowerCase();
+      const matchesSearch = !searchTerm || img.key.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesCat = activeCategory === 'All' || img.category.toLowerCase() === activeCategory.toLowerCase();
       return matchesSearch && matchesCat;
     });
   }, [images, searchTerm, activeCategory]);
@@ -94,25 +83,25 @@ export default function AssetLibraryPage() {
     return {
       count: images.length,
       size: (totalSize / (1024 * 1024)).toFixed(2) + ' MB',
-      categories: ASSET_FOLDERS.map(folder => ({
-        name: folder.name,
-        count: images.filter(img => String(img?.category || 'System Images').toLowerCase() === folder.name.toLowerCase()).length
+      categories: CATEGORIES.filter(c => c !== 'All').map(c => ({
+        name: c,
+        count: images.filter(img => img.category.toLowerCase() === c.toLowerCase()).length
       }))
     };
   }, [images]);
 
-  if (!isSuperAdmin) return <div className="p-20 text-center font-black uppercase">Access denied</div>;
+  if (!isSuperAdmin) return <div className="p-20 text-center font-black uppercase">Unauthorized Node</div>;
 
   return (
-    <div className="space-y-8 pb-32 max-w-[1600px] mx-auto pt-4 px-2 ua-compact-page">
+    <div className="space-y-8 pb-32 max-w-[1600px] mx-auto pt-4 px-2">
       {/* HEADER SECTION */}
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-1">
         <div className="space-y-2">
           <div className="flex items-center gap-3">
              <Cloud className="w-4 h-4 text-primary" />
-             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-400">R2 Asset Library</span>
+             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-400">Infrastructure Asset Hub</span>
           </div>
-          <PageHeader title="Global Assets" breadcrumb={["Admin", "Global Assets"]} className="mb-0" />
+          <h1 className="text-4xl md:text-5xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Global Assets</h1>
           <p className="text-zinc-500 uppercase text-[10px] font-bold tracking-widest">Real-time management of Cloudflare R2 storage nodes</p>
         </div>
         
@@ -142,24 +131,11 @@ export default function AssetLibraryPage() {
       </div>
 
       {/* KPI STRIP */}
-      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-zinc-100 bg-zinc-100 shadow-sm px-0 sm:grid-cols-2 sm:gap-4 sm:overflow-visible sm:rounded-none sm:border-0 sm:bg-transparent sm:shadow-none sm:px-1 lg:grid-cols-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 px-1">
          <AssetMetric title="Asset Count" value={stats.count.toString()} sub="Total Objects" icon={Layers} />
-         <AssetMetric title="Storage Used" value={stats.size} sub="Total image storage" icon={Database} color="text-primary" />
+         <AssetMetric title="Node Weight" value={stats.size} sub="Storage Volume" icon={Database} color="text-primary" />
          <AssetMetric title="Edge Status" value="ACTIVE" sub="Cape Town Node" icon={ShieldCheck} color="text-emerald-600" />
          <AssetMetric title="Provider" value="CLOUDFLARE" sub="R2 Infrastructure" icon={Cloud} color="text-blue-500" />
-      </div>
-
-      {/* STORAGE FOLDERS */}
-      <div className="grid grid-cols-1 gap-3 px-1 sm:grid-cols-3">
-        {ASSET_FOLDERS.map(folder => {
-          const count = stats.categories.find(item => item.name === folder.name)?.count || 0;
-          const active = activeCategory === folder.key;
-          return <button key={folder.key} type="button" onClick={() => setActiveCategory(active ? 'All' : folder.key)} className={cn("flex min-w-0 items-center gap-4 rounded-2xl border bg-white p-4 text-left shadow-sm transition-all hover:border-zinc-300 hover:shadow-md", active ? "border-zinc-900 ring-1 ring-zinc-900" : "border-zinc-100")}>
-            <span className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-xl", folder.tone)}><FolderOpen className="h-6 w-6" /></span>
-            <span className="min-w-0 flex-1"><span className="block text-xs font-black uppercase tracking-wide text-zinc-900">{folder.name}</span><span className="mt-1 block text-[10px] leading-4 text-zinc-500">{folder.description}</span><span className="mt-2 block text-[9px] font-bold text-zinc-400">{count} images · {folder.prefix}</span></span>
-            <ChevronRight className={cn("h-4 w-4 shrink-0", active ? "text-zinc-900" : "text-zinc-300")} />
-          </button>;
-        })}
       </div>
 
       {/* FILTERS & SEARCH */}
@@ -168,7 +144,7 @@ export default function AssetLibraryPage() {
             <div className="relative flex-1 w-full">
                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
                <Input 
-                 placeholder="Search images by file name..." 
+                 placeholder="Search assets by file name or category..." 
                  value={searchTerm}
                  onChange={e => setSearchTerm(e.target.value)}
                  className="h-14 pl-12 bg-zinc-50 border-none rounded-2xl font-bold uppercase text-xs"
@@ -222,7 +198,7 @@ export default function AssetLibraryPage() {
                     </div>
                     <div className="absolute top-4 left-4">
                        <Badge className="bg-white/90 backdrop-blur-md text-zinc-900 border-none font-black text-[7px] uppercase px-3 h-6 shadow-sm">
-                          {asset.category || 'System Images'}
+                          {asset.category}
                        </Badge>
                     </div>
                  </div>
@@ -263,7 +239,7 @@ export default function AssetLibraryPage() {
                     <div>
                        <h4 className="text-sm font-black text-zinc-900 uppercase">{asset.key.split('/').pop()}</h4>
                        <div className="flex items-center gap-4 mt-1.5">
-                          <Badge variant="outline" className="text-[8px] font-black uppercase border-zinc-100">{asset.category || 'System Images'}</Badge>
+                          <Badge variant="outline" className="text-[8px] font-black uppercase border-zinc-100">{asset.category}</Badge>
                           <span className="text-[9px] font-bold text-zinc-400 uppercase tracking-widest">{new Date(asset.lastModified).toLocaleString()}</span>
                           <span className="text-[9px] font-bold text-zinc-300 uppercase tracking-widest">{(asset.size / 1024).toFixed(1)} KB</span>
                        </div>
@@ -284,15 +260,15 @@ export default function AssetLibraryPage() {
 
 function AssetMetric({ title, value, sub, icon: Icon, color = "text-zinc-900" }: any) {
   return (
-    <Card className="border-0 shadow-none rounded-none bg-white p-4 group transition-colors sm:rounded-[2.5rem] sm:border sm:border-zinc-100 sm:shadow-sm sm:p-8 sm:hover:bg-zinc-50">
-       <div className="flex items-center justify-between mb-3 sm:mb-4">
-          <div className="w-9 h-9 rounded-xl bg-zinc-50 flex items-center justify-center text-zinc-300 shadow-inner transition-transform group-hover:scale-110 sm:w-12 sm:h-12 sm:rounded-2xl">
-             <Icon className={cn("w-4 h-4 sm:w-6 sm:h-6", color)} />
+    <Card className="border-none shadow-sm rounded-[2.5rem] bg-white p-8 border border-zinc-100 group hover:bg-zinc-50 transition-colors">
+       <div className="flex items-center justify-between mb-4">
+          <div className="w-12 h-12 rounded-2xl bg-zinc-50 flex items-center justify-center text-zinc-300 shadow-inner transition-transform group-hover:scale-110">
+             <Icon className={cn("w-6 h-6", color)} />
           </div>
           <Badge className="bg-primary/5 text-primary border-none text-[8px] font-black px-3 h-5">Verified</Badge>
        </div>
        <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest mb-1">{title}</p>
-       <h3 className="text-xl font-black font-headline text-zinc-900 tracking-tighter leading-none sm:text-3xl">{value}</h3>
+       <h3 className="text-3xl font-black font-headline text-zinc-900 tracking-tighter leading-none">{value}</h3>
        <p className="text-[8px] font-bold text-zinc-300 uppercase tracking-widest mt-2">{sub}</p>
     </Card>
   );

@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Banknote, 
@@ -96,25 +92,29 @@ export default function PayrollManagementPage() {
   const [advanceUserId, setAdvanceUserId] = useState('');
 
   const staffQuery = useMemoFirebase(() => {
-    if (!firestore || !isSuperAdmin) return null;
+    if (!firestore) return null;
     return query(collection(firestore, 'users'), where('role', '!=', 'CLIENT'));
-  }, [firestore, isSuperAdmin]);
+  }, [firestore]);
 
   const jobsQuery = useMemoFirebase(() => {
-    if (!firestore || !isSuperAdmin) return null;
+    if (!firestore) return null;
     return collection(firestore, 'carwash_jobs');
-  }, [firestore, isSuperAdmin]);
+  }, [firestore]);
 
   const advancesQuery = useMemoFirebase(() => {
-    if (!firestore || !isSuperAdmin) return null;
+    if (!firestore) return null;
     return query(collection(firestore, 'salary_advances'), orderBy('timestamp', 'desc'));
-  }, [firestore, isSuperAdmin]);
+  }, [firestore]);
 
   const { data: staff, loading: staffLoading } = useCollection<UserProfile>(staffQuery);
   const { data: allJobs } = useCollection<CarwashJob>(jobsQuery);
   const { data: advances } = useCollection<any>(advancesQuery);
 
-  const { startOfToday } = useBusinessClock();
+  const startOfToday = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }, []);
 
   const filteredJobsByTime = useMemo(() => {
     if (!allJobs) return [];
@@ -290,7 +290,7 @@ export default function PayrollManagementPage() {
   if (!isSuperAdmin) {
     return (
       <div className="h-[80vh] flex items-center justify-center p-6 text-center">
-         <div className="space-y-4 ua-compact-page">
+         <div className="space-y-4">
             <h2 className="text-xl font-black uppercase font-headline">Access Restricted</h2>
          </div>
       </div>
@@ -298,13 +298,13 @@ export default function PayrollManagementPage() {
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 ua-compact-page">
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2">
         <div>
           <div className="flex items-center gap-2 mb-2">
              <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">STAFF PAYROLL</span>
           </div>
-          <PageHeader title="Payroll" breadcrumb={["Admin", "Payroll"]} className="mb-0" />
+          <h1 className="text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">PAYROLL</h1>
         </div>
         <div className="flex items-center gap-3">
           <div className="flex gap-2 bg-white p-1.5 rounded-none border border-zinc-100 shadow-sm">
@@ -322,7 +322,7 @@ export default function PayrollManagementPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 px-2 ua-metric-strip">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 px-2">
         <KPICard title="Total Salaries" value={`KES ${totals.baseSalary.toLocaleString()}`} />
         <KPICard title="Commissions" value={`KES ${totals.commissions.toLocaleString()}`} color="text-primary" />
         <KPICard title="Staff Tips" value={`KES ${totals.tips.toLocaleString()}`} color="text-green-600" />

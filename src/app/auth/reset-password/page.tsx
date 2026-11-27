@@ -24,7 +24,6 @@ export default function ResetPasswordPage() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isVerifying, setIsVerifying] = useState(true);
   const [isValidCode, setIsValidCode] = useState(false);
@@ -70,11 +69,6 @@ export default function ResetPasswordPage() {
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!auth || !oobCode || isSubmitting) return;
-
-    if (password.length < 8 || passwordStrength < 50) {
-      toast({ variant: "destructive", title: "Password Too Weak", description: "Use at least 8 characters and add an uppercase letter, number or symbol." });
-      return;
-    }
 
     if (password !== confirmPassword) {
       toast({ variant: "destructive", title: "Passwords Mismatch", description: "Please ensure both passwords match." });
@@ -205,21 +199,18 @@ export default function ResetPasswordPage() {
                   <div className="relative">
                     <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
                     <Input 
-                      type={showConfirmPassword ? "text" : "password"} 
+                      type="password" 
                       value={confirmPassword} 
                       onChange={e => setConfirmPassword(e.target.value)} 
                       placeholder="Repeat password" 
-                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 pr-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10" 
+                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10" 
                       required 
                     />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-900">
-                      {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                    </button>
                   </div>
                 </div>
               </div>
 
-              <Button type="submit" disabled={isSubmitting || password.length < 8 || passwordStrength < 50} className="w-full h-16 bg-zinc-900 text-white font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-xl hover:bg-zinc-800 active:scale-95 transition-all gap-3">
+              <Button type="submit" disabled={isSubmitting || passwordStrength < 25} className="w-full h-16 bg-zinc-900 text-white font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-xl hover:bg-zinc-800 active:scale-95 transition-all gap-3">
                 {isSubmitting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : 'Save Password'}
               </Button>
             </form>

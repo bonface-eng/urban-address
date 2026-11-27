@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Send,
@@ -47,7 +43,7 @@ export default function UrbanAI() {
   const [isConsulting, setIsProcessing] = useState(false);
   const [aiStatus, setAiStatus] = useState<{ hasKey: boolean; status: string; message: string }>({ hasKey: false, status: 'CHECKING', message: 'Verifying link...' });
   
-  const { startOfToday } = useBusinessClock();
+  const startOfToday = new Date().setHours(0,0,0,0);
 
   useEffect(() => {
     checkAiStatus().then(res => {
@@ -57,19 +53,19 @@ export default function UrbanAI() {
 
   // Context Queries
   const ordersQuery = useMemoFirebase(() => {
-    if (!firestore || !isSuperAdmin) return null;
+    if (!firestore) return null;
     return query(collection(firestore, 'orders'), where('status', '==', 'PAID'), where('timestamp', '>=', startOfToday));
-  }, [firestore, startOfToday, isSuperAdmin]);
+  }, [firestore, startOfToday]);
 
   const inventoryQuery = useMemoFirebase(() => {
-    if (!firestore || !isSuperAdmin) return null;
+    if (!firestore) return null;
     return collection(firestore, 'inventory');
-  }, [firestore, isSuperAdmin]);
+  }, [firestore]);
 
   const historyQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return query(collection(firestore, 'users', user.uid, 'ai_chats'), orderBy('timestamp', 'desc'), limit(50));
-  }, [firestore, user?.uid, isSuperAdmin]);
+  }, [firestore, user?.uid]);
 
   const { data: todayOrders } = useCollection<Order>(ordersQuery);
   const { data: inventory } = useCollection<Product>(inventoryQuery);
@@ -196,10 +192,10 @@ export default function UrbanAI() {
   if (!isSuperAdmin) return null;
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 ua-compact-page">
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2">
         <div>
-          <PageHeader title="Urban AI" breadcrumb={["Admin", "Urban AI"]} className="mb-0" />
+          <h1 className="text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">URBAN AI</h1>
           <p className="text-zinc-500 mt-2 uppercase text-[10px] font-bold tracking-widest">Advanced Business Intelligence & Support</p>
         </div>
         <Badge 

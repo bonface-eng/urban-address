@@ -1,9 +1,6 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useMemo, useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
 import { 
   Car, 
   Plus, 
@@ -78,7 +75,6 @@ import { cn } from '@/lib/utils';
 import { CarwashJob, UserProfile, Product } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
-import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 
 export default function CarwashPage() {
   const firestore = useFirestore();
@@ -156,7 +152,6 @@ export default function CarwashPage() {
 
     const jobRef = doc(firestore, 'carwash_jobs', jobId);
     await updateDoc(jobRef, { status: newStatus });
-    await notifyTelegramClientEvent(getAuth().currentUser, { type: 'CARWASH_STATUS', jobId, status: newStatus, plate: currentJob?.plateNumber, attendant: currentJob?.attendantId });
 
     await addDoc(collection(firestore, 'audit_logs'), {
       action: `JOB_STATUS_${newStatus}`,
@@ -195,7 +190,7 @@ export default function CarwashPage() {
              <Activity className="w-3 h-3 md:w-3.5 md:h-3.5 text-primary" />
              <span className="text-[8px] md:text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Station Queue Management</span>
           </div>
-          <PageHeader title="Service Queue" breadcrumb={["Operations", "Service Queue"]} className="mb-0" />
+          <h1 className="text-2xl md:text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Service Queue</h1>
         </div>
       </div>
 

@@ -1,9 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
-import { useBusinessClock } from '@/hooks/use-business-clock';
-
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
   TrendingUp,
@@ -125,9 +121,8 @@ export default function DashboardPage() {
     }
   }, [dateFilter, mounted]);
 
-  const { startOfToday } = useBusinessClock();
-
   const timeThreshold = useMemo(() => {
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
     
     switch (dateFilter) {
       case 'TODAY': return startOfToday;
@@ -136,12 +131,12 @@ export default function DashboardPage() {
       case 'LAST_30_DAYS': return startOfToday - (30 * 24 * 60 * 60 * 1000);
       default: return 0;
     }
-  }, [dateFilter, startOfToday]);
+  }, [dateFilter]);
 
   // Security Gate: Only initiate global queries once the role is resolved as staff/admin
   const ordersQuery = useMemoFirebase(() => {
     if (!firestore || !mounted || profileLoading || !isEmployee) return null;
-    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'));
+    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'), limit(1000));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
   const inventoryQuery = useMemoFirebase(() => {
@@ -184,14 +179,13 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     const canSeeAll = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER';
+    const startOfToday = new Date().setHours(0, 0, 0, 0);
+    
     const baseOrders = allOrders?.filter(o => {
-      // Use the settlement time for sales reporting; fall back to creation time
-      // for older receipts that predate paidAt.
-      const saleTimestamp = o.paidAt || o.timestamp;
-      const isInRange = saleTimestamp >= timeThreshold;
+      const isInRange = o.timestamp >= timeThreshold;
       const isPaid = o.status === 'PAID';
       
-      if (dateFilter === 'YESTERDAY' && saleTimestamp >= startOfToday) return false;
+      if (dateFilter === 'YESTERDAY' && o.timestamp >= startOfToday) return false;
       if (!isInRange || !isPaid) return false;
       if (canSeeAll) return true;
       
@@ -381,7 +375,9 @@ export default function DashboardPage() {
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 pt-2">
         <div>
-          <PageHeader title="My Node" breadcrumb={["Operations", "My Node"]} className="mb-0" />
+          <h1 className="text-2xl md:text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">
+            My Node
+          </h1>
           <p className="text-[10px] md:text-xs text-zinc-500 font-black uppercase tracking-widest mt-2">
             {stats.isPersonalView ? 'Personal Shift Summary' : 'Global Network Overview'} • {profile?.displayName}
           </p>

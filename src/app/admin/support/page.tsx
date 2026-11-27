@@ -1,7 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useMemo, useState } from 'react';
 import { 
   MessageSquare, 
@@ -42,9 +40,9 @@ export default function AdminSupportInbox() {
   const itemsPerPage = 12;
 
   const queriesQuery = useMemo(() => {
-    if (!firestore || !isSuperAdmin) return null;
-    return query(collection(firestore, 'support_queries'), orderBy('timestamp', 'desc'));
-  }, [firestore, isSuperAdmin]);
+    if (!firestore) return null;
+    return query(collection(firestore, 'support_queries'), orderBy('timestamp', 'desc'), limit(500));
+  }, [firestore]);
 
   const { data: queries, loading } = useCollection<any>(queriesQuery);
 
@@ -83,7 +81,7 @@ export default function AdminSupportInbox() {
   if (!isSuperAdmin) {
     return (
       <div className="h-[80vh] flex items-center justify-center p-6 text-center">
-         <div className="space-y-4 ua-compact-page">
+         <div className="space-y-4">
             <ShieldCheck className="w-16 h-16 text-primary mx-auto opacity-20" />
             <h2 className="text-xl font-black uppercase font-headline">Access Restricted</h2>
          </div>
@@ -92,10 +90,10 @@ export default function AdminSupportInbox() {
   }
 
   return (
-    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 ua-compact-page">
+    <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2">
         <div>
-          <PageHeader title="Support Inbox" breadcrumb={["Admin", "Support Inbox"]} className="mb-0" />
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Support Inbox</h1>
           <p className="text-zinc-500 mt-2 uppercase text-[10px] font-bold tracking-widest">Customer inquiries registry</p>
         </div>
       </div>

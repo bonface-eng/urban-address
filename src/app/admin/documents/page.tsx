@@ -1,8 +1,6 @@
 
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useMemo } from 'react';
 import { 
   FileText, 
@@ -120,19 +118,8 @@ export default function DocumentsPage() {
       total: 4500,
       timestamp: Date.now(),
       cashierName: 'Admin Auditor',
-      customerName: 'Sample Customer',
-      customerPhone: '+254 700 000 000',
-      attendantName: template.unit === 'CARWASH' ? 'James Mwangi' : undefined,
-      attendantId: template.unit === 'CARWASH' ? 'sample-attendant' : undefined,
       tableNumber: template.unit === 'LOUNGE' ? 'T12' : null,
       plateNumber: template.unit === 'CARWASH' ? 'KDA 123X' : null,
-      vehicleMake: template.unit === 'CARWASH' ? 'Toyota' : undefined,
-      vehicleModel: template.unit === 'CARWASH' ? 'Axio' : undefined,
-      vehicleColor: template.unit === 'CARWASH' ? 'Silver' : undefined,
-      jobType: 'VEHICLE',
-      subtotal: 4500,
-      discount: 250,
-      tax: 0,
       items: [
         { name: 'Sample Item 01', quantity: 2, price: 1500, productId: '1' },
         { name: 'Sample Item 02', quantity: 1, price: 1500, productId: '2' },
@@ -142,23 +129,23 @@ export default function DocumentsPage() {
   };
 
   return (
-    <div className="mx-auto w-full max-w-[1600px] space-y-5 overflow-x-hidden px-1 pb-24 pt-2 ua-compact-page sm:space-y-8 sm:px-2 sm:pt-4">
-      <div className="no-print flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between sm:gap-6">
+    <div className="space-y-8 pb-20 max-w-[1600px] mx-auto pt-4 px-2">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 no-print">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <FileText className="w-3.5 h-3.5 text-primary" />
             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">Documentation Center</span>
           </div>
-          <PageHeader title="OS Documents" breadcrumb={["Admin", "OS Documents"]} className="mb-0" />
+          <h1 className="text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">OS Documents</h1>
           <p className="text-zinc-500 mt-2 uppercase text-[10px] font-bold tracking-widest max-w-2xl">
             Inventory audit forms and high-fidelity thermal receipt templates.
           </p>
         </div>
-        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:flex-wrap sm:gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button 
             onClick={handleDownloadExcel}
             disabled={isExportingExcel || filteredInventory.length === 0}
-            className="h-11 w-full justify-center rounded-lg bg-emerald-600 px-3 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm transition-all active:scale-95 hover:bg-emerald-700 sm:h-12 sm:w-auto sm:rounded-xl sm:px-6 sm:font-black sm:tracking-widest"
+            className="h-12 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 transition-all active:scale-95"
           >
             {isExportingExcel ? (
               <><RefreshCcw className="w-4 h-4 animate-spin mr-1" /> Generating Excel...</>
@@ -169,7 +156,7 @@ export default function DocumentsPage() {
           <Button 
             onClick={handleDownloadPDF}
             disabled={isExportingPDF || filteredInventory.length === 0}
-            className="h-11 w-full justify-center rounded-lg bg-zinc-900 px-3 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm transition-all active:scale-95 hover:bg-zinc-800 sm:h-12 sm:w-auto sm:rounded-xl sm:px-6 sm:font-black sm:tracking-widest"
+            className="h-12 px-6 bg-zinc-900 hover:bg-zinc-800 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 transition-all active:scale-95"
           >
             {isExportingPDF ? (
               <><RefreshCcw className="w-4 h-4 animate-spin mr-1" /> Generating PDF...</>
@@ -179,7 +166,7 @@ export default function DocumentsPage() {
           </Button>
           <Button 
             onClick={() => setIsReceiptSettingsOpen(true)}
-            className="h-11 w-full justify-center rounded-lg bg-primary px-3 text-[10px] font-bold uppercase tracking-wide text-white shadow-sm transition-all active:scale-95 hover:bg-orange-600 sm:h-12 sm:w-auto sm:rounded-xl sm:px-6 sm:font-black sm:tracking-widest"
+            className="h-12 px-6 bg-primary hover:bg-orange-600 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 transition-all active:scale-95"
           >
             <Settings2 className="w-4 h-4" /> Edit Receipt Data
           </Button>
@@ -187,20 +174,20 @@ export default function DocumentsPage() {
       </div>
 
       <Tabs defaultValue="stock-sheet" className="w-full no-print">
-         <TabsList className="mb-4 grid h-auto w-full grid-cols-2 gap-1 rounded-xl border border-zinc-100 bg-white p-1 shadow-sm sm:mb-8 sm:inline-flex sm:w-auto sm:grid-cols-none sm:rounded-2xl sm:p-1.5">
-            <TabsTrigger value="stock-sheet" className="h-10 rounded-lg px-2 text-[9px] font-bold uppercase tracking-wide transition-all data-[state=active]:bg-zinc-900 data-[state=active]:text-white sm:h-full sm:rounded-xl sm:px-8 sm:text-[10px] sm:font-black sm:tracking-widest">Audit Forms</TabsTrigger>
+         <TabsList className="bg-white p-1.5 rounded-2xl h-14 mb-8 shadow-sm border border-zinc-100 inline-flex">
+            <TabsTrigger value="stock-sheet" className="rounded-xl h-full px-8 text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-zinc-900 data-[state=active]:text-white transition-all">Audit Forms</TabsTrigger>
             <TabsTrigger value="receipts" className="rounded-xl h-full px-8 text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-zinc-900 data-[state=active]:text-white transition-all">Receipt Previews</TabsTrigger>
          </TabsList>
 
          <TabsContent value="stock-sheet" className="m-0 space-y-6">
-            <div className="flex flex-col gap-3 rounded-xl border border-zinc-100 bg-white p-3 shadow-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4 sm:rounded-2xl sm:p-4">
-               <div className="grid w-full grid-cols-3 gap-1 rounded-lg bg-zinc-100/60 p-1 sm:flex sm:w-auto sm:gap-2 sm:rounded-xl sm:p-1.5">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-zinc-100">
+               <div className="flex gap-2 bg-zinc-100/50 p-1.5 rounded-xl">
                   {['STORE', 'LOUNGE', 'CARWASH'].map((u) => (
                     <Button
                       key={u}
                       onClick={() => setActiveUnit(u as BusinessUnit)}
                       className={cn(
-                        "h-9 min-w-0 rounded-md px-2 text-[9px] font-bold uppercase tracking-wide transition-all sm:h-10 sm:rounded-lg sm:px-6 sm:font-black sm:tracking-widest",
+                        "h-10 px-6 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all",
                         activeUnit === u ? "bg-white text-primary shadow-sm" : "bg-transparent text-zinc-400 hover:text-zinc-900"
                       )}
                     >
@@ -208,7 +195,7 @@ export default function DocumentsPage() {
                     </Button>
                   ))}
                </div>
-               <div className="relative w-full min-w-0 flex-1 sm:w-auto">
+               <div className="relative flex-1 max-md">
                   <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
                   <Input 
                     placeholder="Search inventory..." 
@@ -219,25 +206,9 @@ export default function DocumentsPage() {
                </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 sm:hidden">
-  {filteredInventory.map((item) => (
-    <Card key={item.id} className="rounded-xl border border-zinc-200 bg-white p-3 shadow-sm">
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-zinc-100 bg-zinc-50 text-zinc-500"><LayoutList className="h-5 w-5" /></div>
-        <div className="min-w-0 flex-1"><p className="break-words text-sm font-semibold text-zinc-900">{item.name}</p><p className="mt-1 truncate text-xs text-zinc-500">{item.category} · {item.barcode || "No barcode"}</p></div>
-        <Badge variant="outline" className="shrink-0 text-[10px]">{item.stockLevel} in stock</Badge>
-      </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 border-t border-zinc-100 pt-3">
-        <div><p className="text-[10px] text-zinc-400">Physical count</p><div className="mt-1 h-9 rounded-md border border-dashed border-primary/30 bg-primary/5" /></div>
-        <div><p className="text-[10px] text-zinc-400">Last checked</p><p className="mt-2 text-xs font-medium text-zinc-700">{item.lastCountedAt ? new Date(item.lastCountedAt).toLocaleDateString() : "No history"}</p></div>
-      </div>
-    </Card>
-  ))}
-  {filteredInventory.length === 0 && <div className="rounded-xl border border-dashed border-zinc-200 bg-white px-4 py-10 text-center text-sm text-zinc-500">No inventory items found for this department.</div>}
-</div>
-<Card className="hidden overflow-x-auto rounded-2xl border border-zinc-100 bg-white shadow-sm sm:block">
+            <Card className="border-none shadow-mobile rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
                <CardContent className="p-0">
-                  <Table className="min-w-[760px]">
+                  <Table>
                      <TableHeader className="bg-zinc-50/50">
                         <TableRow className="border-zinc-100">
                            <TableHead className="pl-8 h-16 text-[10px] uppercase font-black tracking-widest text-zinc-400">Product Name</TableHead>
@@ -280,11 +251,8 @@ export default function DocumentsPage() {
          </TabsContent>
 
          <TabsContent value="receipts" className="m-0">
-            <div className="mb-4 rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-600">
-              Select a unit-specific receipt below. Lounge, Store and Carwash use separate receipt headings and transaction details; Carwash previews also show the assigned attendant.
-            </div>
-            <div className="grid grid-cols-1 gap-5 lg:grid-cols-12 lg:gap-8">
-               <div className="min-w-0 space-y-3 lg:col-span-4 lg:space-y-4">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+               <div className="lg:col-span-4 space-y-4">
                   <p className="text-[10px] font-black uppercase text-zinc-400 tracking-widest px-2">Select Design</p>
                   {TEMPLATE_PREVIEWS.map((tmpl) => (
                     <button
@@ -314,7 +282,7 @@ export default function DocumentsPage() {
 
                <div className="lg:col-span-8">
                   {selectedTemplate ? (
-                    <div className="flex min-w-0 flex-col items-center overflow-x-auto rounded-xl border border-dashed border-zinc-200 bg-zinc-50/50 p-3 sm:rounded-3xl sm:p-6 lg:p-10">
+                    <div className="flex flex-col items-center animate-in fade-in slide-in-from-right-4 duration-500 bg-zinc-50/50 rounded-[3rem] p-12 border border-dashed border-zinc-200">
                        <ReceiptPreview data={selectedTemplate} className="w-full" />
                     </div>
                   ) : (

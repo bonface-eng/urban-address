@@ -1,11 +1,8 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   ShieldCheck, 
-  Award,
   Activity, 
   Settings2, 
   Save,
@@ -26,7 +23,6 @@ import {
   Coffee, 
   ShoppingBag, 
   MonitorPlay, 
-  Smartphone,
   Package, 
   Car, 
   Users, 
@@ -51,7 +47,6 @@ import {
   Cloud,
   UserPlus,
   MonitorCheck,
-  Image as ImageIcon,
   Moon,
   Sun,
   AlertCircle,
@@ -103,7 +98,7 @@ import { doc, setDoc, collection, query, orderBy, limit, addDoc, deleteDoc, upda
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
-import { UserRole, AuditLog, BusinessUnit, UserProfile, POSTerminal, BusinessBranch } from '@/lib/types';
+import { UserRole, AuditLog, BusinessUnit, UserProfile, POSTerminal } from '@/lib/types';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -122,49 +117,45 @@ const UNITS: { label: string; value: BusinessUnit }[] = [
   { label: 'Carwash Detailing', value: 'CARWASH' }
 ];
 
-const ACCESS_PAGES: Array<{ label: string; href: string; icon: React.ElementType; group: string; superOnly?: boolean }> = [
-  // Operations
+const ACCESS_PAGES = [
+  // Hub 1: Operations
   { label: 'Dashboard Overview', href: '/dashboard', icon: LayoutDashboard, group: 'Operations' },
   { label: 'Kitchen Board', href: '/kds', icon: ChefHat, group: 'Operations' },
   { label: 'Lounge Station', href: '/lounge', icon: Coffee, group: 'Operations' },
   { label: 'Retail Station', href: '/store', icon: Store, group: 'Operations' },
   { label: 'Carwash Station', href: '/carwash/pos', icon: MonitorPlay, group: 'Operations' },
-
-  // Intelligence
+  
+  // Hub 2: Intelligence
+  { label: 'Intelligence Hub', href: '/admin/hubs/intelligence', icon: LayoutGrid, group: 'Intelligence' },
   { label: 'AI Analyst', href: '/admin/intelligence', icon: Bot, group: 'Intelligence' },
   { label: 'Security Monitoring', href: '/reports/fraud', icon: ShieldAlert, group: 'Intelligence' },
   { label: 'System Health', href: '/admin/database', icon: HardDrive, group: 'Intelligence' },
-  { label: 'System Errors', href: '/admin/system-errors', icon: AlertCircle, group: 'Intelligence', superOnly: true },
 
-  // Staff
-  { label: 'Team Registry', href: '/employees', icon: Users, group: 'Staff' },
-  { label: 'Attendant Performance', href: '/attendants', icon: UserCircle, group: 'Staff' },
+  // Hub 3: Staff
+  { label: 'Staff Hub', href: '/admin/hubs/staff', icon: Users, group: 'Staff' },
+  { label: 'Team List', href: '/employees', icon: Users, group: 'Staff' },
+  { label: 'Team Metrics', href: '/attendants', icon: UserCircle, group: 'Staff' },
   { label: 'Staff Payroll', href: '/admin/payroll', icon: Banknote, group: 'Staff' },
 
-  // Finance & customers
-  { label: 'Sales History', href: '/sales-history', icon: ClipboardList, group: 'Finance' },
-  { label: 'Petty Cash & Finance', href: '/finance', icon: Receipt, group: 'Finance' },
+  // Hub 4: Finance
+  { label: 'Finance Hub', href: '/admin/hubs/finance', icon: DollarSign, group: 'Finance' },
+  { label: 'Sales', href: '/sales-history', icon: ClipboardList, group: 'Finance' },
+  { label: 'Petty Cash', href: '/finance', icon: Receipt, group: 'Finance' },
   { label: 'Business Reports', href: '/reports', icon: BarChart3, group: 'Finance' },
   { label: 'Customer CRM', href: '/customers', icon: Contact, group: 'Finance' },
-  { label: 'Loyalty Reconciliation', href: '/admin/loyalty', icon: Award, group: 'Finance' },
 
-  // Logistics
+  // Hub 5: Logistics
+  { label: 'Logistics Hub', href: '/admin/hubs/logistics', icon: Package, group: 'Logistics' },
   { label: 'Inventory Catalog', href: '/inventory', icon: Package, group: 'Logistics' },
   { label: 'Supplier Network', href: '/suppliers', icon: Truck, group: 'Logistics' },
   { label: 'Service Queue', href: '/carwash', icon: Car, group: 'Logistics' },
 
-  // Direct administration pages (hub landing pages removed)
+  // Hub 6: Governance
+  { label: 'Governance Hub', href: '/admin/hubs/governance', icon: ShieldCheck, group: 'Governance' },
   { label: 'Access Matrix', href: '/admin', icon: Terminal, group: 'Governance' },
-  { label: 'Branch Management', href: '/admin/branches', icon: Building2, group: 'Governance' },
-  { label: 'Digital Menu Display', href: '/admin/digital-menu', icon: MonitorPlay, group: 'Governance' },
-  { label: 'App Release Manager', href: '/admin/app-manager', icon: Smartphone, group: 'Governance' },
-  { label: 'Asset Library', href: '/admin/assets', icon: ImageIcon, group: 'Governance' },
-  { label: 'Live Audio Support', href: '/admin/live-audio', icon: MonitorCheck, group: 'Governance' },
   { label: 'Support Inbox', href: '/admin/support', icon: MessageSquare, group: 'Governance' },
   { label: 'OS Documents', href: '/admin/documents', icon: FileText, group: 'Governance' },
-  { label: 'Email Communications', href: '/admin/email', icon: Mail, group: 'Governance', superOnly: true },
-  { label: 'Telegram Management', href: '/admin/telegram', icon: Send, group: 'Governance', superOnly: true },
-  { label: 'Help Guide', href: '/admin/help', icon: BookOpen, group: 'Governance' },
+  { label: 'Operations Guide', href: '/admin/help', icon: BookOpen, group: 'Governance' },
 ];
 
 export default function AdminPanel() {
@@ -173,9 +164,7 @@ export default function AdminPanel() {
   const firestore = useFirestore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
-  const [isSettingUpBranches, setIsSettingUpBranches] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [activeAdminTab, setActiveAdminTab] = useState('matrix');
   const [terminalToDelete, setTerminalToDelete] = useState<{ id: string; name: string } | null>(null);
   
   // Broadcast State
@@ -188,26 +177,24 @@ export default function AdminPanel() {
 
   useEffect(() => {
     setMounted(true);
-    const requestedTab = new URLSearchParams(window.location.search).get('tab');
-    if (requestedTab && ['matrix', 'staff', 'broadcasting', 'stations', 'config'].includes(requestedTab)) setActiveAdminTab(requestedTab);
   }, []);
 
   // Guard document requests with user session to prevent permission errors
   const permissionsRef = useMemo(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return doc(firestore, 'system', 'permissions');
-  }, [firestore, user, isSuperAdmin]);
+  }, [firestore, user]);
 
   const configRef = useMemo(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return doc(firestore, 'system', 'config');
-  }, [firestore, user, isSuperAdmin]);
+  }, [firestore, user]);
 
   const { data: permMap } = useDoc<any>(permissionsRef);
   const { data: remoteConfig } = useDoc<any>(configRef);
 
   const [localPerms, setLocalPerms] = useState<Record<string, string[]>>({});
-  const [isPermsDirty, setIsPermsDirty] = useState(false);
+  const [isPermsLoaded, setIsPermsLoaded] = useState(false);
 
   const [localConfig, setLocalConfig] = useState({
     commissionStandard: '30.00',
@@ -216,51 +203,47 @@ export default function AdminPanel() {
     paystackSecretKeyLive: '',
     visualTheme: 'NONE'
   });
-
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
   const terminalsRef = useMemo(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return collection(firestore, 'pos_terminals');
-  }, [firestore, user, isSuperAdmin]);
+  }, [firestore, user]);
 
   const { data: terminals } = useCollection<POSTerminal>(terminalsRef);
 
-  const branchesRef = useMemo(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
-    return collection(firestore, 'branches');
-  }, [firestore, user, isSuperAdmin]);
-  const { data: branches } = useCollection<BusinessBranch>(branchesRef);
-
   const staffQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return query(collection(firestore, 'users'), orderBy('createdAt', 'desc'));
-  }, [firestore, user, isSuperAdmin]);
+  }, [firestore, user]);
   const { data: allStaff } = useCollection<UserProfile>(staffQuery);
 
   const broadcastHistoryQuery = useMemoFirebase(() => {
-    if (!firestore || !user || !isSuperAdmin) return null;
+    if (!firestore || !user) return null;
     return query(
       collection(firestore, 'audit_logs'),
       where('action', '==', 'INTERNAL_BROADCAST'),
       orderBy('timestamp', 'desc'),
       limit(15)
     );
-  }, [firestore, user, isSuperAdmin]);
+  }, [firestore, user]);
   const { data: broadcastHistory } = useCollection<AuditLog>(broadcastHistoryQuery);
 
-  // Keep administrator settings synchronized with other administrators while
-  // preserving this session's unsaved permission edits.
   useEffect(() => {
-    if (permMap && !isPermsDirty) setLocalPerms(permMap);
-  }, [permMap, isPermsDirty]);
+    if (permMap && !isPermsLoaded) {
+      setLocalPerms(permMap);
+      setIsPermsLoaded(true);
+    }
+  }, [permMap, isPermsLoaded]);
 
-  // Global configuration is read-only in this panel; mirror every remote update.
   useEffect(() => {
-    if (remoteConfig) setLocalConfig(prev => ({ ...prev, ...remoteConfig }));
-  }, [remoteConfig]);
+    if (remoteConfig && !isConfigLoaded) {
+      setLocalConfig(prev => ({ ...prev, ...remoteConfig }));
+      setIsConfigLoaded(true);
+    }
+  }, [remoteConfig, isConfigLoaded]);
 
   const togglePermission = (role: string, href: string) => {
-    setIsPermsDirty(true);
     setLocalPerms(prev => {
       const current = (prev && prev[role]) ? [...prev[role]] : [];
       const updated = current.includes(href) 
@@ -277,7 +260,6 @@ export default function AdminPanel() {
     try {
       await setDoc(doc(firestore, 'system', 'permissions'), localPerms);
       await setDoc(doc(firestore, 'system', 'config'), localConfig);
-      setIsPermsDirty(false);
       
       await addDoc(collection(firestore, 'audit_logs'), {
         action: 'UPDATE_SETTINGS',
@@ -393,106 +375,6 @@ export default function AdminPanel() {
     }
   };
 
-  const defaultNakaBranch = (branches || []).find(branch => branch.code === 'default-naka');
-  const currentStaff = (allStaff || []).filter(staff => staff.role && staff.role !== 'CLIENT');
-  const branchSetupNeeded = Boolean(branches && allStaff && (
-    !defaultNakaBranch || currentStaff.some(staff =>
-      !(staff.branchIds || []).includes(defaultNakaBranch.id) || staff.activeBranchId !== defaultNakaBranch.id
-    )
-  ));
-
-  const setupDefaultNakaBranch = async () => {
-    if (!firestore || !user || !profile || !isSuperAdmin || !branches || !allStaff) return;
-    setIsSettingUpBranches(true);
-    try {
-      const now = Date.now();
-      const branchId = defaultNakaBranch?.id || 'default-naka';
-      const branchRef = doc(firestore, 'branches', branchId);
-      const branchData = {
-        id: branchId,
-        businessId: 'urban-address' as const,
-        name: 'Default - Naka Branch',
-        code: 'default-naka',
-        status: 'ACTIVE' as const,
-        isPrimary: true,
-        location: defaultNakaBranch?.location || {
-          address: '',
-          town: 'Naka',
-          county: 'Nakuru',
-          country: 'Kenya'
-        },
-        phone: defaultNakaBranch?.phone || '',
-        createdAt: defaultNakaBranch?.createdAt || now,
-        createdBy: defaultNakaBranch?.createdBy || user.uid,
-        updatedAt: now,
-        updatedBy: user.uid
-      };
-
-      const branchBatch = writeBatch(firestore);
-      branchBatch.set(branchRef, branchData, { merge: true });
-      (branches || []).filter(branch => branch.id !== branchId && branch.isPrimary).forEach(branch => {
-        branchBatch.update(doc(firestore, 'branches', branch.id), {
-          isPrimary: false, updatedAt: now, updatedBy: user.uid
-        });
-      });
-      await branchBatch.commit();
-
-      const staffToAssign = currentStaff.filter(staff =>
-        !(staff.branchIds || []).includes(branchId) || staff.activeBranchId !== branchId
-      );
-      for (let offset = 0; offset < staffToAssign.length; offset += 450) {
-        const batch = writeBatch(firestore);
-        staffToAssign.slice(offset, offset + 450).forEach(staff => {
-          const branchIds = Array.from(new Set([...(staff.branchIds || []), branchId]));
-          batch.update(doc(firestore, 'users', staff.uid), {
-            branchIds,
-            activeBranchId: branchId,
-            updatedAt: now
-          });
-        });
-        await batch.commit();
-      }
-
-      await addDoc(collection(firestore, 'audit_logs'), {
-        action: 'INITIALIZE_BRANCH_STRUCTURE',
-        userId: profile.uid,
-        details: `Created or confirmed Default - Naka Branch and assigned ${staffToAssign.length} existing staff accounts.`,
-        timestamp: now,
-        severity: 'INFO'
-      });
-      toast({
-        title: 'Default - Naka Branch is ready',
-        description: `${staffToAssign.length} existing staff account(s) assigned. You can now add other branches and locations.`
-      });
-    } catch (error) {
-      console.error('[branch-setup] Failed to initialize default Naka branch', error);
-      toast({
-        variant: 'destructive',
-        title: 'Branch setup was not completed',
-        description: 'Some setup steps may have saved. Retry this action to safely finish assigning the existing staff.'
-      });
-    } finally {
-      setIsSettingUpBranches(false);
-    }
-  };
-
-  const handleBranchToggle = async (staff: UserProfile, branchId: string) => {
-    if (!firestore || !profile || staff.role === 'CLIENT') return;
-    const currentIds = staff.branchIds || [];
-    const branchIds = currentIds.includes(branchId)
-      ? currentIds.filter(id => id !== branchId)
-      : [...currentIds, branchId];
-    const activeBranchId = staff.activeBranchId && branchIds.includes(staff.activeBranchId)
-      ? staff.activeBranchId
-      : branchIds[0] || null;
-    try {
-      await updateDoc(doc(firestore, 'users', staff.uid), { branchIds, activeBranchId });
-      toast({ title: 'Branch access updated', description: `${staff.displayName} can access ${branchIds.length} branch(es).` });
-    } catch {
-      toast({ variant: 'destructive', title: 'Branch assignment failed' });
-    }
-  };
-
   const handleUnitToggle = async (user: UserProfile, unitVal: BusinessUnit) => {
     if (!firestore || !profile) return;
     const currentUnits = user.assignedUnits || [];
@@ -514,19 +396,19 @@ export default function AdminPanel() {
   if (!isSuperAdmin) return null;
 
   return (
-    <div className="admin-hub ua-compact-page space-y-5 pb-28 sm:space-y-8 sm:pb-24 max-w-[1600px] mx-auto">
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 px-2 pt-2 sm:pt-4">
+    <div className="space-y-8 pb-24 max-w-[1600px] mx-auto">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 px-2 pt-4">
         <div>
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-400">System Governance</span>
           </div>
-          <PageHeader title="Administration" breadcrumb={["Admin", "Administration"]} className="mb-0" />
+          <h1 className="text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">ADMIN HUB</h1>
         </div>
         <div className="flex gap-3">
           <Button 
             onClick={handleSaveAll}
             disabled={isSubmitting}
-            className="h-11 w-full sm:w-auto px-4 sm:px-8 bg-zinc-900 hover:bg-zinc-800 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 transition-all active:scale-95"
+            className="h-12 px-8 bg-zinc-900 hover:bg-zinc-800 text-white font-black uppercase text-[10px] tracking-widest rounded-2xl shadow-xl gap-2 transition-all active:scale-95"
           >
             {isSubmitting ? <RefreshCcw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4 text-primary" />}
             Save OS Changes
@@ -534,38 +416,10 @@ export default function AdminPanel() {
         </div>
       </div>
 
-      {isSuperAdmin && branchSetupNeeded && (
-        <Card className="mx-2 overflow-hidden rounded-2xl border border-amber-200 bg-amber-50/70 shadow-sm">
-          <CardContent className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between sm:p-5">
-            <div className="flex min-w-0 items-start gap-3">
-              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-200 bg-white text-amber-700">
-                <Building2 className="h-5 w-5" />
-              </div>
-              <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-sm font-black text-zinc-900">Complete your branch setup</h2>
-                  <Badge className="border-amber-200 bg-amber-100 text-amber-800">Action required</Badge>
-                </div>
-                <p className="mt-1 max-w-3xl text-xs leading-5 text-zinc-600">
-                  Urban Address is currently one business expanding to multiple locations. Set up <strong>Default - Naka Branch</strong> as the primary location and assign all existing staff accounts to it. Their current roles and station permissions will remain unchanged.
-                </p>
-              </div>
-            </div>
-            <div className="flex shrink-0 flex-col gap-2 sm:min-w-[230px]">
-              <Button onClick={setupDefaultNakaBranch} disabled={isSettingUpBranches || !branches || !allStaff} className="h-11 rounded-xl bg-zinc-900 px-4 text-[10px] font-black uppercase tracking-wider text-white hover:bg-zinc-800">
-                {isSettingUpBranches ? <RefreshCcw className="mr-2 h-4 w-4 animate-spin" /> : <Building2 className="mr-2 h-4 w-4" />}
-                {isSettingUpBranches ? 'Setting up branch…' : 'Set up Naka branch'}
-              </Button>
-              <a href="/admin/branches" className="text-center text-[10px] font-bold text-zinc-600 underline underline-offset-4 hover:text-zinc-950">Review branches and add locations</a>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      <Tabs value={activeAdminTab} onValueChange={setActiveAdminTab} className="w-full">
+      <Tabs defaultValue="matrix" className="w-full">
         <div className="px-2 overflow-x-auto no-scrollbar pb-2">
-          <TabsList className="bg-white p-1 rounded-xl sm:rounded-[1.5rem] h-12 sm:h-14 mb-3 sm:mb-4 shadow-sm border border-zinc-100 flex w-max min-w-full lg:w-full">
-            <TabsTrigger value="matrix" className="rounded-lg sm:rounded-xl h-full px-3 sm:px-5 text-[9px] sm:text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Access Matrix</TabsTrigger>
+          <TabsList className="bg-white p-1 rounded-[1.5rem] h-14 mb-4 shadow-sm border border-zinc-100 flex w-max min-w-full lg:w-full">
+            <TabsTrigger value="matrix" className="rounded-xl h-full px-5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Access Matrix</TabsTrigger>
             <TabsTrigger value="staff" className="rounded-xl h-full px-5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Staff Registry</TabsTrigger>
             <TabsTrigger value="broadcasting" className="rounded-xl h-full px-5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">Internal Alerts</TabsTrigger>
             <TabsTrigger value="stations" className="rounded-xl h-full px-5 text-[10px] font-black uppercase tracking-widest whitespace-nowrap">POS Stations</TabsTrigger>
@@ -574,72 +428,69 @@ export default function AdminPanel() {
         </div>
 
         <TabsContent value="matrix" className="px-2">
-          <section className="space-y-5">
-            <div className="flex flex-col gap-3 border-b border-zinc-200 pb-5 sm:flex-row sm:items-end sm:justify-between">
-              <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-primary">Access governance</p>
-                <h2 className="mt-1 text-xl font-black tracking-tight text-zinc-950 sm:text-2xl">Role permissions</h2>
-                <p className="mt-1 max-w-2xl text-sm leading-5 text-zinc-500">Choose which operational areas each role can open. Changes remain local until you save OS changes.</p>
-              </div>
-              <div className="flex flex-wrap gap-2 text-[10px] font-semibold text-zinc-500">
-                <span className="rounded-md border border-zinc-200 px-2.5 py-1.5">{ROLES.length} roles</span>
-                <span className="rounded-md border border-zinc-200 px-2.5 py-1.5">{ACCESS_PAGES.length} modules</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {ROLES.map(role => {
-                const enabledCount = ACCESS_PAGES.filter(page => !page.superOnly && localPerms?.[role]?.includes(page.href)).length;
-                const groupedPages = ACCESS_PAGES.reduce<Record<string, typeof ACCESS_PAGES>>((groups, page) => {
-                  (groups[page.group] ||= []).push(page);
-                  return groups;
-                }, {});
-                return (
-                  <article key={role} className="min-w-0 overflow-hidden rounded-xl border border-zinc-200 bg-white">
-                    <header className="flex items-center justify-between gap-3 border-b border-zinc-100 px-4 py-3 sm:px-5">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700"><ShieldCheck className="h-4 w-4" /></div>
-                        <div className="min-w-0">
-                          <h3 className="text-xs font-black uppercase tracking-[0.12em] text-zinc-900">{role}</h3>
-                          <p className="mt-0.5 text-[11px] text-zinc-500">{enabledCount} of {ACCESS_PAGES.length} modules enabled</p>
-                        </div>
-                      </div>
-                      <span className="shrink-0 text-xs font-bold tabular-nums text-zinc-700">{Math.round((enabledCount / ACCESS_PAGES.length) * 100)}%</span>
-                    </header>
-                    <div className="divide-y divide-zinc-100">
-                      {Object.entries(groupedPages).map(([group, pages]) => (
-                        <section key={group} className="px-4 py-3 sm:px-5">
-                          <h4 className="mb-2 text-[9px] font-black uppercase tracking-[0.2em] text-primary">{group}</h4>
-                          <div className="grid grid-cols-1 gap-1 sm:grid-cols-2">
-                            {pages.map(page => {
-                              const allowed = page.superOnly || Boolean(localPerms?.[role]?.includes(page.href));
-                              return (
-                                <button key={page.href} type="button" aria-pressed={allowed} disabled={page.superOnly} onClick={() => { if (!page.superOnly) togglePermission(role, page.href); }}
-                                  className={cn("flex min-h-10 min-w-0 items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40", allowed ? "border-primary/30 bg-orange-50/40 text-zinc-900" : "border-transparent bg-zinc-50/70 text-zinc-500 hover:border-zinc-200 hover:bg-white")}>
-                                  <span className="flex min-w-0 items-center gap-2">
-                                    <page.icon className={cn("h-3.5 w-3.5 shrink-0", allowed ? "text-primary" : "text-zinc-400")} />
-                                    <span className="truncate text-[10px] font-bold">{page.label}{page.superOnly ? ' · Super admin only' : ''}</span>
-                                  </span>
-                                  <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-md border", allowed ? "border-primary bg-primary text-white" : "border-zinc-300 bg-white text-transparent")}>
-                                    {allowed && <Check className="h-3 w-3 stroke-[3]" />}
-                                  </span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      ))}
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-            <p className="text-[11px] leading-5 text-zinc-500">Security note: this matrix controls role-based page visibility. Sensitive operations must continue to enforce authorization in their own server-side or Firestore security rules.</p>
-          </section>
+           <Card className="border-none shadow-mobile rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
+             <div className="p-6 sm:p-8 border-b border-zinc-50">
+                <h3 className="text-sm font-black uppercase tracking-widest text-zinc-900">Permission Registry</h3>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mt-1">Define role-based visibility across operational hubs.</p>
+             </div>
+             <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                   <thead>
+                      <tr className="bg-zinc-50 border-b border-zinc-100">
+                         <th className="p-4 sm:p-6 text-[10px] font-black uppercase text-zinc-400 tracking-widest min-w-[220px] sticky left-0 bg-zinc-50 z-10">Module Identifier</th>
+                         {ROLES.map(role => (
+                           <th key={role} className="p-4 sm:p-6 text-[10px] font-black uppercase text-zinc-900 tracking-widest text-center min-w-[90px]">{role}</th>
+                         ))}
+                      </tr>
+                   </thead>
+                   <tbody className="divide-y divide-zinc-50">
+                      {ACCESS_PAGES.map((page, pIdx) => {
+                        const showGroupLabel = pIdx === 0 || ACCESS_PAGES[pIdx - 1].group !== page.group;
+                        return (
+                          <React.Fragment key={page.href}>
+                            {showGroupLabel && (
+                              <tr className="bg-zinc-50/50">
+                                <td colSpan={ROLES.length + 1} className="p-3 px-6">
+                                   <span className="text-[9px] font-black uppercase text-primary tracking-[0.3em]">{page.group} HUB</span>
+                                </td>
+                              </tr>
+                            )}
+                            <tr className="group hover:bg-zinc-50/50 transition-colors">
+                               <td className="p-4 sm:p-6 sticky left-0 bg-white group-hover:bg-zinc-50/50 transition-colors z-10">
+                                  <div className="flex items-center gap-3">
+                                     <page.icon className="w-4 h-4 text-zinc-300" />
+                                     <span className="text-[11px] font-black uppercase text-zinc-600 whitespace-nowrap">{page.label}</span>
+                                  </div>
+                               </td>
+                               {ROLES.map(role => {
+                                 const isAllowed = localPerms && localPerms[role] && localPerms[role].includes(page.href);
+                                 return (
+                                   <td key={role} className="p-4 sm:p-6 text-center">
+                                      <button 
+                                        onClick={() => togglePermission(role, page.href)}
+                                        className={cn(
+                                          "w-10 h-10 rounded-xl flex items-center justify-center mx-auto transition-all shadow-sm border",
+                                          isAllowed ? "bg-primary border-primary shadow-primary/20 text-white" : "bg-white border-zinc-100 text-zinc-200"
+                                        )}
+                                      >
+                                         {isAllowed ? <Check className="w-4 h-4 stroke-[3] text-white" /> : <Zap className="w-4 h-4" />}
+                                      </button>
+                                   </td>
+                                 );
+                               })}
+                            </tr>
+                          </React.Fragment>
+                        );
+                      })}
+                   </tbody>
+                </table>
+             </div>
+           </Card>
         </TabsContent>
 
         <TabsContent value="staff" className="px-2">
            <Card className="rounded-[2.5rem] border-none shadow-mobile bg-white overflow-hidden border border-zinc-100">
-              <div className="p-4 sm:p-8 border-b border-zinc-50 flex flex-wrap items-center justify-between gap-3">
+              <div className="p-6 sm:p-8 border-b border-zinc-50 flex items-center justify-between">
                  <h3 className="text-sm font-black uppercase tracking-widest">Personnel Registry</h3>
                  <div className="flex items-center gap-3">
                    <Badge className="bg-zinc-100 text-zinc-400 uppercase font-black text-[8px] px-3">{allStaff?.length} Members</Badge>
@@ -648,7 +499,6 @@ export default function AdminPanel() {
                    </a>
                  </div>
               </div>
-              <div className="hidden overflow-x-auto md:block">
               <div className="overflow-x-auto">
                 <Table>
                    <TableHeader className="bg-zinc-50/50">
@@ -656,7 +506,6 @@ export default function AdminPanel() {
                          <TableHead className="pl-8 h-14 text-[10px] font-black uppercase">Identity</TableHead>
                          <TableHead className="h-14 text-[10px] font-black uppercase text-center">System Role</TableHead>
                          <TableHead className="h-14 text-[10px] font-black uppercase text-center">Station Authorization</TableHead>
-                         <TableHead className="h-14 text-[10px] font-black uppercase text-center">Branch Access</TableHead>
                          <TableHead className="pr-8 h-14 text-[10px] font-black uppercase text-right">Joined On</TableHead>
                       </TableRow>
                    </TableHeader>
@@ -679,7 +528,7 @@ export default function AdminPanel() {
                                  <PopoverTrigger asChild>
                                    <Button variant="outline" className="h-9 px-3 rounded-xl border-zinc-100 bg-white shadow-sm flex items-center gap-2 mx-auto">
                                       {currentUnits.length === 0 ? (
-                                        <span className="text-[8px] font-black text-zinc-400 uppercase">All Stations</span>
+                                        <span className="text-[8px] font-black text-zinc-400 uppercase">Global Hub</span>
                                       ) : (
                                         <div className="flex gap-1">
                                           {currentUnits.map(u => (
@@ -712,91 +561,13 @@ export default function AdminPanel() {
                                  </PopoverContent>
                                </Popover>
                              </TableCell>
-                             <TableCell className="text-center">
-                               {s.role === 'CLIENT' ? <span className="text-[9px] text-zinc-300">Customer</span> : (
-                                 <Popover>
-                                   <PopoverTrigger asChild>
-                                     <Button variant="outline" className="mx-auto flex h-9 max-w-[190px] items-center gap-2 rounded-lg border-zinc-200 px-3 text-[9px] font-bold">
-                                       <span className="truncate">{(s.branchIds || []).length ? `${(s.branchIds || []).length} branch(es)` : 'No branch assigned'}</span>
-                                       <ChevronDown className="h-3 w-3 shrink-0 text-zinc-400" />
-                                     </Button>
-                                   </PopoverTrigger>
-                                   <PopoverContent align="center" className="w-64 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
-                                     <p className="px-3 py-2 text-[9px] font-black uppercase text-zinc-400">Assign branch access</p>
-                                     {(branches || []).filter(branch => branch.status === 'ACTIVE').map(branch => {
-                                       const assigned = (s.branchIds || []).includes(branch.id);
-                                       return <button key={branch.id} type="button" onClick={() => handleBranchToggle(s, branch.id)} className={cn("flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-xs font-bold", assigned ? "bg-primary/5 text-primary" : "text-zinc-600 hover:bg-zinc-50")}>
-                                         <span className="min-w-0"><span className="block truncate">{branch.name}</span><span className="text-[9px] font-normal text-zinc-400">{branch.location?.town}, {branch.location?.county}</span></span>
-                                         {assigned && <Check className="h-4 w-4 shrink-0" />}
-                                       </button>;
-                                     })}
-                                     {!(branches || []).length && <p className="px-3 py-4 text-xs text-zinc-400">Create a branch before assigning staff.</p>}
-                                   </PopoverContent>
-                                 </Popover>
-                               )}
-                             </TableCell>
                              <TableCell className="pr-8 text-right text-[10px] font-bold text-zinc-400">{new Date(s.createdAt).toLocaleDateString('en-KE')}</TableCell>
                           </TableRow>
                         );
                       })}
                    </TableBody>
                 </Table>
-      
               </div>
-              <div className="grid gap-3 p-3 md:hidden">
-                {allStaff?.length ? allStaff.map(s => {
-                  const currentUnits = s.assignedUnits || [];
-                  return (
-                    <article key={s.uid} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <p className="break-words text-sm font-black uppercase text-zinc-900">{s.displayName}</p>
-                          <p className="mt-1 break-all text-[11px] text-zinc-500">{s.email}</p>
-                          <div className="mt-2"><Badge variant="outline" className="text-[9px] font-bold uppercase">{s.role}</Badge></div>
-                        </div>
-                        <span className="shrink-0 text-[10px] text-zinc-400">{new Date(s.createdAt).toLocaleDateString('en-KE')}</span>
-                      </div>
-                      <div className="mt-3 flex items-center justify-between gap-2 border-t border-zinc-100 pt-3">
-                        <div className="flex min-w-0 flex-wrap gap-1">
-                          {currentUnits.length ? currentUnits.map(u => <Badge key={u} className="h-5 border-none bg-primary/10 px-2 text-[8px] text-primary">{u}</Badge>) : <span className="text-[9px] font-bold uppercase text-zinc-400">All Stations</span>}
-                        </div>
-                        {s.role !== 'CLIENT' && (
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button variant="outline" className="h-10 shrink-0 rounded-lg px-3 text-[9px] font-bold uppercase">Branches <ChevronDown className="ml-1 h-3 w-3"/></Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-64 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
-                              <p className="px-3 py-2 text-[9px] font-black uppercase text-zinc-400">Assign branch access</p>
-                              {(branches || []).filter(branch => branch.status === 'ACTIVE').map(branch => {
-                                const assigned = (s.branchIds || []).includes(branch.id);
-                                return <button key={branch.id} type="button" onClick={() => handleBranchToggle(s, branch.id)} className={cn("flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-xs font-bold", assigned ? "bg-primary/5 text-primary" : "text-zinc-600 hover:bg-zinc-50")}>
-                                  <span className="min-w-0"><span className="block truncate">{branch.name}</span><span className="text-[9px] font-normal text-zinc-400">{branch.location?.town}, {branch.location?.county}</span></span>
-                                  {assigned && <Check className="h-4 w-4 shrink-0" />}
-                                </button>;
-                              })}
-                              {!(branches || []).length && <p className="px-3 py-4 text-xs text-zinc-400">Create a branch before assigning staff.</p>}
-                            </PopoverContent>
-                          </Popover>
-                        )}
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <Button variant="outline" className="h-10 shrink-0 rounded-lg px-3 text-[9px] font-bold uppercase">Stations <ChevronDown className="ml-1 h-3 w-3"/></Button>
-                          </PopoverTrigger>
-                          <PopoverContent align="end" className="w-64 rounded-xl border border-zinc-200 bg-white p-2 shadow-xl">
-                            <p className="px-3 py-2 text-[9px] font-black uppercase text-zinc-400">Authorize Stations</p>
-                            {UNITS.map(u => (
-                              <button key={u.value} onClick={() => handleUnitToggle(s, u.value)} className={cn("flex min-h-11 w-full items-center justify-between rounded-lg px-3 text-left text-xs font-bold", currentUnits.includes(u.value) ? "bg-primary/5 text-primary" : "text-zinc-600 hover:bg-zinc-50")}>
-                                {u.label}
-                                {currentUnits.includes(u.value) && <Check className="h-4 w-4"/>}
-                              </button>
-                            ))}
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </article>
-                  );
-                }) : <div className="rounded-xl border border-dashed border-zinc-200 px-4 py-10 text-center text-xs text-zinc-400">No staff records available.</div>}
-              </div>        </div>
            </Card>
         </TabsContent>
         
@@ -808,7 +579,7 @@ export default function AdminPanel() {
                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest pt-1">Station Network Alerts</p>
                  </div>
                  <form onSubmit={handleBroadcast} className="space-y-5">
-                    <div className="space-y-4 ua-compact-page">
+                    <div className="space-y-4">
                        <div className="space-y-1.5">
                           <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Target Personnel</Label>
                           <Select value={broadcastTarget} onValueChange={setBroadcastTarget}>
@@ -891,24 +662,7 @@ export default function AdminPanel() {
                  </CardContent>
               </Card>
            </div>
-</TabsContent>
-        <TabsContent value="stations" className="px-2"><section className="space-y-4">
-<div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div><h2 className="text-base font-semibold text-zinc-900">POS Stations</h2><p className="mt-1 text-sm text-zinc-500">Register and manage terminals used by Lounge, Store and Carwash teams.</p></div><Badge variant="outline" className="w-fit">{terminals?.length || 0} registered stations</Badge></div>
-<Card className="rounded-lg border border-zinc-200 shadow-sm"><CardContent className="p-4 sm:p-5"><form onSubmit={(event) => { event.preventDefault(); void handleProvisionStation(); }} className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px_auto] sm:items-end">
-<div className="space-y-1.5"><Label htmlFor="new-terminal-name">Station name</Label><Input id="new-terminal-name" value={newTerminalName} onChange={(event) => setNewTerminalName(event.target.value)} placeholder="e.g. Store Counter 02" className="h-10 rounded-md" required /></div>
-<div className="space-y-1.5"><Label htmlFor="new-terminal-unit">Business unit</Label><Select value={newTerminalUnit} onValueChange={(value) => setNewTerminalUnit(value as BusinessUnit)}><SelectTrigger id="new-terminal-unit" className="h-10 rounded-md"><SelectValue placeholder="Select unit" /></SelectTrigger><SelectContent>{UNITS.map(unit => <SelectItem key={unit.value} value={unit.value}>{unit.label}</SelectItem>)}</SelectContent></Select></div>
-<Button type="submit" disabled={!newTerminalName.trim()} className="h-10 rounded-md px-5">Register station</Button></form></CardContent></Card>
-<Card className="overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm"><CardHeader className="border-b border-zinc-100 px-4 py-3 sm:px-5"><CardTitle className="text-sm font-semibold">Registered terminals</CardTitle><CardDescription className="text-xs">Availability and last activity from the terminal registry.</CardDescription></CardHeader><CardContent className="p-0"><div className="divide-y divide-zinc-100">
-{(terminals || []).length ? terminals!.map((terminal) => <div key={terminal.id} className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-zinc-200 bg-zinc-50 text-zinc-600"><Monitor className="h-4 w-4" /></div><div className="min-w-0"><p className="truncate text-sm font-semibold text-zinc-900">{terminal.name || "Unnamed station"}</p><p className="mt-0.5 text-xs text-zinc-500">{UNITS.find(unit => unit.value === terminal.unit)?.label || terminal.unit} · {terminal.lastActive ? "Last active " + new Date(terminal.lastActive).toLocaleString("en-KE") : "No activity recorded"}</p></div></div><div className="flex items-center justify-between gap-3 sm:justify-end"><Badge variant="outline" className={cn("rounded-md text-[10px]", terminal.status === "OPEN" ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-zinc-200 bg-zinc-50 text-zinc-600")}>{terminal.status || "UNKNOWN"}</Badge><Button type="button" variant="outline" size="sm" className="h-9 rounded-md text-xs text-red-600 hover:bg-red-50 hover:text-red-700" onClick={() => setTerminalToDelete({ id: terminal.id, name: terminal.name || "Unnamed station" })}><Trash2 className="mr-2 h-3.5 w-3.5" />Remove</Button></div></div>) : <div className="px-5 py-12 text-center text-sm text-zinc-500">No POS stations have been registered yet.</div>}
-</div></CardContent></Card></section></TabsContent>
-<TabsContent value="config" className="px-2"><section className="space-y-4">
-<div className="rounded-lg border border-zinc-200 bg-white p-4 sm:px-5"><h2 className="text-base font-semibold text-zinc-900">Global Settings</h2><p className="mt-1 text-sm text-zinc-500">Configure business-wide rates, payment credentials and workspace appearance.</p></div>
-<Card className="rounded-lg border border-zinc-200 bg-white shadow-sm"><CardHeader className="border-b border-zinc-100 px-4 py-4 sm:px-5"><CardTitle className="text-sm font-semibold">Operational rates</CardTitle><CardDescription className="text-xs">Rates are stored in the shared system configuration.</CardDescription></CardHeader><CardContent className="grid grid-cols-1 gap-4 p-4 sm:grid-cols-2 sm:p-5"><div className="space-y-1.5"><Label htmlFor="commission-standard">Standard commission (KES)</Label><Input id="commission-standard" inputMode="decimal" value={localConfig.commissionStandard} onChange={event => setLocalConfig(prev => ({ ...prev, commissionStandard: event.target.value }))} className="h-10 rounded-md" /></div><div className="space-y-1.5"><Label htmlFor="commission-night">Night shift commission (KES)</Label><Input id="commission-night" inputMode="decimal" value={localConfig.commissionNightShift} onChange={event => setLocalConfig(prev => ({ ...prev, commissionNightShift: event.target.value }))} className="h-10 rounded-md" /></div></CardContent></Card>
-<Card className="rounded-lg border border-zinc-200 bg-white shadow-sm"><CardHeader className="border-b border-zinc-100 px-4 py-4 sm:px-5"><CardTitle className="text-sm font-semibold">Payment gateway</CardTitle><CardDescription className="text-xs">Secret credentials are masked while editing.</CardDescription></CardHeader><CardContent className="grid grid-cols-1 gap-4 p-4 sm:p-5"><div className="space-y-1.5"><Label htmlFor="paystack-public-key">Paystack public key</Label><Input id="paystack-public-key" value={localConfig.paystackPublicKeyLive} onChange={event => setLocalConfig(prev => ({ ...prev, paystackPublicKeyLive: event.target.value }))} placeholder="pk_live_…" className="h-10 rounded-md font-mono text-xs" /></div><div className="space-y-1.5"><Label htmlFor="paystack-secret-key">Paystack secret key</Label><Input id="paystack-secret-key" type="password" autoComplete="new-password" value={localConfig.paystackSecretKeyLive} onChange={event => setLocalConfig(prev => ({ ...prev, paystackSecretKeyLive: event.target.value }))} placeholder="Enter a new secret key to replace the stored value" className="h-10 rounded-md font-mono text-xs" /></div></CardContent></Card>
-<Card className="rounded-lg border border-zinc-200 bg-white shadow-sm"><CardHeader className="border-b border-zinc-100 px-4 py-4 sm:px-5"><CardTitle className="text-sm font-semibold">Workspace appearance</CardTitle><CardDescription className="text-xs">Choose the global seasonal visual treatment.</CardDescription></CardHeader><CardContent className="p-4 sm:p-5"><div className="max-w-sm space-y-1.5"><Label htmlFor="visual-theme">Visual theme</Label><Select value={localConfig.visualTheme} onValueChange={value => setLocalConfig(prev => ({ ...prev, visualTheme: value }))}><SelectTrigger id="visual-theme" className="h-10 rounded-md"><SelectValue placeholder="Select appearance" /></SelectTrigger><SelectContent><SelectItem value="NONE">Standard</SelectItem><SelectItem value="SNOW">Snowfall</SelectItem><SelectItem value="CELEBRATION">Celebration</SelectItem></SelectContent></Select></div></CardContent></Card>
-<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs text-zinc-500">Save changes to synchronize the shared system configuration.</p><Button type="button" onClick={handleSaveAll} disabled={isSubmitting} className="h-10 rounded-md px-5">{isSubmitting ? <RefreshCcw className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save global settings</Button></div>
-</section></TabsContent>
-<AlertDialog open={!!terminalToDelete} onOpenChange={(open) => { if (!open) setTerminalToDelete(null); }}><AlertDialogContent className="rounded-lg"><AlertDialogHeader><AlertDialogTitle>Remove POS station?</AlertDialogTitle><AlertDialogDescription>This removes {terminalToDelete?.name || "this station"} from the registered terminal list. The action is recorded in the audit log.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel className="rounded-md">Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTerminal} className="rounded-md bg-red-600 text-white hover:bg-red-700">Remove station</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
+        </TabsContent>
       </Tabs>
     </div>
   );

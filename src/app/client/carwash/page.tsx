@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { 
@@ -24,8 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFirestore, useUser } from '@/firebase';
-import { doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { collection, query, where, doc, writeBatch, increment, getDoc } from 'firebase/firestore';
 import { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -90,52 +90,12 @@ export default function CarwashBookingPage() {
   const [bookingTime, setBookingTime] = useState<string>('10:00 AM');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [services, setServices] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [servicesError, setServicesError] = useState('');
+  const servicesQuery = useMemoFirebase(() => {
+    if (!firestore) return null;
+    return query(collection(firestore, 'inventory'), where('unit', '==', 'CARWASH'));
+  }, [firestore]);
 
-  // Public service discovery uses the same cached, server-authorized catalogue
-  // as the other public product pages. Booking writes still use the signed-in
-  // customer's Firebase session and existing Firestore transaction workflow.
-  useEffect(() => {
-    const controller = new AbortController();
-
-    async function loadServices() {
-      setLoading(true);
-      setServicesError('');
-      try {
-        const params = new URLSearchParams({
-          unit: 'CARWASH',
-          page: '1',
-          pageSize: '96',
-          sort: 'name',
-        });
-        const response = await fetch(`/api/public/catalogue?${params.toString()}`, {
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload.error || 'Carwash services could not be loaded.');
-        }
-        if (!controller.signal.aborted) {
-          setServices(Array.isArray(payload.products) ? payload.products as Product[] : []);
-        }
-      } catch (error) {
-        if (!controller.signal.aborted) {
-          console.error('[PUBLIC_CARWASH_SERVICES_LOAD_FAILED]', error);
-          setServices([]);
-          setServicesError(error instanceof Error
-            ? error.message
-            : 'Carwash services are temporarily unavailable. Please try again shortly.');
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
-      }
-    }
-
-    loadServices();
-    return () => controller.abort();
-  }, []);
+  const { data: services, loading } = useCollection<Product>(servicesQuery);
 
   // Never offer archived or malformed service records to customers.
   const activeServices = useMemo(() => (
@@ -291,12 +251,7 @@ export default function CarwashBookingPage() {
                     </SelectContent>
                   </Select>
                 )}
-                {!loading && servicesError && (
-                  <p className="mt-3 text-xs font-semibold text-red-600" role="alert">
-                    {servicesError}
-                  </p>
-                )}
-                {!loading && !servicesError && activeServices.length === 0 && (
+                {!loading && activeServices.length === 0 && (
                   <p className="mt-3 text-xs font-semibold text-zinc-400" role="status">
                     No detailing packages are currently available. Please check back shortly.
                   </p>
@@ -326,7 +281,7 @@ export default function CarwashBookingPage() {
                         {bookingDate ? formatDateStr(bookingDate, "PPP") : <span>Pick a date</span>}
                       </Button>
                     </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 border-none shadow-2xl rounded-2xl" align="start">
+                    <PopoverContent className="w-auto p-0 border-none shadow-2xl rounded-3xl" align="start">
                       <Calendar
                         mode="single"
                         selected={bookingDate}
@@ -367,7 +322,7 @@ export default function CarwashBookingPage() {
                     key={opt.id}
                     htmlFor={opt.id} 
                     className={cn(
-                      "p-8 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between h-full",
+                      "p-8 rounded-3xl border-2 transition-all cursor-pointer flex flex-col justify-between h-full",
                       valetType === opt.id ? "border-primary bg-primary/5 shadow-lg" : "border-zinc-100 bg-white hover:bg-zinc-50"
                     )}
                   >
@@ -391,7 +346,7 @@ export default function CarwashBookingPage() {
                   </div>
                   
                   {address && (
-                    <div className="p-8 bg-zinc-900 text-white rounded-xl flex flex-col gap-2 shadow-2xl">
+                    <div className="p-8 bg-zinc-900 text-white rounded-[2rem] flex flex-col gap-2 shadow-2xl">
                        <p className="text-[8px] font-black uppercase tracking-[0.4em] text-primary">AUTHORIZED ADDRESS</p>
                        <p className="text-sm font-bold uppercase leading-relaxed tracking-tight">{address}</p>
                     </div>
@@ -450,9 +405,9 @@ export default function CarwashBookingPage() {
           {/* Service Quote Sidebar */}
           <aside className="lg:col-span-4">
              <div className="bg-white rounded-[3rem] p-10 shadow-2xl border border-zinc-100 space-y-12 sticky top-32">
-                <div className="text-center space-y-2 py-6 bg-white rounded-xl relative overflow-hidden">
+                <div className="text-center space-y-2 py-6 bg-white rounded-[2rem] relative overflow-hidden">
                   <p className="text-[10px] font-black text-zinc-400 uppercase tracking-[0.5em]">Service Total</p>
-                  <h2 className="text-3xl md:text-4xl font-black font-headline text-zinc-900 tracking-tighter leading-none">
+                  <h2 className="text-5xl font-black font-headline text-zinc-900 tracking-tighter leading-none">
                     KES {total.toLocaleString()}
                   </h2>
                 </div>

@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { 
   ChevronLeft, 
@@ -37,7 +37,6 @@ export default function ProductDetailPage() {
   const router = useRouter();
   const { addToCart } = useCart();
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState<string | null>(null);
 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,19 +71,6 @@ export default function ProductDetailPage() {
     loadProduct();
     return () => controller.abort();
   }, [id]);
-
-  const productImages = useMemo(() => {
-    if (!product) return [];
-    const record = product as Product & { images?: string[]; imageUrls?: string[]; description?: string };
-    const uploaded = [...(Array.isArray(record.images) ? record.images : []), ...(Array.isArray(record.imageUrls) ? record.imageUrls : [])]
-      .filter((src): src is string => typeof src === 'string' && src.trim().length > 0);
-    const sources = uploaded.length ? uploaded : (product.image ? [product.image] : []);
-    return Array.from(new Set(sources));
-  }, [product]);
-
-  useEffect(() => {
-    setActiveImage(productImages[0] || null);
-  }, [productImages]);
 
   const handleAddToCart = () => {
     if (!product) return;
@@ -130,28 +116,28 @@ export default function ProductDetailPage() {
         <ChevronLeft className="w-4 h-4" /> Back to Catalog
       </button>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-10 items-start">
-        <div className="space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-start">
+        <div className="space-y-6">
           <div className="aspect-[4/5] bg-zinc-50 rounded-2xl overflow-hidden shadow-sm border border-zinc-100 flex items-center justify-center relative">
-             {activeImage ? (
-               <Image src={activeImage} fill className="object-contain" alt={product.name} sizes="(max-width: 768px) 100vw, 50vw" priority />
-             ) : (
-               <div className="flex flex-col items-center gap-3 text-zinc-300">
-                 <ShoppingCart className="w-12 h-12 opacity-40" />
-                 <span className="text-[9px] font-bold uppercase tracking-widest">No product image</span>
-               </div>
-             )}
+             <Image 
+               src={product.image || '/assets/logo.png'} 
+               fill
+               className={cn(
+                 "object-cover",
+                 !product.image && "p-24 opacity-10"
+               )} 
+               alt={product.name} 
+               sizes="(max-width: 768px) 100vw, 50vw"
+               priority
+             />
           </div>
-          {productImages.length > 1 && (
-            <div className="grid grid-cols-4 sm:grid-cols-5 gap-3">
-              {productImages.map((src, index) => (
-                <button key={src} type="button" onClick={() => setActiveImage(src)} aria-label={`View product image ${index + 1}`} aria-pressed={activeImage === src}
-                  className={cn("aspect-square bg-zinc-50 rounded-xl overflow-hidden border-2 transition-colors relative", activeImage === src ? "border-primary" : "border-zinc-100 hover:border-zinc-300")}>
-                  <Image src={src} fill className="object-cover" alt={`${product.name} image ${index + 1}`} sizes="20vw" />
-                </button>
-              ))}
-            </div>
-          )}
+          <div className="grid grid-cols-3 gap-4">
+             {[1, 2, 3].map(i => (
+               <div key={i} className="aspect-square bg-zinc-50 rounded-xl overflow-hidden border border-zinc-100 opacity-60 hover:opacity-100 transition-opacity cursor-pointer flex items-center justify-center relative">
+                  <Image src={product.image || '/assets/logo.png'} fill className={cn("object-cover", !product.image && "p-6 opacity-10")} alt="" sizes="15vw" />
+               </div>
+             ))}
+          </div>
         </div>
 
         <div className="space-y-10 lg:sticky lg:top-32">
@@ -219,8 +205,8 @@ export default function ProductDetailPage() {
                 </div>
                 <h3 className="text-xs font-black uppercase tracking-[0.2em] text-zinc-900">Information</h3>
              </div>
-             <p className="text-sm text-zinc-600 leading-7 whitespace-pre-line">
-                {(product as Product & { description?: string }).description?.trim() || `Product details for this ${product.category.toLowerCase()} item will be updated shortly.`}
+             <p className="text-sm text-zinc-500 uppercase font-bold tracking-widest leading-relaxed">
+                Premium {product.category.toLowerCase()} item sourced and verified to meet our quality standards. Available for immediate fulfillment at our main branch.
              </p>
              <div className="grid grid-cols-2 gap-4">
                 <SpecPoint label="Condition" value="Brand New" />

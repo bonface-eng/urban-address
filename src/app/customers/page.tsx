@@ -1,8 +1,5 @@
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-import Link from 'next/link';
-
 import React, { useState, useMemo } from 'react';
 import { 
   Users, 
@@ -23,9 +20,7 @@ import {
   Activity,
   CreditCard,
   Target,
-  ArrowUpRight,
-  Monitor,
-  Settings2
+  ArrowUpRight
 } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -46,11 +41,9 @@ import { UserProfile, Order, CarwashJob } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { exportAsReceiptText } from '@/lib/csv-export';
 import { toast } from '@/hooks/use-toast';
-import { useProfile } from '@/hooks/use-profile';
 
 export default function CustomerCRM() {
   const firestore = useFirestore();
-  const { isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   
   // Pagination State
@@ -81,16 +74,15 @@ export default function CustomerCRM() {
   }, [filteredCustomers, currentPage]);
 
   return (
-    <div className="ua-compact-page space-y-5 pb-12 max-w-[1600px] mx-auto px-2">
-      <div className="flex flex-col gap-3 pt-2 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-2">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pt-4">
         <div>
-          <PageHeader title="Customers" breadcrumb={["Operations", "Customers"]} className="mb-0" />
-          <p className="mt-1 text-xs text-zinc-500">Master Member Registry</p>
+          <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Customers</h1>
+          <p className="text-zinc-500 mt-1 uppercase text-[10px] font-bold tracking-widest">Master Member Registry</p>
         </div>
-        {isSuperAdmin && <div className="flex flex-wrap gap-2"><Button asChild variant="outline" className="h-10 rounded-md border-zinc-200 px-3 text-[10px] font-semibold"><Link href="/admin?tab=stations"><Monitor className="mr-2 h-3.5 w-3.5" />POS Stations</Link></Button><Button asChild variant="outline" className="h-10 rounded-md border-zinc-200 px-3 text-[10px] font-semibold"><Link href="/admin?tab=config"><Settings2 className="mr-2 h-3.5 w-3.5" />Global Settings</Link></Button></div>}
       </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-lg shadow-sm border border-zinc-200">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-4 rounded-[2rem] shadow-sm border border-zinc-100">
         <div className="relative flex-1 max-w-xl">
            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
            <Input 
@@ -102,7 +94,7 @@ export default function CustomerCRM() {
         </div>
       </div>
 
-      <Card className="border-none shadow-mobile rounded-lg overflow-hidden bg-white border border-zinc-200">
+      <Card className="border-none shadow-mobile rounded-[2.5rem] overflow-hidden bg-white border border-zinc-100">
         <CardContent className="p-0">
           <Table>
             <TableHeader className="bg-zinc-50/50">

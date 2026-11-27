@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
+import { ClientLayout } from '../layout';
 
 export default function ClientOrdersPage() {
   const { user, loading: authLoading } = useUser();
@@ -28,19 +29,22 @@ export default function ClientOrdersPage() {
 
   if (authLoading || (user && ordersLoading)) {
     return (
+      <ClientLayout>
         <div className="min-h-[60vh] flex flex-col items-center justify-center space-y-6">
           <div className="animate-pulse">
             <img src="/assets/logo.png" className="h-12 w-auto" alt="Urban Express" />
           </div>
           <p className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Loading your history...</p>
         </div>
+      </ClientLayout>
     );
   }
 
   if (!user) {
     return (
+      <ClientLayout>
         <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center space-y-6">
-          <div className="w-20 h-20 bg-zinc-50 rounded-xl flex items-center justify-center text-zinc-200">
+          <div className="w-20 h-20 bg-zinc-50 rounded-[2rem] flex items-center justify-center text-zinc-200">
              <Package className="w-10 h-10" />
           </div>
           <div className="space-y-2">
@@ -51,24 +55,26 @@ export default function ClientOrdersPage() {
             <Link href="/login">Go to Login</Link>
           </Button>
         </div>
+      </ClientLayout>
     );
   }
 
   return (
+    <ClientLayout>
       <div className="max-w-7xl mx-auto px-6 py-12">
         <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400 mb-2">
           <Link href="/" className="hover:text-primary transition-colors">ACCOUNT</Link> 
           <ChevronRight className="w-2.5 h-2.5" /> 
           <span className="text-primary">MY ORDERS</span>
         </div>
-        <h1 className="text-3xl md:text-4xl font-black font-headline uppercase text-zinc-900 tracking-tighter mb-12">
+        <h1 className="text-5xl font-black font-headline uppercase text-zinc-900 tracking-tighter mb-12">
           Your <span className="text-primary">Orders.</span>
         </h1>
 
         <div className="space-y-6">
           {!orders || orders.length === 0 ? (
-            <Card className="border-2 border-dashed border-zinc-100 rounded-2xl bg-transparent">
-              <CardContent className="p-8 md:p-12 text-center space-y-6">
+            <Card className="border-2 border-dashed border-zinc-100 rounded-[2.5rem] bg-transparent">
+              <CardContent className="p-20 text-center space-y-6">
                 <div className="w-16 h-16 bg-zinc-50 rounded-full flex items-center justify-center mx-auto text-zinc-300">
                   <Receipt className="w-8 h-8" />
                 </div>
@@ -85,6 +91,7 @@ export default function ClientOrdersPage() {
           )}
         </div>
       </div>
+    </ClientLayout>
   );
 }
 
@@ -97,7 +104,7 @@ function OrderHistoryCard({ order }: { order: Order }) {
                     order.status === 'VOIDED' ? XCircle : Clock;
 
   return (
-    <Card className="border-none shadow-sm rounded-xl bg-white overflow-hidden group hover:shadow-xl transition-all border border-zinc-50">
+    <Card className="border-none shadow-sm rounded-[2rem] bg-white overflow-hidden group hover:shadow-xl transition-all border border-zinc-50">
       <CardContent className="p-0">
         <div className="p-8 flex flex-col md:flex-row md:items-center justify-between gap-8">
           <div className="flex items-center gap-6">

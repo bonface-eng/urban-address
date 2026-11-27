@@ -1,8 +1,6 @@
 
 'use client';
 
-import { PageHeader } from '@/components/shared/page-layout';
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Smartphone, 
@@ -186,14 +184,14 @@ export default function AppReleaseManager() {
   if (!isSuperAdmin) return null;
 
   return (
-    <div className="space-y-8 pb-32 max-w-[1200px] mx-auto pt-4 px-2 ua-compact-page">
+    <div className="space-y-8 pb-32 max-w-[1200px] mx-auto pt-4 px-2">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 px-1">
         <div className="space-y-2">
           <div className="flex items-center gap-2">
              <Smartphone className="w-4 h-4 text-primary" />
              <span className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-400">Mobile Ecosystem Lifecycle</span>
           </div>
-          <PageHeader title="Release Manager" breadcrumb={["Admin", "Release Manager"]} className="mb-0" />
+          <h1 className="text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Release Manager</h1>
         </div>
         <div className="flex gap-2">
           {editingId && <Button variant="ghost" onClick={handleReset} className="h-12 px-6 text-[10px] font-black uppercase">Cancel Edit</Button>}
@@ -313,7 +311,7 @@ export default function AppReleaseManager() {
            </Card>
         </div>
 
-        {/* Visual Presentation */}
+        {/* Visual Presentation Hub */}
         <div className="lg:col-span-5 space-y-6">
            <Card className="rounded-[2.5rem] border-none shadow-mobile bg-white p-10 border border-zinc-100">
               <CardTitle className="text-sm font-black uppercase tracking-widest mb-8 flex items-center gap-3">
