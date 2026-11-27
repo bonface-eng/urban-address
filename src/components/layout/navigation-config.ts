@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentType } from 'react';
 import { TelegramIcon } from '@/components/icons/telegram-icon';
+import { getRoleBaselinePaths } from '@/lib/role-routing';
 import {
   Activity,
   Award,
@@ -126,16 +127,27 @@ export function getVisibleNavGroups({
 }: NavigationAccess): NavGroup[] {
   if (!role && !isSuperAdmin) return [];
 
-  const baseline = ['/dashboard', '/settings'];
+  const baseline = getRoleBaselinePaths(role, isSuperAdmin);
   const roleAllowed = permMap?.[role || ''] || [];
+  const upperRole = String(role || '').toUpperCase();
+  const effectiveUnits =
+    assignedUnits.length > 0
+      ? assignedUnits
+      : upperRole === 'ATTENDANT'
+        ? ['CARWASH']
+        : upperRole === 'STOREKEEPER'
+          ? ['STORE']
+          : upperRole === 'KITCHEN'
+            ? ['LOUNGE']
+            : assignedUnits;
 
   return NAV_GROUPS.map(group => ({
     ...group,
     items: group.items.filter(item => {
-      if (isSuperAdmin) return true;
+      if (isSuperAdmin || baseline.includes('*')) return true;
       if (item.superOnly || !role) return false;
       if (!baseline.includes(item.href) && !roleAllowed.includes(item.href)) return false;
-      if (item.unit && !assignedUnits.includes(item.unit)) return false;
+      if (item.unit && !effectiveUnits.includes(item.unit)) return false;
       return true;
     }),
   })).filter(group => group.items.length > 0);

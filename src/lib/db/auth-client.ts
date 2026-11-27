@@ -219,35 +219,7 @@ export async function signInWithEmailAndPassword(
     throw err;
   }
 
-  let finalUser = data.user;
-  let finalSession = data.session;
-
-  // If this account previously used a terminal PIN switch, clear the restricted
-  // terminal_staff_session claim now that the staff member proved their password.
-  if (
-    typeof window !== 'undefined' &&
-    typeof fetch === 'function' &&
-    finalSession?.access_token &&
-    (finalUser.app_metadata?.terminal_staff_session || finalUser.app_metadata?.terminalStaffSession)
-  ) {
-    try {
-      const clearRes = await fetch('/api/auth/clear-terminal-session', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${finalSession.access_token}` },
-      });
-      if (clearRes.ok) {
-        const refreshed = await client.auth.refreshSession();
-        if (refreshed.data?.session) {
-          finalSession = refreshed.data.session;
-          finalUser = refreshed.data.session.user;
-        }
-      }
-    } catch {
-      // Non-fatal in offline/test environments
-    }
-  }
-
-  const adapted = adaptSupabaseUser(finalUser, finalSession, client)!;
+  const adapted = adaptSupabaseUser(data.user, data.session, client)!;
   currentCachedUser = adapted;
   return { user: adapted };
 }
@@ -279,35 +251,7 @@ export async function createUserWithEmailAndPassword(
     throw err;
   }
 
-  let finalUser = data.user;
-  let finalSession = data.session;
-
-  // If this account previously used a terminal PIN switch, clear the restricted
-  // terminal_staff_session claim now that the staff member proved their password.
-  if (
-    typeof window !== 'undefined' &&
-    typeof fetch === 'function' &&
-    finalSession?.access_token &&
-    (finalUser.app_metadata?.terminal_staff_session || finalUser.app_metadata?.terminalStaffSession)
-  ) {
-    try {
-      const clearRes = await fetch('/api/auth/clear-terminal-session', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${finalSession.access_token}` },
-      });
-      if (clearRes.ok) {
-        const refreshed = await client.auth.refreshSession();
-        if (refreshed.data?.session) {
-          finalSession = refreshed.data.session;
-          finalUser = refreshed.data.session.user;
-        }
-      }
-    } catch {
-      // Non-fatal in offline/test environments
-    }
-  }
-
-  const adapted = adaptSupabaseUser(finalUser, finalSession, client)!;
+  const adapted = adaptSupabaseUser(data.user, data.session, client)!;
   currentCachedUser = adapted;
   return { user: adapted };
 }

@@ -6,11 +6,12 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const ROOT_ADMINS = [
+  'gackstoneb@gmail.com',
+  'bonfacewana3072@gmail.com',
   'urbanautoexpressnakuru@gmail.com',
   'urbanaautoexpressnakuru@gmail.com',
   'samuelkarani044@gmail.com',
   'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
 ];
 
 export async function POST(request: NextRequest) {

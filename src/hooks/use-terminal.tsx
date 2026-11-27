@@ -38,7 +38,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const [activeTerminal, setActiveTerminal] = useState<POSTerminal | null>(null);
   const [activeCashier, setActiveCashier] = useState<UserProfile | null>(null);
   const [activeRegisterSession, setActiveRegisterSession] = useState<RegisterSession | null>(null);
-  const [isLocked, setIsLocked] = useState(true);
+  const [isLocked, setIsLocked] = useState(false);
   
   const [isLocationAuthorized, setIsLocationAuthorized] = useState(true);
   const [locationName, setLocationName] = useState('Remote Node');
@@ -111,19 +111,8 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   }, [refreshLocation]);
 
   useEffect(() => {
-    const checkTimeout = () => {
-      const unlockedAt = lastUnlockedAt.current;
-      if (unlockedAt !== null && !isLocked && Date.now() - unlockedAt >= 15 * 60 * 1000) {
-        lastUnlockedAt.current = null;
-        setIsLocked(true);
-      }
-    };
-    const interval = setInterval(checkTimeout, 15000);
-    return () => clearInterval(interval);
-  }, [isLocked]);
-
-  useEffect(() => {
     if (!firestore || !user) {
+      setActiveCashier(null);
       setLoading(false);
       return;
     }
@@ -166,15 +155,9 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         const terminal = { ...terminalSnap.data(), id: terminalSnap.id } as POSTerminal & { disabled?: boolean; locked?: boolean; forceLockAt?: number };
         setActiveTerminal(terminal);
 
-        // Remote Telegram station locks and cashier-session closures are enforced
-        // through the live terminal document, not only at the next PIN attempt.
+        // Remote Telegram station locks are enforced for non-admin operators.
         if (terminal.disabled === true || terminal.locked === true) {
           lastUnlockedAt.current = null;
-          setIsLocked(true);
-        }
-        if (terminal.currentCashierId !== undefined && terminal.currentCashierId !== user.uid) {
-          lastUnlockedAt.current = null;
-          setActiveCashier(null);
           setIsLocked(true);
         }
 
@@ -241,7 +224,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
           return false;
         }
         setActiveCashier(newUser);
-        setIsLocked(true); 
+        setIsLocked(false); 
         
         if (activeTerminal) {
           await updateDoc(doc(firestore, 'pos_terminals', activeTerminal.id), {
@@ -286,7 +269,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
         }
 
         setActiveCashier({ ...profileData, uid: uDoc.id });
-        setIsLocked(true); 
+        setIsLocked(false); 
         
         if (activeTerminal) {
           await updateDoc(doc(firestore, 'pos_terminals', activeTerminal.id), {

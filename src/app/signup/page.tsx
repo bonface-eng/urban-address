@@ -16,13 +16,14 @@ import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { cn } from '@/lib/utils';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
+import { getRoleHomeRoute } from '@/lib/role-routing';
 
 export default function SignUpPage() {
   const { user } = useUser();
   const auth = useAuth();
   const firestore = useDb();
   const router = useRouter();
-  const { isEmployee, loading, isSuperAdmin } = useProfile();
+  const { role, isEmployee, loading, isSuperAdmin, profile } = useProfile();
   const TERMS_VERSION = '2024-08';
 
   const [name, setName] = useState('');
@@ -37,13 +38,16 @@ export default function SignUpPage() {
 
   React.useEffect(() => {
     if (user && !loading) {
-      if (isEmployee || isSuperAdmin) {
-        router.push('/dashboard');
-      } else {
-        router.push('/');
-      }
+      router.push(
+        getRoleHomeRoute({
+          role,
+          email: user.email,
+          isSuperAdmin,
+          assignedUnits: profile?.assignedUnits,
+        })
+      );
     }
-  }, [user, isEmployee, isSuperAdmin, loading, router]);
+  }, [user, role, isEmployee, isSuperAdmin, profile, loading, router]);
 
   const passwordStrength = useMemo(() => {
     if (!password) return 0;
@@ -96,12 +100,13 @@ export default function SignUpPage() {
         password,
         options: {
           data: { full_name: fullName, display_name: fullName },
-          emailRedirectTo: `${window.location.origin}/auth/callback`,
         },
       });
 
       if (error) {
-        console.error('[SIGNUP] supabase.auth.signUp failed:', { message: error.message, status: (error as any).status, code: (error as any).code, name: error.name });
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[SIGNUP] supabase.auth.signUp failed:', error);
+        }
         throw error;
       }
 
@@ -112,52 +117,85 @@ export default function SignUpPage() {
         throw dup;
       }
 
-      // 2. "Confirm email" is ON in the Supabase dashboard: no session until the link is clicked.
-      if (!data.session) {
-        toast({
-          title: 'Check your email',
-          description: 'We sent a confirmation link to ' + normalizedEmail + '. Open it to activate your account, then sign in.',
+      // 2. Ensure an active session immediately. If signUp returned no session for any reason,
+      //    sign in with the same credentials right away.
+      let activeSession = data.session;
+      let activeUser = data.user;
+      if (!activeSession) {
+        const signInRes = await supabase.auth.signInWithPassword({
+          email: normalizedEmail,
+          password,
         });
-        router.replace('/login');
-        return;
+        if (signInRes.error || !signInRes.data.session || !signInRes.data.user) {
+          throw signInRes.error || new Error('Account created, but automatic sign-in failed. Please sign in.');
+        }
+        activeSession = signInRes.data.session;
+        activeUser = signInRes.data.user;
       }
 
-      // 3. Session is active: store consent details on the profile created by the trigger.
-      const adapted = adaptSupabaseUser(data.user, data.session, supabase)!;
+      if (!activeUser) {
+        throw new Error('Could not resolve newly created user account.');
+      }
+
+      // 3. Ensure the public.profiles row exists (role CLIENT) and store consent details before redirecting.
       const now = Date.now();
-      const { error: profileError } = await supabase
+      const displayName = fullName || normalizedEmail.split('@')[0] || 'Urban Member';
+      const { data: existingProfile } = await supabase
         .from('profiles')
-        .update({
-          terms_accepted_at: now,
-          terms_version: TERMS_VERSION,
-          marketing_opt_in: marketingOptIn,
-        })
-        .eq('id', data.user!.id);
-      if (profileError) {
-        // Non-fatal: the account and profile already exist.
-        console.warn('[SIGNUP] profile consent update failed:', profileError.message);
+        .select('id, role')
+        .eq('id', activeUser.id)
+        .maybeSingle();
+
+      let resolvedRole = existingProfile?.role || 'CLIENT';
+      if (existingProfile) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({
+            terms_accepted_at: now,
+            terms_version: TERMS_VERSION,
+            marketing_opt_in: marketingOptIn,
+            marketing_consent: marketingOptIn,
+            ...(marketingOptIn ? { marketing_consent_updated_at: now, marketing_consent_source: 'signup' } : {}),
+          })
+          .eq('id', activeUser.id);
+        if (profileError) {
+          console.warn('[SIGNUP] profile consent update failed:', profileError.message);
+        }
+      } else {
+        const { error: insertError } = await supabase
+          .from('profiles')
+          .insert({
+            id: activeUser.id,
+            uid: activeUser.id,
+            firebase_id: activeUser.id,
+            email: normalizedEmail,
+            display_name: displayName,
+            role: 'CLIENT',
+            account_type: 'CLIENT',
+            loyalty_points: 0,
+            total_spent: 0,
+            terms_accepted_at: now,
+            terms_version: TERMS_VERSION,
+            marketing_opt_in: marketingOptIn,
+            marketing_consent: marketingOptIn,
+            ...(marketingOptIn ? { marketing_consent_updated_at: now, marketing_consent_source: 'signup' } : {}),
+            created_at_ms: now,
+          });
+        if (insertError) {
+          console.warn('[SIGNUP] fallback profile insert warning:', insertError.message);
+        }
+        resolvedRole = 'CLIENT';
       }
 
-      void notifyTelegramClientEvent(adapted, { type: 'SIGNUP', name: fullName });
-      try {
-        const idToken = await adapted.getIdToken();
-        const verificationResponse = await fetch('/api/auth/send-verification', {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${idToken}` },
-        });
-        if (!verificationResponse.ok) throw new Error('Verification email could not be sent.');
-        toast({
-          title: 'Account Created',
-          description: 'A six-digit verification code has been sent to your email address.',
-        });
-        router.replace('/auth/verify-email');
-      } catch {
-        toast({
-          title: 'Account Created',
-          description: 'Your account is ready. Open the verification page to request a code.',
-        });
-        router.replace('/auth/verify-email');
-      }
+      const adapted = adaptSupabaseUser(activeUser, activeSession, supabase)!;
+      void notifyTelegramClientEvent(adapted, { type: 'SIGNUP', name: displayName });
+
+      toast({
+        title: 'Welcome to Urban Express',
+        description: 'Your account is ready and you are signed in.',
+      });
+      const destination = getRoleHomeRoute({ role: resolvedRole, email: normalizedEmail });
+      router.replace(destination);
     } catch (error: any) {
       console.error('[SIGNUP] failed:', error);
       const raw = String(error?.message || '');
@@ -166,10 +204,10 @@ export default function SignUpPage() {
       const friendlyMessage =
         code === 'user_already_exists' || lower.includes('already registered') || lower.includes('already been registered')
           ? 'An account with this email already exists. Please sign in instead.'
-          : code === 'weak_password' || lower.includes('password should')
-            ? raw
+          : code === 'weak_password' || lower.includes('password should') || lower.includes('weak password')
+            ? 'Please choose a stronger password with at least 8 characters, an uppercase letter, a number, and a symbol.'
             : code === 'over_email_send_rate_limit' || lower.includes('rate limit')
-              ? 'Too many attempts or confirmation emails sent. Please wait a few minutes and try again.'
+              ? 'Too many sign-up attempts right now. Please wait a few minutes and try again.'
               : code === 'signup_disabled' || lower.includes('signups not allowed')
                 ? 'Sign-ups are currently disabled. Please contact support.'
                 : lower.includes('failed to fetch') || lower.includes('network')

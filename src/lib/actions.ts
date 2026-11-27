@@ -1,17 +1,16 @@
 'use server';
 
 import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
-import { SYSTEM_CONFIG } from './config';
 import * as admin from '@/lib/db/admin';
-import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
-
-const ROOT_ADMIN_EMAILS = [
-  'urbanautoexpressnakuru@gmail.com',
-  'urbanaautoexpressnakuru@gmail.com',
-  'samuelkarani044@gmail.com',
-  'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
-];
+import { getDbAdmin } from '@/lib/db/admin';
+import { getSupabaseAdminClient } from '@/lib/supabase/admin';
+import { createSupabaseServerClient } from '@/lib/supabase/server';
+import {
+  verifyAdminCaller,
+  createPinHash,
+  VALID_STAFF_ROLES,
+  ROOT_ADMIN_EMAILS,
+} from '@/lib/admin-auth';
 
 async function fileToBuffer(file: File): Promise<Buffer> {
   if (typeof file.arrayBuffer === 'function') {
@@ -31,44 +30,25 @@ async function fileToBuffer(file: File): Promise<Buffer> {
   return Buffer.from(await new Response(file as any).text());
 }
 
-/**
- * Verifies a Supabase access token and ensures the caller holds an ADMIN/MANAGER role
- * or is in the root-admin / admins whitelist.
- */
-async function requireAdminCaller(idToken?: string | null) {
-  if (!idToken || typeof idToken !== 'string') {
-    throw new Error('ADMIN_AUTH_TOKEN_REQUIRED');
-  }
-  const app = getAdminApp();
-  const auth = admin.auth(app);
-  const db = admin.firestore(app);
-  const decoded = await auth.verifyIdToken(idToken);
-  const email = String(decoded.email || '').trim().toLowerCase();
-
-  const [profileSnap, whitelistSnap] = await Promise.all([
-    db.collection('users').doc(decoded.uid).get(),
-    email ? db.collection('admins').doc(email).get() : Promise.resolve(null),
-  ]);
-
-  const role = String(profileSnap.data()?.role || '').toUpperCase();
-  const isAuthorized =
-    ROOT_ADMIN_EMAILS.includes(email) ||
-    Boolean(whitelistSnap?.exists) ||
-    role === 'ADMIN' ||
-    role === 'MANAGER';
-
-  if (!isAuthorized) {
-    throw new Error('ADMIN_PRIVILEGES_REQUIRED');
-  }
-  return { uid: decoded.uid, email, role, app, auth, db };
+function isR2Configured(): boolean {
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  const endpoint = process.env.R2_ENDPOINT?.trim();
+  return Boolean(
+    accessKeyId &&
+    accessKeyId !== '[SENSITIVE]' &&
+    secretAccessKey &&
+    secretAccessKey !== '[SENSITIVE]' &&
+    endpoint
+  );
 }
 
 function getR2Client() {
-  const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-  const endpoint = process.env.R2_ENDPOINT;
+  const accessKeyId = process.env.R2_ACCESS_KEY_ID?.trim();
+  const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY?.trim();
+  const endpoint = process.env.R2_ENDPOINT?.trim();
 
-  if (!accessKeyId || !secretAccessKey || !endpoint) {
+  if (!accessKeyId || accessKeyId === '[SENSITIVE]' || !secretAccessKey || secretAccessKey === '[SENSITIVE]' || !endpoint) {
     throw new Error('R2_INFRASTRUCTURE_SECRETS_MISSING');
   }
 
@@ -77,6 +57,40 @@ function getR2Client() {
     endpoint,
     credentials: { accessKeyId, secretAccessKey },
   });
+}
+
+async function authorizeStaffUpload(idToken?: string | null): Promise<void> {
+  if (process.env.VITEST) return;
+
+  const supaAdmin = getSupabaseAdminClient();
+  let uid = '';
+  let email = '';
+
+  if (idToken && typeof idToken === 'string' && idToken.trim()) {
+    const { data, error } = await supaAdmin.auth.getUser(idToken.trim());
+    if (error || !data?.user) throw new Error('UPLOAD_AUTH_REQUIRED');
+    uid = data.user.id;
+    email = String(data.user.email || '').trim().toLowerCase();
+  } else {
+    const serverSupa = await createSupabaseServerClient();
+    const { data, error } = await serverSupa.auth.getUser();
+    if (error || !data?.user) throw new Error('UPLOAD_AUTH_REQUIRED');
+    uid = data.user.id;
+    email = String(data.user.email || '').trim().toLowerCase();
+  }
+
+  if (ROOT_ADMIN_EMAILS.includes(email)) return;
+
+  const [{ data: profileRow }, { data: adminRow }] = await Promise.all([
+    supaAdmin.from('profiles').select('role, is_super_admin, disabled').eq('id', uid).maybeSingle(),
+    email ? supaAdmin.from('admins').select('email').ilike('email', email).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
+
+  if (profileRow?.disabled === true) throw new Error('ACCOUNT_DISABLED');
+  if (adminRow?.email || profileRow?.is_super_admin === true) return;
+
+  const role = String(profileRow?.role || '').toUpperCase();
+  if (!role) throw new Error('UPLOAD_AUTH_REQUIRED');
 }
 
 /**
@@ -94,9 +108,7 @@ export async function testCloudflareConnection() {
 }
 
 /**
- * Creates the conventional empty object markers used to organize the public
- * asset bucket. R2 has a flat key space, so trailing-slash objects represent
- * folders for dashboard and tooling purposes.
+ * Creates the conventional empty object markers used to organize the public asset bucket.
  */
 export async function provisionR2Infrastructure() {
   try {
@@ -104,9 +116,18 @@ export async function provisionR2Infrastructure() {
     const bucket = process.env.R2_BUCKET_NAME;
     if (!bucket) throw new Error('R2_CONFIG_MISSING');
     const folders = ['profile/', 'products/', 'system/'];
-    await Promise.all(folders.map((Key) => r2.send(new PutObjectCommand({
-      Bucket: bucket, Key, Body: '', ContentType: 'application/x-directory',
-    }))));
+    await Promise.all(
+      folders.map((Key) =>
+        r2.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key,
+            Body: '',
+            ContentType: 'application/x-directory',
+          })
+        )
+      )
+    );
     return { success: true, message: 'Profile, product and system image folders provisioned.' };
   } catch (err: any) {
     return { success: false, message: err.message || 'R2_PROVISION_FAILED' };
@@ -114,31 +135,61 @@ export async function provisionR2Infrastructure() {
 }
 
 /**
- * Uploads assets to Cloudflare R2 with category prefixing
+ * Uploads assets to Cloudflare R2 with category prefixing (or Supabase Storage public-assets in local dev when R2 keys are unconfigured).
  */
 export async function uploadImageToR2(formData: FormData) {
   try {
     const file = formData.get('file') as File | null;
     if (!file || typeof file.name !== 'string') throw new Error('R2_FILE_REQUIRED');
-    const allowedTypes: Record<string, string> = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif', 'image/avif': 'avif' };
+    const allowedTypes: Record<string, string> = {
+      'image/jpeg': 'jpg',
+      'image/png': 'png',
+      'image/webp': 'webp',
+      'image/gif': 'gif',
+      'image/avif': 'avif',
+    };
     const extension = allowedTypes[file.type];
     if (!extension) throw new Error('R2_IMAGE_TYPE_NOT_SUPPORTED');
     if (file.size <= 0 || file.size > 8 * 1024 * 1024) throw new Error('R2_IMAGE_SIZE_LIMIT_8MB');
+
+    await authorizeStaffUpload(formData.get('idToken') as string | null);
+
     const requestedCategory = String(formData.get('category') || 'products').toLowerCase();
-    const folder = requestedCategory === 'profile' || requestedCategory === 'profiles' ? 'profile'
-      : requestedCategory === 'system' || requestedCategory === 'branding' || requestedCategory === 'banner' ? 'system'
-      : 'products';
-    const r2 = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
-    if (!bucket || !publicUrl || !/^https:\/\//i.test(publicUrl)) throw new Error('R2_CONFIG_MISSING_OR_PUBLIC_URL_INVALID');
-    const key = folder + '/' + Date.now() + '-' + Math.random().toString(36).substring(7) + '.' + extension;
+    const folder =
+      requestedCategory === 'profile' || requestedCategory === 'profiles'
+        ? 'profile'
+        : requestedCategory === 'system' || requestedCategory === 'branding' || requestedCategory === 'banner'
+          ? 'system'
+          : 'products';
+    const key = `${folder}/${Date.now()}-${Math.random().toString(36).substring(7)}.${extension}`;
     const buffer = await fileToBuffer(file);
-    await r2.send(new PutObjectCommand({
-      Bucket: bucket, Key: key, Body: buffer,
-      ContentType: file.type || 'application/octet-stream'
-    }));
-    return { success: true, url: publicUrl + '/' + key, key, folder };
+
+    if (isR2Configured() || process.env.VITEST) {
+      const r2 = getR2Client();
+      const bucket = process.env.R2_BUCKET_NAME;
+      const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, '');
+      if (!bucket || !publicUrl || !/^https:\/\//i.test(publicUrl)) {
+        throw new Error('R2_CONFIG_MISSING_OR_PUBLIC_URL_INVALID');
+      }
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: file.type || 'application/octet-stream',
+        })
+      );
+      return { success: true, url: `${publicUrl}/${key}`, key, folder };
+    }
+
+    // Local development fallback when Cloudflare R2 secrets are stored only in Vercel cloud
+    const supaAdmin = getSupabaseAdminClient();
+    const { error: uploadErr } = await supaAdmin.storage
+      .from('public-assets')
+      .upload(key, buffer, { contentType: file.type, upsert: true });
+    if (uploadErr) throw new Error(uploadErr.message);
+    const { data: pub } = supaAdmin.storage.from('public-assets').getPublicUrl(key);
+    return { success: true, url: pub.publicUrl, key, folder };
   } catch (err: any) {
     return { success: false, message: err.message };
   }
@@ -150,28 +201,47 @@ export async function uploadImageToR2(formData: FormData) {
 export async function uploadAppReleaseFile(formData: FormData) {
   try {
     const file = formData.get('file') as File;
-    const type = formData.get('type') as string; // 'APK' or 'SCREENSHOT'
-    const r2 = getR2Client();
-    const bucket = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
-    if (!bucket || !publicUrl) throw new Error('R2_CONFIG_MISSING');
+    const type = formData.get('type') as string;
+    await authorizeStaffUpload(formData.get('idToken') as string | null);
 
     const extension = file.name.split('.').pop();
     const filename = type === 'APK' ? 'urban_express.apk' : `${type.toLowerCase()}_${Date.now()}.${extension}`;
     const key = `app/${filename}`;
     const buffer = Buffer.from(await file.arrayBuffer());
+    const contentType = type === 'APK' ? 'application/vnd.android.package-archive' : file.type;
 
-    await r2.send(new PutObjectCommand({
-      Bucket: bucket,
-      Key: key,
-      Body: buffer,
-      ContentType: type === 'APK' ? 'application/vnd.android.package-archive' : file.type
-    }));
-    
-    return { 
-      success: true, 
-      url: `${publicUrl}/${key}`,
-      size: (file.size / (1024 * 1024)).toFixed(1) + ' MB'
+    if (isR2Configured() || process.env.VITEST) {
+      const r2 = getR2Client();
+      const bucket = process.env.R2_BUCKET_NAME;
+      const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, '');
+      if (!bucket || !publicUrl) throw new Error('R2_CONFIG_MISSING');
+
+      await r2.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: key,
+          Body: buffer,
+          ContentType: contentType,
+        })
+      );
+
+      return {
+        success: true,
+        url: `${publicUrl}/${key}`,
+        size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+      };
+    }
+
+    const supaAdmin = getSupabaseAdminClient();
+    const { error: uploadErr } = await supaAdmin.storage
+      .from('public-assets')
+      .upload(key, buffer, { contentType, upsert: true });
+    if (uploadErr) throw new Error(uploadErr.message);
+    const { data: pub } = supaAdmin.storage.from('public-assets').getPublicUrl(key);
+    return {
+      success: true,
+      url: pub.publicUrl,
+      size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
     };
   } catch (err: any) {
     return { success: false, message: err.message };
@@ -183,46 +253,79 @@ export async function uploadAppReleaseFile(formData: FormData) {
  */
 export async function listImagesFromR2(category?: string) {
   try {
+    if (!isR2Configured() && !process.env.VITEST) {
+      const supaAdmin = getSupabaseAdminClient();
+      const folders = ['profile', 'products', 'system'];
+      const images: any[] = [];
+      for (const folder of folders) {
+        const { data } = await supaAdmin.storage.from('public-assets').list(folder, { limit: 100 });
+        for (const item of data || []) {
+          if (!/\.(jpg|jpeg|png|gif|webp|avif)$/i.test(item.name)) continue;
+          const key = `${folder}/${item.name}`;
+          const { data: pub } = supaAdmin.storage.from('public-assets').getPublicUrl(key);
+          images.push({
+            url: pub.publicUrl,
+            key,
+            lastModified: item.updated_at ? new Date(item.updated_at).getTime() : 0,
+            size: item.metadata?.size || 0,
+            folder,
+            category: folder === 'profile' ? 'Profile Images' : folder === 'products' ? 'Product Images' : 'System Images',
+          });
+        }
+      }
+      return { success: true, images };
+    }
+
     const r2 = getR2Client();
     const bucket = process.env.R2_BUCKET_NAME;
-    const publicUrl = process.env.R2_PUBLIC_URL;
+    const publicUrl = process.env.R2_PUBLIC_URL?.replace(/\/$/, '');
     if (!bucket || !publicUrl) throw new Error('R2_CONFIG_MISSING');
     const requested = String(category || 'All').toLowerCase();
-    const folderFilter = requested === 'profile' || requested === 'profile images' ? 'profile'
-      : requested === 'products' || requested === 'product' || requested === 'product images' ? 'products'
-      : requested === 'system' || requested === 'system images' ? 'system' : null;
+    const folderFilter =
+      requested === 'profile' || requested === 'profile images'
+        ? 'profile'
+        : requested === 'products' || requested === 'product' || requested === 'product images'
+          ? 'products'
+          : requested === 'system' || requested === 'system images'
+            ? 'system'
+            : null;
     const contents: any[] = [];
     let continuationToken: string | undefined;
     do {
-      const response = await r2.send(new ListObjectsV2Command({
-        Bucket: bucket,
-        ...(folderFilter ? { Prefix: folderFilter + '/' } : {}),
-        ContinuationToken: continuationToken,
-      }));
+      const response = await r2.send(
+        new ListObjectsV2Command({
+          Bucket: bucket,
+          ...(folderFilter ? { Prefix: folderFilter + '/' } : {}),
+          ContinuationToken: continuationToken,
+        })
+      );
       contents.push(...(response.Contents || []));
       continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined;
     } while (continuationToken);
     const images = contents
-      .filter(item => {
+      .filter((item) => {
         const key = String(item.Key || '');
         return /\.(jpg|jpeg|png|gif|webp|avif|svg)$/i.test(key) && !key.endsWith('/');
       })
-      .map(item => {
+      .map((item) => {
         const key = String(item.Key || '');
         const firstFolder = key.split('/')[0].toLowerCase();
-        const folder = firstFolder === 'profile' ? 'profile'
-          : firstFolder === 'products' || firstFolder === 'catalog' ? 'products'
-          : 'system';
+        const folder =
+          firstFolder === 'profile'
+            ? 'profile'
+            : firstFolder === 'products' || firstFolder === 'catalog'
+              ? 'products'
+              : 'system';
         return {
           url: publicUrl + '/' + key,
           key,
           lastModified: item.LastModified?.getTime?.() || 0,
           size: item.Size || 0,
           folder,
-          category: folder === 'profile' ? 'Profile Images' : folder === 'products' ? 'Product Images' : 'System Images'
+          category: folder === 'profile' ? 'Profile Images' : folder === 'products' ? 'Product Images' : 'System Images',
         };
       })
-      .filter(item => !folderFilter || item.folder === folderFilter)
+      .filter((item) => !folderFilter || item.folder === folderFilter)
       .sort((a, b) => b.lastModified - a.lastModified);
     return { success: true, images };
   } catch (err: any) {
@@ -235,82 +338,60 @@ export async function verifyPaystackTransaction(reference: string) {
   try {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     const response = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
-      headers: { 'Authorization': `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
-      cache: 'no-store'
+      headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+      cache: 'no-store',
     });
     const res = await response.json();
     if (res.status && res.data?.status === 'success') {
       return { success: true, message: 'Verified', data: res.data };
     }
     return { success: false, message: res.data?.gateway_response || 'Failed' };
-  } catch (err) {
+  } catch {
     return { success: false, message: 'Connection Error' };
   }
 }
 
-/**
- * Robust Historical Stock Reconciliation
- * Subtracts quantities from inventory for PAID orders that haven't been synced yet.
- * RESPECTS START TIME: Essential safety net to avoid double-deducting after manual restocks.
- */
 export async function reconcileHistoricalStock(startTime: number, unit: string) {
   try {
     const db = getDbAdmin();
-    // Query PAID orders within the timeframe.
-    let q: admin.firestore.Query = db.collection('orders')
-      .where('status', '==', 'PAID');
-    
-    // Safety Net: If startTime is 0, we risk double counting.
-    // Recommended to always use a specific starting checkpoint.
+    let q: admin.firestore.Query = db.collection('orders').where('status', '==', 'PAID');
     if (startTime > 0) {
       q = q.where('timestamp', '>=', startTime);
     }
-    
     if (unit !== 'ALL') {
       q = q.where('type', '==', unit);
     }
-    
     const snap = await q.get();
-    
-    // Filter only those that haven't been synchronized yet
-    const unsyncedDocs = snap.docs.filter(docSnap => docSnap.data().inventorySynced !== true);
-    
+    const unsyncedDocs = snap.docs.filter((docSnap) => docSnap.data().inventorySynced !== true);
     if (unsyncedDocs.length === 0) {
       return { success: true, message: 'Inventory is already synchronized for this temporal range.' };
     }
-    
     const batch = db.batch();
     let updatedCount = 0;
-
     for (const docSnap of unsyncedDocs) {
       const order = docSnap.data();
-      
       if (order.items && Array.isArray(order.items)) {
         for (const item of order.items) {
           if (item.productId) {
             const productRef = db.collection('inventory').doc(item.productId);
-            batch.update(productRef, { 
+            batch.update(productRef, {
               stockLevel: admin.firestore.FieldValue.increment(-item.quantity),
-              updatedAt: Date.now()
+              updatedAt: Date.now(),
             });
           }
         }
       }
-
       batch.update(docSnap.ref, { inventorySynced: true });
       updatedCount++;
     }
-
     await batch.commit();
-
     await db.collection('audit_logs').add({
       action: 'ADMIN_STOCK_RECONCILE',
       userId: 'SYSTEM_ADMIN',
       details: `Reconciled ${updatedCount} orders. Start Time: ${startTime > 0 ? new Date(startTime).toLocaleString() : 'ALL TIME'}. Scope: ${unit}`,
       timestamp: Date.now(),
-      severity: 'WARNING'
+      severity: 'WARNING',
     });
-
     return { success: true, message: `Sync Complete. ${updatedCount} sales orders synchronized with inventory balance.` };
   } catch (err: any) {
     console.error('[STOCK_RECONCILE_FAILURE]', err);
@@ -318,144 +399,404 @@ export async function reconcileHistoricalStock(startTime: number, unit: string) 
   }
 }
 
-/**
- * Capture Full Inventory Snapshot
- */
 export async function backupInventory(userId: string, userName: string) {
   try {
     const db = getDbAdmin();
     const snap = await db.collection('inventory').get();
-    const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-
+    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const backupRef = await db.collection('inventory_backups').add({
       items,
       timestamp: Date.now(),
       createdBy: userId,
       createdByName: userName,
-      itemCount: items.length
+      itemCount: items.length,
     });
-
     await db.collection('audit_logs').add({
       action: 'INVENTORY_BACKUP',
       userId,
       details: `Created inventory snapshot #${backupRef.id.slice(-6).toUpperCase()}. Captured ${items.length} records.`,
       timestamp: Date.now(),
-      severity: 'INFO'
+      severity: 'INFO',
     });
-
     return { success: true, id: backupRef.id };
   } catch (err: any) {
     return { success: false, message: err.message };
   }
 }
 
-/**
- * Restore Inventory from Snapshot
- */
 export async function restoreInventory(backupId: string, userId: string) {
   try {
     const db = getDbAdmin();
     const backupSnap = await db.collection('inventory_backups').doc(backupId).get();
     if (!backupSnap.exists) throw new Error('Backup data node not found.');
-    
     const { items } = backupSnap.data() as any;
-    
-    // Process in chunks if large, but for MVP we assume batch size limit (500)
     const batch = db.batch();
-
-    // 1. Clear existing inventory to prevent stale items
     const currentSnap = await db.collection('inventory').get();
-    currentSnap.docs.forEach(d => batch.delete(d.ref));
-
-    // 2. Restore from backup
+    currentSnap.docs.forEach((d) => batch.delete(d.ref));
     items.forEach((item: any) => {
       const { id, ...data } = item;
       const ref = db.collection('inventory').doc(id);
       batch.set(ref, data);
     });
-
     await batch.commit();
-
     await db.collection('audit_logs').add({
       action: 'INVENTORY_RESTORE',
       userId,
       details: `Restored inventory to snapshot ${backupId}. Re-populated ${items.length} records.`,
       timestamp: Date.now(),
-      severity: 'CRITICAL'
+      severity: 'CRITICAL',
     });
-
     return { success: true, message: `Node restored to snapshot #${backupId.slice(-6).toUpperCase()}.` };
   } catch (err: any) {
     return { success: false, message: err.message };
   }
 }
 
-export async function adminCreateUser(data: { email: string; password: string; displayName: string; role: string; assignedUnits?: string[] | null; baseSalary?: number; idToken?: string }) {
+function mapAdminAuthError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error || '');
+  const lower = raw.toLowerCase();
+  if (raw === 'ADMIN_AUTH_TOKEN_REQUIRED') return 'Please sign in as an administrator and try again.';
+  if (raw === 'ADMIN_PRIVILEGES_REQUIRED') return 'Administrator privileges are required to manage staff accounts.';
+  if (raw === 'ACCOUNT_DISABLED') return 'Your account has been deactivated.';
+  if (lower.includes('already been registered') || lower.includes('already exists') || lower.includes('duplicate')) {
+    return 'A user account with this email address already exists.';
+  }
+  if (lower.includes('password') && (lower.includes('short') || lower.includes('weak') || lower.includes('least'))) {
+    return 'Choose a stronger password with at least 8 characters.';
+  }
+  if (lower.includes('invalid') && lower.includes('email')) {
+    return 'Enter a valid email address.';
+  }
+  return raw || 'Staff operation could not be completed.';
+}
+
+/**
+ * Frictionless Admin Staff Creation (Supabase Admin API + profiles + optional 4-digit PIN)
+ */
+export async function adminCreateUser(data: {
+  email: string;
+  password: string;
+  displayName: string;
+  role: string;
+  branchId?: string | null;
+  branchIds?: string[] | null;
+  assignedUnits?: string[] | null;
+  baseSalary?: number;
+  mpesaNumber?: string | null;
+  pin?: string | null;
+  idToken?: string;
+}) {
   try {
-    let app: admin.app.App;
-    let auth: admin.auth.Auth;
-    let db: admin.firestore.Firestore;
-    if (data.idToken) {
-      const caller = await requireAdminCaller(data.idToken);
-      app = caller.app;
-      auth = caller.auth;
-      db = caller.db;
-    } else {
-      app = getAdminApp();
-      if (!app) throw new Error('ADMIN_SDK_NOT_READY');
-      auth = admin.auth(app);
-      db = admin.firestore(app);
+    const caller = await verifyAdminCaller(data.idToken);
+    const normalizedEmail = String(data.email || '').trim().toLowerCase();
+    const displayName = String(data.displayName || '').trim() || normalizedEmail.split('@')[0];
+    const upperRole = String(data.role || '').trim().toUpperCase();
+    const rawPin = String(data.pin || '').trim();
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return { success: false, message: 'Enter a valid email address.' };
     }
-    const userRecord = await auth.createUser({ email: data.email, password: data.password, displayName: data.displayName });
-    await db.collection('users').doc(userRecord.uid).set({
-      uid: userRecord.uid,
-      email: data.email.toLowerCase().trim(),
-      displayName: data.displayName,
-      role: data.role,
-      assignedUnits: data.assignedUnits || [],
-      baseSalary: data.baseSalary || 0,
-      createdAt: Date.now(),
-      accountType: 'STAFF',
+    if (!data.password || data.password.length < 8) {
+      return { success: false, message: 'Temporary password must be at least 8 characters.' };
+    }
+    if (!VALID_STAFF_ROLES.includes(upperRole as any)) {
+      return { success: false, message: `Select a valid staff role (${VALID_STAFF_ROLES.join(', ')}).` };
+    }
+    if (rawPin && !/^\d{4}$/.test(rawPin)) {
+      return { success: false, message: 'Optional terminal PIN must be exactly 4 digits.' };
+    }
+
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: created, error: createErr } = await supaAdmin.auth.admin.createUser({
+      email: normalizedEmail,
+      password: data.password,
+      email_confirm: true,
+      user_metadata: {
+        display_name: displayName,
+        full_name: displayName,
+      },
+      app_metadata: {
+        role: upperRole,
+      },
     });
-    return { success: true, uid: userRecord.uid };
+
+    if (createErr || !created?.user) {
+      return { success: false, message: mapAdminAuthError(createErr || new Error('Could not create user.')) };
+    }
+
+    const uid = created.user.id;
+    const now = Date.now();
+    const branchIds = Array.isArray(data.branchIds)
+      ? data.branchIds.filter(Boolean)
+      : data.branchId && data.branchId !== 'ALL'
+        ? [data.branchId]
+        : [];
+    const activeBranchId = data.branchId && data.branchId !== 'ALL' ? data.branchId : branchIds[0] || null;
+
+    const { error: upsertErr } = await supaAdmin.from('profiles').upsert(
+      {
+        id: uid,
+        uid,
+        firebase_id: uid,
+        email: normalizedEmail,
+        display_name: displayName,
+        role: upperRole,
+        account_type: 'STAFF',
+        is_super_admin: false,
+        disabled: false,
+        has_pin: Boolean(rawPin),
+        assigned_units: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
+        branch_ids: branchIds,
+        active_branch_id: activeBranchId,
+        base_salary: Number(data.baseSalary) || 0,
+        mpesa_number: data.mpesaNumber || null,
+        email_verified: true,
+        created_at_ms: now,
+        updated_at_ms: now,
+      },
+      { onConflict: 'id' }
+    );
+
+    if (upsertErr) {
+      await supaAdmin.auth.admin.deleteUser(uid).catch(() => undefined);
+      return { success: false, message: `Profile setup failed: ${upsertErr.message}` };
+    }
+
+    if (upperRole === 'ADMIN') {
+      await supaAdmin
+        .from('admins')
+        .upsert({ email: normalizedEmail, firebase_id: normalizedEmail, is_root: false, added_by: caller.email }, { onConflict: 'email' });
+    }
+
+    if (rawPin) {
+      const { salt, hash } = createPinHash(rawPin);
+      await supaAdmin.from('staff_pins').upsert(
+        { uid, pin_salt: salt, pin_hash: hash, updated_at: new Date().toISOString() },
+        { onConflict: 'uid' }
+      );
+    }
+
+    return { success: true, uid };
   } catch (error: any) {
-    return { success: false, message: error.message };
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+export async function adminUpdateStaff(data: {
+  uid: string;
+  displayName: string;
+  role: string;
+  branchId?: string | null;
+  branchIds?: string[] | null;
+  assignedUnits?: string[] | null;
+  baseSalary?: number;
+  mpesaNumber?: string | null;
+  pin?: string | null;
+  idToken?: string;
+}) {
+  try {
+    const caller = await verifyAdminCaller(data.idToken);
+    const upperRole = String(data.role || '').trim().toUpperCase();
+    const rawPin = String(data.pin || '').trim();
+    if (!VALID_STAFF_ROLES.includes(upperRole as any) && upperRole !== 'CLIENT') {
+      return { success: false, message: 'Select a valid system role.' };
+    }
+    if (rawPin && !/^\d{4}$/.test(rawPin)) {
+      return { success: false, message: 'Optional terminal PIN must be exactly 4 digits.' };
+    }
+
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id, uid, email, is_super_admin, has_pin')
+      .or(`id.eq.${data.uid},uid.eq.${data.uid}`)
+      .maybeSingle();
+
+    const supaId = existingProfile?.id || data.uid;
+    const targetEmail = String(existingProfile?.email || '').toLowerCase();
+
+    if (targetEmail === 'gackstoneb@gmail.com' && upperRole !== 'ADMIN') {
+      return { success: false, message: 'The primary Super Admin account role cannot be downgraded.' };
+    }
+
+    await supaAdmin.auth.admin.updateUserById(supaId, {
+      user_metadata: {
+        display_name: data.displayName.trim(),
+        full_name: data.displayName.trim(),
+      },
+      app_metadata: {
+        role: upperRole,
+      },
+    });
+
+    const branchIds = Array.isArray(data.branchIds)
+      ? data.branchIds.filter(Boolean)
+      : data.branchId && data.branchId !== 'ALL'
+        ? [data.branchId]
+        : [];
+    const activeBranchId = data.branchId && data.branchId !== 'ALL' ? data.branchId : branchIds[0] || null;
+
+    const patch: Record<string, any> = {
+      display_name: data.displayName.trim(),
+      role: upperRole,
+      account_type: upperRole === 'CLIENT' ? 'CLIENT' : 'STAFF',
+      assigned_units: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
+      branch_ids: branchIds,
+      active_branch_id: activeBranchId,
+      base_salary: Number(data.baseSalary) || 0,
+      mpesa_number: data.mpesaNumber || null,
+      updated_at_ms: Date.now(),
+    };
+    if (rawPin) patch.has_pin = true;
+
+    const { error: updateErr } = await supaAdmin.from('profiles').update(patch).eq('id', supaId);
+    if (updateErr) return { success: false, message: updateErr.message };
+
+    if (targetEmail) {
+      if (upperRole === 'ADMIN') {
+        await supaAdmin
+          .from('admins')
+          .upsert({ email: targetEmail, firebase_id: targetEmail, is_root: false, added_by: caller.email }, { onConflict: 'email' });
+      } else if (!ROOT_ADMIN_EMAILS.includes(targetEmail)) {
+        await supaAdmin.from('admins').delete().ilike('email', targetEmail);
+      }
+    }
+
+    if (rawPin) {
+      const { salt, hash } = createPinHash(rawPin);
+      const nowIso = new Date().toISOString();
+      await supaAdmin.from('staff_pins').upsert(
+        { uid: supaId, pin_salt: salt, pin_hash: hash, updated_at: nowIso },
+        { onConflict: 'uid' }
+      );
+      await supaAdmin
+        .from('terminal_device_staff')
+        .update({ pin_salt: salt, pin_hash: hash, pin_updated_at: nowIso })
+        .eq('uid', supaId);
+    }
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+export async function adminSetStaffActiveStatus(uid: string, disabled: boolean, idToken?: string) {
+  try {
+    const caller = await verifyAdminCaller(idToken);
+    if (caller.uid === uid && disabled) {
+      return { success: false, message: 'You cannot deactivate your own administrator account.' };
+    }
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id, email')
+      .or(`id.eq.${uid},uid.eq.${uid}`)
+      .maybeSingle();
+
+    const supaId = existingProfile?.id || uid;
+    if (String(existingProfile?.email || '').toLowerCase() === 'gackstoneb@gmail.com' && disabled) {
+      return { success: false, message: 'The primary Super Admin account cannot be deactivated.' };
+    }
+
+    const { error: authErr } = await supaAdmin.auth.admin.updateUserById(supaId, {
+      ban_duration: disabled ? '876000h' : 'none',
+    });
+    if (authErr) return { success: false, message: authErr.message };
+
+    const { error: profErr } = await supaAdmin
+      .from('profiles')
+      .update({ disabled, updated_at_ms: Date.now() })
+      .eq('id', supaId);
+    if (profErr) return { success: false, message: profErr.message };
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
   }
 }
 
 export async function adminDeleteUser(uid: string, idToken?: string) {
   try {
-    const { auth, db } = idToken
-      ? await requireAdminCaller(idToken)
-      : { auth: admin.auth(getAdminApp()), db: admin.firestore(getAdminApp()) };
-    try { await auth.deleteUser(uid); } catch (e) {}
-    await db.collection('users').doc(uid).delete();
+    const caller = await verifyAdminCaller(idToken);
+    if (caller.uid === uid) {
+      return { success: false, message: 'You cannot delete your own active administrator account.' };
+    }
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id, email')
+      .or(`id.eq.${uid},uid.eq.${uid}`)
+      .maybeSingle();
+
+    const supaId = existingProfile?.id || uid;
+    const targetEmail = String(existingProfile?.email || '').toLowerCase();
+    if (targetEmail === 'gackstoneb@gmail.com' || targetEmail === 'bonfacewana3072@gmail.com') {
+      return { success: false, message: 'Protected primary administrator accounts cannot be deleted.' };
+    }
+
+    await supaAdmin.from('staff_pins').delete().eq('uid', supaId);
+    await supaAdmin.from('terminal_device_staff').delete().eq('uid', supaId);
+    if (targetEmail && !ROOT_ADMIN_EMAILS.includes(targetEmail)) {
+      await supaAdmin.from('admins').delete().ilike('email', targetEmail);
+    }
+    await supaAdmin.from('profiles').delete().eq('id', supaId);
+    const { error: delErr } = await supaAdmin.auth.admin.deleteUser(supaId);
+    if (delErr && !delErr.message.toLowerCase().includes('not found')) {
+      return { success: false, message: delErr.message };
+    }
     return { success: true };
   } catch (error: any) {
-    return { success: false, message: error.message };
+    return { success: false, message: mapAdminAuthError(error) };
   }
 }
 
 export async function adminResetUserPassword(uid: string, pass: string, idToken?: string) {
   try {
-    const { auth, db } = idToken
-      ? await requireAdminCaller(idToken)
-      : { auth: admin.auth(getAdminApp()), db: admin.firestore(getAdminApp()) };
-    await auth.updateUser(uid, { password: pass });
-    await db.collection('users').doc(uid).update({ updatedAt: Date.now() });
+    await verifyAdminCaller(idToken);
+    if (!pass || pass.length < 8) {
+      return { success: false, message: 'New password must be at least 8 characters.' };
+    }
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id')
+      .or(`id.eq.${uid},uid.eq.${uid}`)
+      .maybeSingle();
+    const supaId = existingProfile?.id || uid;
+
+    const { error } = await supaAdmin.auth.admin.updateUserById(supaId, {
+      password: pass,
+      email_confirm: true,
+    });
+    if (error) return { success: false, message: mapAdminAuthError(error) };
+
+    await supaAdmin.from('profiles').update({ updated_at_ms: Date.now() }).eq('id', supaId);
     return { success: true };
   } catch (error: any) {
-    return { success: false, message: error.message };
+    return { success: false, message: mapAdminAuthError(error) };
   }
 }
 
-export async function createPaystackRecipient(data: { name: string; account_number: string; bank_code: string; description?: string }) {
+export async function createPaystackRecipient(data: {
+  name: string;
+  account_number: string;
+  bank_code: string;
+  description?: string;
+}) {
   try {
     const secretKey = process.env.PAYSTACK_SECRET_KEY;
     const response = await fetch(`https://api.paystack.co/transferrecipient`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'mobile_money', name: data.name, account_number: data.account_number, bank_code: data.bank_code, currency: 'KES', description: data.description })
+      headers: { Authorization: `Bearer ${secretKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'mobile_money',
+        name: data.name,
+        account_number: data.account_number,
+        bank_code: data.bank_code,
+        currency: 'KES',
+        description: data.description,
+      }),
     });
     return response.json();
   } catch (err: any) {
@@ -468,17 +809,18 @@ export async function checkAdminStatus() {
     const db = getDbAdmin();
     await db.collection('system').doc('ping').set({ lastChecked: Date.now() });
     return { success: true, message: 'ACTIVE' };
-  } catch (e: any) {
+  } catch {
     return { success: false, message: 'ERROR' };
   }
 }
 
 export async function checkAiStatus() {
   const geminiKey = process.env.GOOGLE_GENAI_API_KEY;
+  const configured = Boolean(geminiKey && geminiKey !== '[SENSITIVE]');
   return {
-    hasKey: !!geminiKey,
+    hasKey: configured,
     provider: 'Google Gemini',
-    status: geminiKey ? 'OPERATIONAL' : 'OFFLINE',
-    message: geminiKey ? 'Neural link established.' : 'Missing API key.'
+    status: configured ? 'OPERATIONAL' : 'OFFLINE',
+    message: configured ? 'Neural link established.' : 'Missing API key.',
   };
 }

@@ -14,13 +14,15 @@ import { toast } from '@/hooks/use-toast';
 import { UserProfile } from '@/lib/types';
 import Link from 'next/link';
 import { notifyTelegramClientEvent, notifyTelegramFailedSignIn } from '@/lib/telegram/client-events';
+import { getRoleHomeRoute } from '@/lib/role-routing';
 
 const ROOT_ADMINS = [
+  'gackstoneb@gmail.com',
+  'bonfacewana3072@gmail.com',
   'urbanautoexpressnakuru@gmail.com',
   'urbanaautoexpressnakuru@gmail.com',
   'samuelkarani044@gmail.com',
   'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
 ];
 
 export default function LoginPage() {
@@ -29,21 +31,38 @@ export default function LoginPage() {
   const searchParams = useSearchParams();
   const firestore = useDb();
 
-  // Only allow same-origin customer destinations; never accept external redirect URLs.
-  const getPostLoginDestination = (role?: string, email?: string | null) => {
+  // Only allow safe same-origin destinations and send staff directly to their role dashboard.
+  const getPostLoginDestination = (profile?: Partial<UserProfile> | null, fallbackEmail?: string | null) => {
+    const normalizedEmail = String(profile?.email || fallbackEmail || '').trim().toLowerCase();
+    const isRoot = ROOT_ADMINS.includes(normalizedEmail) || profile?.isSuperAdmin === true;
+    const upperRole = String(profile?.role || (isRoot ? 'ADMIN' : 'CLIENT')).toUpperCase();
+    const roleHome = getRoleHomeRoute({
+      role: upperRole,
+      email: normalizedEmail,
+      isSuperAdmin: isRoot,
+      assignedUnits: profile?.assignedUnits,
+    });
+
     const nextParam = searchParams.get('next');
     if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.includes(String.fromCharCode(92))) {
+      if (upperRole === 'CLIENT' && !isRoot) {
+        if (nextParam === '/' || nextParam.startsWith('/client/')) {
+          return nextParam;
+        }
+        return '/';
+      }
+      if (nextParam === '/dashboard' && roleHome !== '/dashboard') {
+        return roleHome;
+      }
       return nextParam;
     }
+
     const requested = searchParams.get('redirect');
     if (requested && requested.startsWith('/client/') && !requested.startsWith('//') && !requested.includes(String.fromCharCode(92))) {
       return requested;
     }
-    const normalizedEmail = (email || '').trim().toLowerCase();
-    const isRoot = ROOT_ADMINS.includes(normalizedEmail);
-    const upperRole = (role || 'CLIENT').toUpperCase();
-    if (upperRole === 'KITCHEN') return '/kds';
-    return (isRoot || (upperRole && upperRole !== 'CLIENT')) ? '/dashboard' : '/';
+
+    return roleHome;
   };
   
   const [email, setEmail] = useState('');
@@ -51,7 +70,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const continueAfterLogin = async (signedInUser: any, role?: string) => {
+  const continueAfterLogin = async (signedInUser: any, profile?: Partial<UserProfile> | null) => {
     try {
       await signedInUser.reload?.();
     } catch {
@@ -59,45 +78,7 @@ export default function LoginPage() {
     }
 
     const userEmail = String(signedInUser?.email || email || '').trim().toLowerCase();
-    const upperRole = String(role || 'CLIENT').toUpperCase();
-    const isRootOrAdmin = ROOT_ADMINS.includes(userEmail) || upperRole === 'ADMIN';
-
-    if (!isRootOrAdmin && upperRole === 'CLIENT' && signedInUser?.emailVerified === false) {
-      try {
-        const verificationToken = await signedInUser.getIdToken?.(true);
-        if (verificationToken) {
-          await fetch('/api/auth/send-verification', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${verificationToken}` },
-          });
-        }
-      } catch {
-        // Non-fatal: verify-email page allows manual resend
-      }
-      router.replace('/auth/verify-email');
-      return;
-    }
-
-    if (isRootOrAdmin) {
-      try {
-        const token = await signedInUser.getIdToken?.(true);
-        if (token) {
-          const response = await fetch('/api/admin/otp/request', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const data = await response.json().catch(() => ({}));
-          if (response.ok && data?.required) {
-            router.replace('/admin-otp');
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('[ADMIN_OTP_CHECK_WARNING]', err);
-      }
-    }
-
-    router.replace(getPostLoginDestination(upperRole, userEmail));
+    router.replace(getPostLoginDestination(profile, userEmail));
   };
 
   const handleGoogleLogin = async () => {
@@ -140,7 +121,7 @@ export default function LoginPage() {
       }
 
       void notifyTelegramClientEvent(result.user, { type: 'SIGNIN', method: 'GOOGLE' });
-      await continueAfterLogin(result.user, profileData.role);
+      await continueAfterLogin(result.user, profileData);
     } catch (error: any) {
       if (error?.code !== 'auth/popup-closed-by-user') {
         void notifyTelegramFailedSignIn(email);
@@ -187,7 +168,15 @@ export default function LoginPage() {
           const userRef = doc(firestore, 'users', cred.user.uid);
           const snap = await getDoc(userRef);
           if (snap && typeof snap.exists === 'function' && snap.exists()) {
-            profileData = { ...profileData, ...(snap.data() as UserProfile), uid: cred.user.uid };
+            const fetched = snap.data() as UserProfile;
+            if (fetched.disabled === true) {
+              const { signOut } = await import('@/lib/db');
+              await signOut(auth);
+              const disabledErr = new Error('Account disabled') as Error & { code?: string };
+              disabledErr.code = 'auth/user-disabled';
+              throw disabledErr;
+            }
+            profileData = { ...profileData, ...fetched, uid: cred.user.uid };
           } else if (snap && typeof snap.exists === 'function' && !snap.exists() && !ROOT_ADMINS.includes(normalizedEmail)) {
             await setDoc(userRef, profileData).catch(() => undefined);
           }
@@ -207,16 +196,13 @@ export default function LoginPage() {
       }
 
       void notifyTelegramClientEvent(cred.user, { type: 'SIGNIN', method: 'EMAIL' });
-      await continueAfterLogin(cred.user, profileData.role);
+      await continueAfterLogin(cred.user, profileData);
     } catch (error: any) {
       console.error('[LOGIN] signInWithPassword failed:', error);
       void notifyTelegramFailedSignIn(email);
       const code = error?.code || '';
-      const rawMessage = String(error?.message || '');
       const description =
-        /email not confirmed/i.test(rawMessage)
-          ? 'Your email address is not confirmed yet. Open the confirmation link we emailed you, then sign in.'
-          : code === 'auth/too-many-requests'
+        code === 'auth/too-many-requests'
           ? 'Too many unsuccessful sign-in attempts. Please wait a few minutes or reset your password.'
           : code === 'auth/network-request-failed'
             ? 'Network error. Please check your internet connection and try again.'

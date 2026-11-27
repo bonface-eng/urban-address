@@ -58,7 +58,7 @@ describe('LoginPage Auth Logic', () => {
       user: {
         uid: 'client-1',
         email: 'client@urban.co.ke',
-        emailVerified: true,
+        emailVerified: false,
         reload: vi.fn().mockResolvedValue(undefined),
         getIdToken: vi.fn().mockResolvedValue('id-token'),
       },
@@ -72,6 +72,41 @@ describe('LoginPage Auth Logic', () => {
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/');
+    });
+  });
+
+  it.each([
+    ['CASHIER', 'cashier@urban.co.ke', '/dashboard'],
+    ['MANAGER', 'manager@urban.co.ke', '/dashboard'],
+    ['SUPERVISOR', 'supervisor@urban.co.ke', '/dashboard'],
+    ['STOREKEEPER', 'store@urban.co.ke', '/inventory'],
+    ['ATTENDANT', 'attendant@urban.co.ke', '/carwash'],
+    ['KITCHEN', 'kitchen@urban.co.ke', '/kds'],
+    ['ADMIN', 'gackstoneb@gmail.com', '/dashboard'],
+    ['ADMIN', 'bonfacewana3072@gmail.com', '/dashboard'],
+  ])('redirects %s (%s) straight to %s after sign-in', async (role, email, expectedRoute) => {
+    const { getDoc } = await import('@/lib/db');
+    vi.mocked(getDoc).mockResolvedValueOnce({
+      exists: () => true,
+      data: () => ({ uid: `${role}-uid`, email, displayName: `${role} User`, role }),
+    } as any);
+    vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
+      user: {
+        uid: `${role}-uid`,
+        email,
+        reload: vi.fn().mockResolvedValue(undefined),
+        getIdToken: vi.fn().mockResolvedValue('id-token'),
+      },
+    } as any);
+
+    render(<LoginPage />);
+
+    fireEvent.change(screen.getByPlaceholderText(/Email address/i), { target: { value: email } });
+    fireEvent.change(screen.getByPlaceholderText(/Password/i), { target: { value: 'Password123!' } });
+    fireEvent.click(screen.getByRole('button', { name: /Sign In/i }));
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith(expectedRoute);
     });
   });
 

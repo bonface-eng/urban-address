@@ -1,28 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from '@/lib/db/admin';
-import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
+import { authorizeAdminRequest } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROOT_ADMINS = ['urbanautoexpressnakuru@gmail.com','urbanaautoexpressnakuru@gmail.com','samuelkarani044@gmail.com','gmaina424@gmail.com','bonfacewana3072@gmail.com'];
-
 async function authorize(request: NextRequest) {
-  const header = request.headers.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token) return null;
-  try {
-    const decoded = await admin.auth(getAdminApp()).verifyIdToken(token);
-    const email = String(decoded.email || '').trim().toLowerCase();
-    const db = getDbAdmin();
-    const [profile, whitelist] = await Promise.all([
-      db.collection('users').doc(decoded.uid).get(),
-      email ? db.collection('admins').doc(email).get() : Promise.resolve(null),
-    ]);
-    const isAdmin = ROOT_ADMINS.includes(email) || !!whitelist?.exists || String(profile.data()?.role || '').toUpperCase() === 'ADMIN';
-    const verifiedToday = decoded.adminOtpVerifiedDate === new Date().toISOString().slice(0, 10);
-    return isAdmin && verifiedToday ? db : null;
-  } catch { return null; }
+  const caller = await authorizeAdminRequest(request);
+  return caller ? caller.db : null;
 }
 
 export async function GET(request: NextRequest) {

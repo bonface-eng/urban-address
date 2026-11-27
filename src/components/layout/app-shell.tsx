@@ -13,6 +13,11 @@ import { toast } from '@/hooks/use-toast';
 import { TerminalLock } from '@/components/pos/terminal-lock';
 import { BusinessUnit } from '@/lib/types';
 import { VersionUpdateBriefing } from '@/components/shared/version-update';
+import {
+  clearObsoleteTerminalStorage,
+  getRoleBaselinePaths,
+  getRoleHomeRoute,
+} from '@/lib/role-routing';
 import Snowfall from 'react-snowfall';
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
@@ -26,7 +31,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const { role, isSuperAdmin, isEmployee, isKitchen, loading: profileLoading, profile } = useProfile();
   const [mounted, setMounted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [adminOtpCheck, setAdminOtpCheck] = useState<'checking' | 'verified' | 'required'>('checking');
   const previousStaffPath = useRef<string | null>(null);
 
   // Check if we are in "Preview Mode" (rendered inside the mobile mockup)
@@ -47,9 +51,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const { data: permMap } = useDoc<any>(permissionsRef);
   const { data: globalConfig } = useDoc<any>(configRef);
 
-  const isAdminOtpRoute = pathname === '/admin-otp';
-  const isEmailVerificationRoute = pathname === '/auth/verify-email';
-  const isAuthRoute = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/auth/') || isAdminOtpRoute;
+  const isAuthRoute = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/auth/');
   const isClientView = pathname === '/' || 
                        pathname.startsWith('/client') || 
                        pathname === '/about' || 
@@ -62,28 +64,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   
   const isSetupPage = pathname === '/setup-profile';
   const isProtectedStaffRoute = !isAuthRoute && !isClientView && !isSetupPage;
-
-  // Super administrators must complete one email OTP verification per UTC day
-  // before any staff workspace or administrative screen is rendered.
-  useEffect(() => {
-    if (!mounted || authLoading || profileLoading || isPreviewMode) return;
-    if (!user || !isSuperAdmin || isClientView || isSetupPage || isAdminOtpRoute) {
-      setAdminOtpCheck('verified');
-      return;
-    }
-    let active = true;
-    setAdminOtpCheck('checking');
-    user.getIdTokenResult(true).then((tokenResult) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const verified = tokenResult.claims.adminOtpVerifiedDate === today;
-      if (active) setAdminOtpCheck(verified ? 'verified' : 'required');
-      if (!verified) router.replace('/admin-otp');
-    }).catch(() => {
-      if (active) setAdminOtpCheck('required');
-      router.replace('/admin-otp');
-    });
-    return () => { active = false; };
-  }, [mounted, authLoading, profileLoading, isPreviewMode, user, isSuperAdmin, isClientView, isSetupPage, isAdminOtpRoute, router]);
 
   // Browser back/forward can restore a page from the back-forward cache without
   // remounting React. Force a fresh document/auth check before showing staff data.
@@ -99,6 +79,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   }, [isPreviewMode, isProtectedStaffRoute]);
 
   useEffect(() => {
+    clearObsoleteTerminalStorage();
     const storedCollapsed = typeof window !== 'undefined' ? localStorage.getItem('urban_sidebar_collapsed') : null;
     setSidebarCollapsed(storedCollapsed === 'true');
     setMounted(true);
@@ -170,9 +151,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       if (!isAuthRoute && !isClientView) router.replace('/login');
       return;
     }
+    const roleHome = getRoleHomeRoute({
+      role,
+      email: user.email,
+      isSuperAdmin,
+      assignedUnits: profile?.assignedUnits,
+    });
+
     if (isAuthRoute) {
-      if (isAdminOtpRoute || isEmailVerificationRoute) return;
-      router.replace(isKitchen ? '/kds' : (isEmployee || isSuperAdmin) ? '/dashboard' : '/');
+      router.replace(roleHome);
       return;
     }
     if (!isEmployee && !isSuperAdmin && !isClientView) {
@@ -180,44 +167,50 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (!isClientView && !isSetupPage && isIncomplete) {
-      const hasReminded = sessionStorage.getItem('uax_setup_reminded');
-      if (!hasReminded) {
-        router.replace('/setup-profile');
-        return;
-      }
+    if (isKitchen && pathname === '/dashboard') {
+      router.replace('/kds');
+      return;
     }
 
-    if (!isSuperAdmin && permMap && role && !isClientView && !isSetupPage) {
-      const baseline = ['/dashboard', '/settings'];
-      const allowedPaths = permMap[role] || [];
-      const isExplicitlyAllowed = allowedPaths.includes(pathname);
+    if (!isSuperAdmin && role && !isClientView && !isSetupPage) {
+      const baseline = getRoleBaselinePaths(role, isSuperAdmin);
+      if (baseline.includes('*')) return;
 
-      if (!baseline.includes(pathname) && !isExplicitlyAllowed) {
+      const allowedPaths = permMap ? permMap[role] || [] : [];
+      const isExplicitlyAllowed = baseline.includes(pathname) || allowedPaths.includes(pathname);
+
+      if (!isExplicitlyAllowed) {
         const units = profile?.assignedUnits || [];
-        const isAuthorizedToStay = (role === 'CASHIER' || role === 'ATTENDANT' || role === 'STOREKEEPER' || role === 'KITCHEN');
+        const isAuthorizedToStay =
+          role === 'CASHIER' || role === 'ATTENDANT' || role === 'STOREKEEPER' || role === 'KITCHEN';
 
         if (isAuthorizedToStay) {
           const departmentalPages = ['/lounge', '/store', '/carwash/pos', '/carwash', '/attendants', '/kds'];
-          
+
           if (departmentalPages.includes(pathname)) {
             let authorized = false;
             if (units.includes('LOUNGE') && (pathname === '/lounge' || pathname === '/kds')) authorized = true;
             if (role === 'KITCHEN' && pathname === '/kds') authorized = true;
+            if (role === 'STOREKEEPER' && pathname === '/store') authorized = true;
+            if (role === 'ATTENDANT' && ['/carwash', '/attendants'].includes(pathname)) authorized = true;
             if (units.includes('STORE') && pathname === '/store') authorized = true;
-            if (units.includes('CARWASH') && ['/carwash/pos', '/carwash', '/attendants'].includes(pathname)) authorized = true;
+            if (units.includes('CARWASH') && ['/carwash/pos', '/carwash', '/attendants'].includes(pathname)) {
+              authorized = true;
+            }
 
             if (!authorized && units.length > 0) {
-              const redirectMap: any = { 'LOUNGE': '/lounge', 'STORE': '/store', 'CARWASH': '/carwash/pos' };
-              const fallback = isKitchen ? '/kds' : (redirectMap[units[0]] || '/dashboard');
+              const redirectMap: Record<string, string> = {
+                LOUNGE: '/lounge',
+                STORE: '/store',
+                CARWASH: '/carwash/pos',
+              };
+              const fallback = isKitchen ? '/kds' : redirectMap[units[0]] || roleHome;
               router.replace(fallback);
               return;
             }
           }
         }
-        if (!baseline.includes(pathname)) {
-          router.replace(isKitchen ? '/kds' : '/dashboard');
-        }
+        router.replace(roleHome);
       }
     }
   }, [mounted, authLoading, profileLoading, user, role, pathname, router, isAuthRoute, isSuperAdmin, profile, permMap, isEmployee, isClientView, isIncomplete, isSetupPage, isKitchen, isPreviewMode]);
@@ -236,10 +229,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   };
 
   if (!mounted) return null;
-
-  if (!isPreviewMode && isProtectedStaffRoute && isSuperAdmin && adminOtpCheck !== 'verified') {
-    return <div className="min-h-screen bg-white flex items-center justify-center px-6"><div className="text-center space-y-3" role="status" aria-live="polite"><div className="mx-auto h-8 w-8 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" /><p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Verifying administrator access…</p></div></div>;
-  }
 
   // Never render staff/admin content while the auth session is restoring or has no user.
   if (!isPreviewMode && isProtectedStaffRoute && (authLoading || profileLoading || !user)) {
@@ -296,7 +285,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             </main>
           </div>
           <BottomNav />
-          <VersionUpdateBriefing />
         </div>
       </TerminalLock>
     </TooltipProvider>

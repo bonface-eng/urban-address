@@ -49,11 +49,9 @@ const TOP_LEVEL_TABLE_MAP: Record<string, { table: string; pkColumn?: string; is
   audit_logs: { table: 'audit_logs' },
   system_incidents: { table: 'system_incidents' },
   terminal_devices: { table: 'terminal_devices' },
-  terminal_pin_attempts: { table: 'terminal_pin_attempts' },
   terminal_pin_reset_otps: { table: 'terminal_pin_reset_otps' },
   terminal_sessions: { table: 'terminal_sessions' },
-  email_verification_otps: { table: 'email_verification_otps' },
-  admin_daily_otps: { table: 'admin_daily_otps' },
+  staff_pins: { table: 'staff_pins', pkColumn: 'uid' },
   email_rate_limits: { table: 'email_rate_limits' },
   email_preferences: { table: 'email_preferences' },
   email_outbox: { table: 'email_outbox' },
@@ -204,18 +202,6 @@ const CAMEL_TO_SNAKE_OVERRIDES: Record<string, Record<string, string>> = {
   email_messages: {
     sentAt: 'sent_at',
   },
-  admin_daily_otps: {
-    sentAt: 'sent_at',
-    expiresAt: 'expires_at',
-    consumedAt: 'consumed_at',
-    verifiedAt: 'verified_at',
-  },
-  email_verification_otps: {
-    lastSentAt: 'last_sent_at',
-    expiresAt: 'expires_at',
-    consumedAt: 'consumed_at',
-    hourlyCount: 'hourly_count',
-  },
   terminal_pin_reset_otps: {
     lastSentAt: 'last_sent_at',
     expiresAt: 'expires_at',
@@ -269,7 +255,7 @@ const CAMEL_TO_SNAKE_OVERRIDES: Record<string, Record<string, string>> = {
 };
 
 const TABLES_WITH_CREATED_AT_MS = new Set([
-  'branches', 'email_campaigns', 'email_outbox', 'email_verification_otps',
+  'branches', 'email_campaigns', 'email_outbox',
   'inventory', 'live_audio_sessions', 'pos_terminals', 'profiles',
   'refund_requests', 'staff_navigation_logs', 'stock_adjustment_requests',
   'suppliers', 'system_audit_logs', 'system_incidents',
@@ -278,8 +264,8 @@ const TABLES_WITH_CREATED_AT_MS = new Set([
 ]);
 
 const TABLES_WITH_UPDATED_AT_MS = new Set([
-  'admin_daily_otps', 'app_releases', 'branches', 'digital_menus',
-  'email_campaigns', 'email_outbox', 'email_verification_otps', 'inventory',
+  'app_releases', 'branches', 'digital_menus',
+  'email_campaigns', 'email_outbox', 'inventory',
   'maps_geocode_cache', 'orders', 'pos_terminals', 'profiles', 'settings',
   'suppliers', 'system_config', 'telegram_controls',
   'telegram_event_deliveries', 'telegram_link_challenges',
@@ -290,7 +276,7 @@ const TABLES_WITH_UPDATED_AT_MS = new Set([
 const TIMESTAMPTZ_EXTRA_COLUMNS: Record<string, Set<string>> = {
   firebase_uid_map: new Set(['migrated_at']),
   terminal_device_staff: new Set([
-    'disclaimer_acknowledged_at', 'pin_updated_at', 'pin_reset_at',
+    'pin_updated_at', 'pin_reset_at',
     'registered_at', 'last_seen_at',
   ]),
   terminal_sessions: new Set(['expires_at']),
@@ -409,7 +395,7 @@ export function rowToDocument<T = Record<string, any>>(
 const KNOWN_TABLE_COLUMNS: Record<string, Set<string>> = {
   profiles: new Set([
     'id', 'uid', 'firebase_id', 'email', 'display_name', 'first_name', 'middle_name', 'last_name',
-    'role', 'account_type', 'assigned_units', 'branch_ids', 'active_branch_id', 'photo_url',
+    'role', 'account_type', 'is_super_admin', 'disabled', 'has_pin', 'assigned_units', 'branch_ids', 'active_branch_id', 'photo_url',
     'phone_number', 'address', 'delivery_location', 'mpesa_number', 'paystack_recipient_code',
     'must_change_password', 'base_salary', 'loyalty_points', 'total_spent', 'loyalty_reconciled_at',
     'loyalty_reconciliation_id', 'seen_versions', 'email_verified', 'email_verified_at',

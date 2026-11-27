@@ -43,6 +43,40 @@ export default function ProfilePage() {
   const [linkedTelegramId, setLinkedTelegramId] = useState('');
   const [telegramBusy, setTelegramBusy] = useState(false);
   const [receiptSettingsOpen, setReceiptSettingsOpen] = useState(false);
+  const [optionalPin, setOptionalPin] = useState('');
+  const [savingPin, setSavingPin] = useState(false);
+
+  const handleSaveOptionalPin = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!user || savingPin) return;
+    const cleanPin = optionalPin.trim();
+    if (cleanPin && !/^\d{4}$/.test(cleanPin)) {
+      toast({ variant: 'destructive', title: 'Invalid PIN', description: 'Enter a 4-digit numeric PIN (or leave blank to clear).' });
+      return;
+    }
+    setSavingPin(true);
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch('/api/terminal/pin', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'set-own-pin', pin: cleanPin }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not update terminal PIN.');
+      setOptionalPin('');
+      toast({
+        title: cleanPin ? 'Terminal PIN saved' : 'Terminal PIN cleared',
+        description: cleanPin
+          ? 'You can now use this 4-digit PIN for fast switching on shared POS terminals.'
+          : 'Optional terminal PIN has been removed.',
+      });
+    } catch (err: any) {
+      toast({ variant: 'destructive', title: 'Could not update PIN', description: err.message });
+    } finally {
+      setSavingPin(false);
+    }
+  };
 
   const [printMode, setPrintMode] = useState<'SERIAL' | 'PROXY' | 'NETWORK'>(HardwareService.getMode());
   const [paperWidth, setPaperWidth] = useState<'80mm' | '58mm'>(HardwareService.getPaperWidth());
@@ -276,11 +310,39 @@ export default function ProfilePage() {
               <div><h3 className="font-semibold text-zinc-900">Account access</h3><p className="text-xs text-zinc-500">Your current access level</p></div>
             </div>
             <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Role</span><span className="font-medium text-zinc-900">{role || 'Not assigned'}</span></div>
-              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Account</span><span className="font-medium text-zinc-900">{user?.emailVerified ? 'Email verified' : 'Email not verified'}</span></div>
+              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Role</span><span className="font-medium text-zinc-900">{isSuperAdmin ? 'ADMIN' : role || 'Not assigned'}</span></div>
+              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Account</span><span className="font-medium text-zinc-900">Active</span></div>
               <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Profile status</span><span className="font-medium text-zinc-900">{profile?.phoneNumber && profile?.address ? 'Details added' : 'Needs details'}</span></div>
             </div>
           </Card>
+
+          {role && role !== 'CLIENT' && (
+            <Card className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="mb-4 flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-50 text-primary"><Monitor className="h-5 w-5" /></div>
+                <div><h3 className="font-semibold text-zinc-900">Optional POS Terminal PIN</h3><p className="text-xs text-zinc-500">Set or change your 4-digit quick-switch PIN</p></div>
+                {profile?.hasPin && <Badge className="ml-auto border-emerald-200 bg-emerald-50 text-emerald-700">PIN Set</Badge>}
+              </div>
+              <form onSubmit={handleSaveOptionalPin} className="space-y-3">
+                <p className="text-xs leading-5 text-zinc-500">A PIN is optional and only used for fast profile switching on shared POS stations. Leave blank and save to clear an existing PIN.</p>
+                <div className="flex gap-2">
+                  <Input
+                    type="password"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    maxLength={4}
+                    value={optionalPin}
+                    onChange={(e) => setOptionalPin(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))}
+                    placeholder={profile?.hasPin ? 'New 4-digit PIN (or blank to clear)' : '4-digit PIN (e.g. 1234)'}
+                    className="h-11 flex-1"
+                  />
+                  <Button type="submit" disabled={savingPin} className="h-11 px-5">
+                    {savingPin ? <RefreshCcw className="h-4 w-4 animate-spin" /> : 'Save PIN'}
+                  </Button>
+                </div>
+              </form>
+            </Card>
+          )}
 
           {role && role !== 'CLIENT' && (
             <Card className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">

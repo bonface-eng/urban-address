@@ -78,9 +78,9 @@ Owners can use `/lock_terminal TERMINAL_ID` and `/unlock_terminal TERMINAL_ID`. 
 
 The current interactive approval workflow is for pending petty-cash requests. Refund execution, payment reversals, stock writes, and staff-account suspension are not exposed as Telegram mutations; they must continue through their existing authenticated application workflows. The bot reports payment, inventory, staff and operational events where the app emits the corresponding event/audit record. No microphone or audio-recording functionality is included in this rollout.
 
-## OTP request security alerts
+## Security alerts
 
-Email-verification and administrator daily-OTP requests generate Telegram security alerts for configured management recipients. The alert contains a masked email, OTP purpose, request count in the current 15-minute window, and a spam-suspected warning once three requests are recorded. Further alerts are rate-limited to avoid flooding (the first request, threshold crossing, then every fifth request). OTP values, hashes, and verification links are never sent to Telegram. The existing email OTP cooldown and hourly/daily limits remain authoritative.
+Security and authentication events generate Telegram alerts for configured management recipients. The alert contains a masked email, action purpose, and request telemetry. Values, hashes, and verification links are never sent to Telegram.
 
 ## POS sales analytics schedule
 

@@ -186,7 +186,7 @@ function ResetPasswordContent() {
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent" />
         <div className="absolute bottom-12 left-12 z-20 text-white space-y-2">
           <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Set New Password</h1>
-          <p className="text-[10px] font-bold uppercase tracking-[0.4em] opacity-60">Security Update for {email}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] opacity-60">Password Recovery for {email}</p>
         </div>
       </div>
 

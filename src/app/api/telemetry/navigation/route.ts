@@ -45,14 +45,13 @@ export async function POST(request: NextRequest) {
       if (previousPath === toPath && now - previousAt < 15_000) return false;
       transaction.set(stateRef, { lastPath: toPath, lastAt: now, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
       const staffName = String(profile.displayName || profile.email || decoded.uid).slice(0, 120);
-      const terminalDeviceId = typeof decoded.terminalDeviceId === 'string' ? decoded.terminalDeviceId : null;
+      const deviceId = typeof body?.deviceId === 'string' ? body.deviceId.slice(0, 80) : null;
       transaction.create(eventRef, {
         userId: decoded.uid,
         staffName,
         role,
         fromPath,
         toPath,
-        terminalDeviceId,
         createdAt: now,
       });
       const auditRef = db.collection('audit_logs').doc();
@@ -62,7 +61,7 @@ export async function POST(request: NextRequest) {
         details: `${staffName} (${role}) navigated from ${fromPath} to ${toPath}.`,
         fromPath,
         toPath,
-        deviceId: terminalDeviceId,
+        deviceId,
         timestamp: now,
         severity: 'INFO',
       });

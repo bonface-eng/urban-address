@@ -435,22 +435,6 @@ export class AdminAuth {
     const userMeta = u.user_metadata || {};
     const uid = String(appMeta.firebase_uid || u.id);
 
-    // Check public.admin_daily_otps for today's UTC date in case app_metadata hasn't refreshed in the token yet
-    const today = new Date().toISOString().slice(0, 10);
-    let adminOtpVerifiedDate = appMeta.adminOtpVerifiedDate;
-    if (adminOtpVerifiedDate !== today) {
-      const { data: otpRow } = await this.client
-        .from('admin_daily_otps')
-        .select('day, verified_at')
-        .in('id', [u.id, uid])
-        .eq('day', today)
-        .not('verified_at', 'is', null)
-        .maybeSingle();
-      if (otpRow) {
-        adminOtpVerifiedDate = today;
-      }
-    }
-
     return {
       uid,
       sub: u.id,
@@ -459,10 +443,6 @@ export class AdminAuth {
       name: userMeta.display_name || userMeta.full_name || userMeta.name || u.email || '',
       ...userMeta,
       ...appMeta,
-      // camelCase aliases for the snake_case claims written into app_metadata
-      terminalStaffSession: appMeta.terminal_staff_session ?? appMeta.terminalStaffSession ?? false,
-      terminalDeviceId: appMeta.terminal_device_id ?? appMeta.terminalDeviceId ?? null,
-      ...(adminOtpVerifiedDate ? { adminOtpVerifiedDate } : {}),
     };
   }
 
@@ -592,23 +572,16 @@ export class AdminAuth {
 
   /**
    * Issues a Supabase session for POS Terminal PIN switching:
-   * 1. Sets `terminal_staff_session: true` and `terminal_device_id` in user's `app_metadata`
-   * 2. Generates a one-time magiclink token_hash via Supabase Admin API and exchanges it
-   *    server-side on an isolated anon client to obtain a real `{ access_token, refresh_token }`
-   *    session for `targetUid`, encoded as a JSON string for `signInWithCustomToken`.
+   * Generates a one-time magiclink token_hash via Supabase Admin API and exchanges it
+   * server-side on an isolated anon client to obtain a real `{ access_token, refresh_token }`
+   * session for `targetUid`, encoded as a JSON string for `signInWithCustomToken`.
    */
-  async createCustomToken(targetUid: string, developerClaims?: Record<string, any>): Promise<string> {
+  async createCustomToken(targetUid: string, sessionMeta?: { deviceId?: string; actorUid?: string }): Promise<string> {
     const supaId = await this.resolveSupabaseUserId(targetUid);
     const userRecord = await this.getUser(supaId);
     if (!userRecord.email) {
       throw new Error('Target staff member has no email address for session issuance.');
     }
-
-    await this.setCustomUserClaims(supaId, {
-      ...developerClaims,
-      terminal_staff_session: Boolean(developerClaims?.terminalStaffSession ?? true),
-      terminal_device_id: developerClaims?.terminalDeviceId || null,
-    });
 
     const { data: linkData, error: linkErr } = await this.client.auth.admin.generateLink({
       type: 'magiclink',
@@ -633,13 +606,12 @@ export class AdminAuth {
       throw new Error(otpErr?.message || 'Could not verify terminal session token.');
     }
 
-    // Record terminal PIN session in public.terminal_sessions for audit & tracking
-    if (developerClaims?.terminalDeviceId) {
+    if (sessionMeta?.deviceId) {
       try {
         await this.client.from('terminal_sessions').insert({
-          device_id: String(developerClaims.terminalDeviceId),
+          device_id: String(sessionMeta.deviceId),
           target_uid: supaId,
-          actor_uid: String(developerClaims.actorUid || supaId),
+          actor_uid: String(sessionMeta.actorUid || supaId),
         });
       } catch {
         // Non-fatal if audit row cannot be recorded

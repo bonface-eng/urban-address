@@ -118,6 +118,6 @@ describe.skipIf(!live)('data layer ⇄ live Supabase', () => {
   }, 60_000);
 
   it('rejects client writes to server-only collections', async () => {
-    await expect(api.setDoc(api.doc(db, 'email_verification_otps', 'x'), { codeHash: 'x' })).rejects.toThrow();
+    await expect(api.setDoc(api.doc(db, 'staff_pins', 'x'), { codeHash: 'x' })).rejects.toThrow();
   });
 });

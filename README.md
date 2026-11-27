@@ -29,7 +29,6 @@
 - [Data model and Firestore collections](#data-model-and-firestore-collections)
 - [Core business workflows](#core-business-workflows)
 - [Authentication, roles and access control](#authentication-roles-and-access-control)
-- [Email OTP verification and rate limits](#email-otp-verification-and-rate-limits)
 - [Branch-aware operations](#branch-aware-operations)
 - [POS hardware and desktop support](#pos-hardware-and-desktop-support)
 - [Integrations and external services](#integrations-and-external-services)
@@ -386,74 +385,9 @@ Authorization is implemented across the application and Firestore Security Rules
 - Restrict destructive actions and sensitive financial changes to authorized roles.
 - Write meaningful audit records for privileged or financially sensitive operations.
 
-## Email OTP verification and rate limits
+## Direct administrator access
 
-Urban Express uses server-generated email one-time passwords (OTPs) for customer email verification and an additional daily verification step for administrator accounts. Firebase Authentication remains the identity provider; OTP verification supplements the authenticated session and does not replace the user's password or Google sign-in.
-
-### Customer sign-up email verification
-
-After a customer creates an account, the application sends a six-digit code to the email address on that Firebase account. The customer enters the code on `/auth/verify-email`; the server verifies it and marks the Firebase Auth user and `users/{uid}` profile as email-verified.
-
-| Control | Behavior |
-| --- | --- |
-| Code format | Six numeric digits, including leading zeroes |
-| Code lifetime | 10 minutes from issue |
-| Resend cooldown | One request per 60 seconds per Firebase UID |
-| Send limit | Five verification email requests per UTC hour per Firebase UID |
-| Incorrect attempts | Five attempts per issued code; further attempts are locked |
-| Storage | SHA-256 OTP hash bound to the Firebase UID and the `signup` purpose; plaintext codes are not stored |
-| Delivery | Resend using the `auth` sender (`otp@urbanautoexpress.com`) |
-
-The send counter and current verification state are stored in the `email_verification_otps/{uid}` Firestore document. Requesting another code replaces the active code and resets its verification-attempt counter, subject to the resend cooldown and hourly send limit. Expired, consumed or locked codes cannot be used to verify an account.
-
-Unverified customer accounts are directed to email verification during sign-in. The verification endpoint requires a Firebase ID token for the account being verified; it does not accept an arbitrary email address supplied by the browser.
-
-### Daily administrator sign-in verification
-
-Administrator sign-in has a second step after Firebase Authentication succeeds. The application checks the signed-in account against the administrator role/profile and the configured administrator whitelist. Eligible administrators are directed to `/admin-otp` until they complete the daily email verification.
-
-| Control | Behavior |
-| --- | --- |
-| Code format | Six numeric digits |
-| Issue frequency | One code issuance per administrator Firebase UID per UTC calendar day |
-| Code lifetime | Until 23:59:59.999 UTC on the day it is issued |
-| Incorrect attempts | Five attempts; the daily code is then locked |
-| Reuse | A code can be consumed only once |
-| Storage | Hashed code in `admin_daily_otps/{uid}`; no plaintext OTP is persisted |
-| Delivery | Resend using the `auth` sender (`otp@urbanautoexpress.com`) |
-| Verification state | Firebase custom claims record the verified UTC date and date parts |
-
-A successful check sets the administrator's `adminOtpVerifiedDate`, `adminOtpVerifiedYear`, `adminOtpVerifiedMonth` and `adminOtpVerifiedDay` custom claims. The client refreshes its Firebase ID token after verification so the new claims become available. The daily verification is valid for the current UTC date; it is not a rolling 24-hour session.
-
-The request endpoint does not issue a second code if one has already been issued that day. The administrator should use the code already delivered to the registered account email. A successful verification consumes the code. The daily state is associated with the Firebase UID, not merely the email address.
-
-### Server endpoints
-
-| Endpoint | Method | Purpose |
-| --- | --- | --- |
-| `/api/auth/send-verification` | `POST` | Issue or resend a customer sign-up verification code, enforcing cooldown and hourly limits |
-| `/api/auth/verify-signup-otp` | `POST` | Validate the six-digit customer code and mark the Firebase email verified |
-| `/api/admin/otp/request` | `POST` | Check administrator eligibility and issue the daily code when one has not already been sent |
-| `/api/admin/otp/verify` | `POST` | Validate and consume the daily administrator code, then set Firebase custom claims |
-
-All four endpoints require a Firebase ID token in the `Authorization: Bearer <token>` header. The server resolves the UID from the verified token; the browser cannot choose another user's OTP document.
-
-### Firestore records and authorization
-
-- `email_verification_otps/{uid}` stores the active customer code hash, issue/expiry timestamps, send throttling counters, attempt count and consumption state.
-- `admin_daily_otps/{uid}` stores the daily administrator code hash, UTC day, expiry, attempt count and consumption state.
-- `audit_logs` receives an `ADMIN_DAILY_OTP_VERIFIED` event after successful administrator verification.
-- `firestore.rules` checks the administrator's daily OTP custom claims when granting protected administrator/super-administrator access. The rules must be deployed to the intended Firebase project for this enforcement to apply to Firestore requests.
-
-The OTP API routes use Firebase Admin SDK and server-side Resend delivery. Keep `RESEND_API_KEY` configured only as a server-side secret in Vercel/Firebase deployment configuration. Never expose it through a `NEXT_PUBLIC_` variable or commit it to the repository.
-
-### Operational notes
-
-- UTC defines the hourly customer send window and the administrator verification day. The administrator code expires at the end of that UTC date, which may not coincide with local midnight in Kenya.
-- A successful local build does not prove email delivery. Verify the Resend sender/domain configuration and perform controlled inbox tests in the target environment.
-- The described throttles are keyed to Firebase UID and stored in Firestore. They are application-level rate limits, not an IP-based abuse-control or global provider quota.
-- Firestore rules are deployed separately from the Next.js application. Review and deploy `firestore.rules` intentionally after changing authorization logic.
-- If an administrator cannot access the registered email inbox or has exhausted the daily attempts, use the organization's verified account-recovery procedure rather than manually changing OTP records in production.
+Customer sign-up grants immediate authenticated access without an email verification gate. Similarly, administrator sign-in directs verified administrators straight into the staff portal and executive dashboard (`/dashboard`) immediately upon password authentication. Intermediate daily OTP codes, lockouts and verification screens have been completely removed.
 
 ## Branch-aware operations
 
