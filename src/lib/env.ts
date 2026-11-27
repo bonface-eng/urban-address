@@ -2,7 +2,7 @@
  * Startup validation for required Supabase environment variables.
  *
  * Client bundles only receive NEXT_PUBLIC_* variables. Server bundles
- * additionally require SUPABASE_SERVICE_ROLE_KEY and DATABASE_URL.
+ * additionally require SUPABASE_SERVICE_ROLE_KEY.
  */
 
 const PUBLIC_REQUIRED = [
@@ -12,7 +12,6 @@ const PUBLIC_REQUIRED = [
 
 const SERVER_REQUIRED = [
   'SUPABASE_SERVICE_ROLE_KEY',
-  'DATABASE_URL',
 ] as const;
 
 export function validatePublicSupabaseEnv(): void {
