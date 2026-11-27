@@ -146,20 +146,20 @@ function toast({ ...props }: Toast) {
   const id = genId()
   const safeProps = {
     ...props,
-    title: sanitizeToastCopy(props.title, "Varban Ltd Server"),
+    title: sanitizeToastCopy(props.title, "Urban Auto Express"),
     description: sanitizeToastCopy(
       props.description,
-      "We could not complete your request. Please try again. If the issue continues, contact Varban Ltd support."
+      "We could not complete your request. Please try again. If the issue continues, contact Urban Auto Express support."
     ),
   } as Toast
 
   const update = (props: ToasterToast) => {
     const safeUpdate = {
       ...props,
-      title: sanitizeToastCopy(props.title, "Varban Ltd Server"),
+      title: sanitizeToastCopy(props.title, "Urban Auto Express"),
       description: sanitizeToastCopy(
         props.description,
-        "We could not complete your request. Please try again. If the issue continues, contact Varban Ltd support."
+        "We could not complete your request. Please try again. If the issue continues, contact Urban Auto Express support."
       ),
     } as ToasterToast;
     dispatch({

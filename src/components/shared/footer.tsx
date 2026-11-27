@@ -104,9 +104,9 @@ export function Footer() {
                 </a>
               </li>
               <li>
-                <a href="https://urbanaddress.com" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-3 text-sm text-zinc-700 transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                <a href="https://urbanautoexpress.com" target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 items-center gap-3 text-sm text-zinc-700 transition-colors hover:text-primary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                   <Globe className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
-                  <span>urbanaddress.com</span>
+                  <span>urbanautoexpress.com</span>
                   <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
                 </a>
               </li>

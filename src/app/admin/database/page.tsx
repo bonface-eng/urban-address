@@ -223,7 +223,7 @@ export default function DatabaseMetricsPage() {
             adminStatus.active ? "border-green-100 text-green-600" : "border-red-100 text-red-600"
           )}>
              <div className={cn("w-1.5 h-1.5 rounded-full", adminStatus.active ? "bg-green-50 animate-pulse" : "bg-red-500")} />
-             VARBAN LTD SERVER: {adminStatus.label}
+             URBAN EXPRESS SERVER: {adminStatus.label}
           </Badge>
           <Badge variant="outline" className={cn(
             "h-10 px-4 gap-2 font-black uppercase text-[9px] tracking-widest shadow-sm rounded-xl bg-white",

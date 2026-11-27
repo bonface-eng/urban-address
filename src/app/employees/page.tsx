@@ -138,13 +138,15 @@ export default function StaffDirectory() {
     if (!firestore || !profile) return;
     setIsSubmitting(true);
     try {
+      const idToken = await getAuth().currentUser?.getIdToken();
       const res = await adminCreateUser({
         email: email.toLowerCase().trim(),
         password,
         displayName,
         role: role as UserRole,
         assignedUnits: assignedUnits,
-        baseSalary: Number(baseSalary) || 0
+        baseSalary: Number(baseSalary) || 0,
+        idToken,
       });
 
       if (!res.success) throw new Error(res.message);

@@ -11,7 +11,7 @@ export class FirestorePermissionError extends Error {
   context: SecurityRuleContext;
 
   constructor(context: SecurityRuleContext) {
-    super('Varban Ltd Server could not authorize this request.');
+    super('Urban Auto Express could not authorize this request.');
     this.name = 'ServiceAccessError';
     this.context = context;
   }

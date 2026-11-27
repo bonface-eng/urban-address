@@ -9,7 +9,7 @@ const STACK_TRACE_PATTERN = /\n\s*at\s+[^\n]+/g;
 
 export function sanitizePublicErrorMessage(
   value: unknown,
-  fallback = 'We could not complete your request. Please try again. If the issue continues, contact Varban Ltd support.'
+  fallback = 'We could not complete your request. Please try again. If the issue continues, contact Urban Auto Express support.'
 ): string {
   const raw = value instanceof Error ? value.message : String(value ?? '');
   const normalized = raw.trim();
@@ -37,7 +37,7 @@ export function toPublicServiceError(value: unknown): Error & { code?: string } 
   const source = value as { code?: unknown; message?: unknown; name?: unknown } | null;
   const message = sanitizePublicErrorMessage(
     value,
-    'Varban Ltd Server could not complete this request. Please try again.'
+    'Urban Auto Express could not complete this request. Please try again.'
   );
   const error = new Error(message) as Error & { code?: string };
   error.name = 'ServiceError';

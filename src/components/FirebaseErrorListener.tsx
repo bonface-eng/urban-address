@@ -8,7 +8,17 @@ import { FirestorePermissionError } from '@/firebase/errors';
 import { toast } from '@/hooks/use-toast';
 
 function safeSummary(value: unknown) {
-  let raw: string;\n  try {\n    raw = value instanceof Error ? value.message : typeof value === 'string' ? value : JSON.stringify(value ?? 'Unexpected application error') || String(value);\n  } catch {\n    raw = String(value ?? 'Unexpected application error');\n  }
+  let raw: string;
+  try {
+    raw =
+      value instanceof Error
+        ? value.message
+        : typeof value === 'string'
+          ? value
+          : JSON.stringify(value ?? 'Unexpected application error') || String(value);
+  } catch {
+    raw = String(value ?? 'Unexpected application error');
+  }
   return raw
     .replace(/https?:\/\/\S+/gi, '[url]')
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, '[email]')
@@ -30,7 +40,7 @@ export function FirebaseErrorListener() {
       const incidentId = typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID() : 'incident-' + now;
       const message = safeSummary(value);
-      console.error('[VARBAN SERVER INCIDENT]', { incidentId, category, message });
+      console.error('[SYSTEM INCIDENT]', { incidentId, category, message });
       try {
         await addDoc(collection(firestore, 'system_incidents'), {
           incidentId,
@@ -43,7 +53,7 @@ export function FirebaseErrorListener() {
           userAgent: typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 180) : 'unknown',
         });
       } catch (writeError) {
-        console.warn('[VARBAN SERVER INCIDENT] Report could not be persisted.', writeError);
+        console.warn('[SYSTEM INCIDENT] Report could not be persisted.', writeError);
       }
     };
 
@@ -51,13 +61,13 @@ export function FirebaseErrorListener() {
     const handleRejection = (event: PromiseRejectionEvent) => { void report('UNHANDLED_REJECTION', event.reason); };
     const handlePermissionError = (error: FirestorePermissionError) => {
       const isHoldAction = error?.context?.path?.includes('held_bills');
-      void report('DATA_ACCESS_DENIED', {
+      void report('FIRESTORE_PERMISSION', {
         operation: error?.context?.operation,
         path: error?.context?.path,
       });
       toast({
         variant: 'destructive',
-        title: 'Varban Ltd Server',
+        title: 'Access Restricted',
         description: isHoldAction
           ? 'The held bill could not be synchronized. Check your connection and station access, then try again.'
           : 'This action is not permitted for your account. If you believe this is an error, contact an administrator.',

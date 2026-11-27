@@ -4,6 +4,72 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command } f
 import { SYSTEM_CONFIG } from './config';
 import * as admin from 'firebase-admin';
 import { getAdminApp, getDbAdmin } from './firebase-admin';
+import { verifyRecaptchaServer } from '@/app/api/auth/verify-recaptcha/route';
+
+const ROOT_ADMIN_EMAILS = [
+  'urbanautoexpressnakuru@gmail.com',
+  'urbanaautoexpressnakuru@gmail.com',
+  'samuelkarani044@gmail.com',
+  'gmaina424@gmail.com',
+  'bonfacewana3072@gmail.com',
+];
+
+async function fileToBuffer(file: File): Promise<Buffer> {
+  if (typeof file.arrayBuffer === 'function') {
+    const ab = await file.arrayBuffer();
+    return Buffer.from(ab);
+  }
+  const chunks: Uint8Array[] = [];
+  const reader = (file as any).stream?.()?.getReader?.();
+  if (reader) {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) chunks.push(value);
+    }
+    return Buffer.concat(chunks.map((c) => Buffer.from(c)));
+  }
+  return Buffer.from(await new Response(file as any).text());
+}
+
+/**
+ * Verifies a Firebase ID token and ensures the caller holds an ADMIN/MANAGER role
+ * or is in the root-admin / admins whitelist.
+ */
+async function requireAdminCaller(idToken?: string | null) {
+  if (!idToken || typeof idToken !== 'string') {
+    throw new Error('ADMIN_AUTH_TOKEN_REQUIRED');
+  }
+  const app = getAdminApp();
+  const auth = admin.auth(app);
+  const db = admin.firestore(app);
+  const decoded = await auth.verifyIdToken(idToken);
+  const email = String(decoded.email || '').trim().toLowerCase();
+
+  const [profileSnap, whitelistSnap] = await Promise.all([
+    db.collection('users').doc(decoded.uid).get(),
+    email ? db.collection('admins').doc(email).get() : Promise.resolve(null),
+  ]);
+
+  const role = String(profileSnap.data()?.role || '').toUpperCase();
+  const isAuthorized =
+    ROOT_ADMIN_EMAILS.includes(email) ||
+    Boolean(whitelistSnap?.exists) ||
+    role === 'ADMIN' ||
+    role === 'MANAGER';
+
+  if (!isAuthorized) {
+    throw new Error('ADMIN_PRIVILEGES_REQUIRED');
+  }
+  return { uid: decoded.uid, email, role, app, auth, db };
+}
+
+/**
+ * reCAPTCHA Server Action Verification
+ */
+export async function verifyRecaptcha(token: string | null, action?: string) {
+  return verifyRecaptchaServer(token, action);
+}
 
 function getR2Client() {
   const accessKeyId = process.env.R2_ACCESS_KEY_ID;
@@ -332,12 +398,22 @@ export async function restoreInventory(backupId: string, userId: string) {
   }
 }
 
-export async function adminCreateUser(data: { email: string; password: string; displayName: string; role: string; assignedUnits?: string[] | null; baseSalary?: number }) {
+export async function adminCreateUser(data: { email: string; password: string; displayName: string; role: string; assignedUnits?: string[] | null; baseSalary?: number; idToken?: string }) {
   try {
-    const app = getAdminApp();
-    if (!app) throw new Error('ADMIN_SDK_NOT_READY');
-    const auth = admin.auth(app);
-    const db = admin.firestore(app);
+    let app: admin.app.App;
+    let auth: admin.auth.Auth;
+    let db: admin.firestore.Firestore;
+    if (data.idToken) {
+      const caller = await requireAdminCaller(data.idToken);
+      app = caller.app;
+      auth = caller.auth;
+      db = caller.db;
+    } else {
+      app = getAdminApp();
+      if (!app) throw new Error('ADMIN_SDK_NOT_READY');
+      auth = admin.auth(app);
+      db = admin.firestore(app);
+    }
     const userRecord = await auth.createUser({ email: data.email, password: data.password, displayName: data.displayName });
     await db.collection('users').doc(userRecord.uid).set({
       uid: userRecord.uid,
@@ -355,12 +431,11 @@ export async function adminCreateUser(data: { email: string; password: string; d
   }
 }
 
-export async function adminDeleteUser(uid: string) {
+export async function adminDeleteUser(uid: string, idToken?: string) {
   try {
-    const app = getAdminApp();
-    if (!app) throw new Error('ADMIN_SDK_NOT_READY');
-    const auth = admin.auth(app);
-    const db = admin.firestore(app);
+    const { auth, db } = idToken
+      ? await requireAdminCaller(idToken)
+      : { auth: admin.auth(getAdminApp()), db: admin.firestore(getAdminApp()) };
     try { await auth.deleteUser(uid); } catch (e) {}
     await db.collection('users').doc(uid).delete();
     return { success: true };
@@ -369,12 +444,11 @@ export async function adminDeleteUser(uid: string) {
   }
 }
 
-export async function adminResetUserPassword(uid: string, pass: string) {
+export async function adminResetUserPassword(uid: string, pass: string, idToken?: string) {
   try {
-    const app = getAdminApp();
-    if (!app) throw new Error('ADMIN_SDK_NOT_READY');
-    const auth = admin.auth(app);
-    const db = admin.firestore(app);
+    const { auth, db } = idToken
+      ? await requireAdminCaller(idToken)
+      : { auth: admin.auth(getAdminApp()), db: admin.firestore(getAdminApp()) };
     await auth.updateUser(uid, { password: pass });
     await db.collection('users').doc(uid).update({ updatedAt: Date.now() });
     return { success: true };
