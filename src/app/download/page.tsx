@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo } from 'react';
-import { ClientLayout } from '../client/layout';
+import ClientLayout from '../client/layout';
 import { 
   Smartphone, 
   Download, 

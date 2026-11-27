@@ -4,7 +4,7 @@ import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command } f
 import { SYSTEM_CONFIG } from './config';
 import * as admin from 'firebase-admin';
 import { getAdminApp, getDbAdmin } from './firebase-admin';
-import { verifyRecaptchaServer } from '@/app/api/auth/verify-recaptcha/route';
+import { verifyRecaptchaServer } from '@/lib/recaptcha';
 
 const ROOT_ADMIN_EMAILS = [
   'urbanautoexpressnakuru@gmail.com',

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { ClientLayout } from '../client/layout';
+import ClientLayout from '../client/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import { collection, addDoc } from 'firebase/firestore';
 import { getRecaptchaToken } from '@/lib/recaptcha-client';
 import { verifyRecaptcha } from '@/lib/actions';
 
-export function ContactPage() {
+export default function ContactPage() {
   const firestore = useFirestore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSuccess] = useState(false);

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { ClientLayout } from '../client/layout';
+import ClientLayout from '../client/layout';
 import { FileText, ShieldCheck, Scale, ChevronRight, Phone, Mail } from 'lucide-react';
 
 const documents = [

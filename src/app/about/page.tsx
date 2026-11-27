@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ClientLayout } from '../client/layout';
+import ClientLayout from '../client/layout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { 

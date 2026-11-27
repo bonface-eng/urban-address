@@ -255,16 +255,14 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function ClientLayout({ children }: { children: React.ReactNode }) {
+// Next.js App Router requires a default export from every route layout.
+export default function ClientLayout({ children }: { children: React.ReactNode }) {
   return (
     <Suspense fallback={null}>
       <ClientLayoutContent>{children}</ClientLayoutContent>
     </Suspense>
   );
 }
-
-// Next.js App Router requires a default export from every route layout.
-export default ClientLayout;
 
 function HeaderLink({ href, active, children }: { href: string; active?: boolean; children: React.ReactNode }) {
   const isExternal = href.startsWith('http');

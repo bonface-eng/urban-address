@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowRight, Loader2, Plus, MapPin, Phone, Mail, Smartphone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { ClientLayout } from './client/layout';
+import ClientLayout from './client/layout';
 import { ReviewList } from '@/components/reviews/review-list';
 import { ReviewForm } from '@/components/reviews/review-form';
 import { Footer } from '@/components/shared/footer';

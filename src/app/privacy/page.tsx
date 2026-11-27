@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { ClientLayout } from '../client/layout';
+import ClientLayout from '../client/layout';
 import { ChevronRight, ShieldCheck, Lock, Eye, Gavel, Cookie } from 'lucide-react';
 import Link from 'next/link';
 
