@@ -1,5 +1,9 @@
 'use client';
 
+import { useStaffInventory } from '@/hooks/use-staff-inventory';
+import { usePosReads } from '@/hooks/use-pos-reads';
+import { PosReadNotice } from '@/components/pos/read-notice';
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
   TrendingUp,
@@ -139,26 +143,19 @@ export default function DashboardPage() {
     return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'), limit(1000));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
-  const inventoryQuery = useMemoFirebase(() => {
-    if (!firestore || !mounted || profileLoading || !isEmployee) return null;
-    return query(collection(firestore, 'inventory'));
-  }, [firestore, mounted, profileLoading, isEmployee]);
-
   const terminalsQuery = useMemoFirebase(() => {
     if (!firestore || !mounted || profileLoading || !isEmployee) return null;
     return query(collection(firestore, 'pos_terminals'));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
   // Held Bills Query: Private scratchpad for individual cashier pending bills
-  const heldBillsQuery = useMemoFirebase(() => {
-    if (!firestore || !mounted || profileLoading || !profile?.uid || isAdmin) return null;
-    return collection(firestore, 'users', profile.uid, 'held_bills');
-  }, [firestore, mounted, profileLoading, profile?.uid, isAdmin]);
 
   const { data: allOrders } = useCollection<Order>(ordersQuery);
-  const { data: inventory } = useCollection<Product>(inventoryQuery);
+  const inventoryRead = useStaffInventory(0);
+  const inventory = inventoryRead.data;
   const { data: terminals } = useCollection<POSTerminal>(terminalsQuery);
-  const { data: rawHeldBills } = useCollection<Order>(heldBillsQuery);
+  const tabRead = usePosReads<Order>('own-tabs', '', mounted && !profileLoading && !!profile?.uid && !isAdmin);
+  const rawHeldBills = tabRead.data;
 
   const myHeldBills = useMemo(() => {
     if (!rawHeldBills) return [];
@@ -373,6 +370,8 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1">
+      <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
+      <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 pt-2">
         <div>
           <h1 className="text-2xl md:text-4xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">
