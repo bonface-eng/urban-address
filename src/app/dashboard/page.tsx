@@ -1,4 +1,5 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
 
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { usePosReads } from '@/hooks/use-pos-reads';
@@ -138,22 +139,15 @@ export default function DashboardPage() {
   }, [dateFilter]);
 
   // Security Gate: Only initiate global queries once the role is resolved as staff/admin
-  const ordersQuery = useMemoFirebase(() => {
-    if (!firestore || !mounted || profileLoading || !isEmployee) return null;
-    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'), limit(1000));
-  }, [firestore, mounted, profileLoading, isEmployee]);
-
-  const terminalsQuery = useMemoFirebase(() => {
-    if (!firestore || !mounted || profileLoading || !isEmployee) return null;
-    return query(collection(firestore, 'pos_terminals'));
-  }, [firestore, mounted, profileLoading, isEmployee]);
 
   // Held Bills Query: Private scratchpad for individual cashier pending bills
 
-  const { data: allOrders } = useCollection<Order>(ordersQuery);
+  const allOrdersRead = useManagementRead<Order>(isAdmin ? 'history' : 'own-orders');
+  const { data: allOrders } = allOrdersRead;
   const inventoryRead = useStaffInventory(0);
   const inventory = inventoryRead.data;
-  const { data: terminals } = useCollection<POSTerminal>(terminalsQuery);
+  const terminalsRead = useManagementRead<POSTerminal>('terminals');
+  const { data: terminals } = terminalsRead;
   const tabRead = usePosReads<Order>('own-tabs', '', mounted && !profileLoading && !!profile?.uid && !isAdmin);
   const rawHeldBills = tabRead.data;
 
@@ -371,6 +365,8 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1">
       <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
+      <PosReadNotice label="allOrders" error={allOrdersRead.error} onRetry={allOrdersRead.refresh} />
+      <PosReadNotice label="terminals" error={terminalsRead.error} onRetry={terminalsRead.refresh} />
       <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 pt-2">
         <div>

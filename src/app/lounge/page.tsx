@@ -1,6 +1,8 @@
 
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
 
+import { submitCheckout } from '@/lib/checkout-client';
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { usePosReads } from '@/hooks/use-pos-reads';
 import { PosReadNotice } from '@/components/pos/read-notice';
@@ -34,7 +36,7 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Product, Order, OrderItem, UserProfile } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import { useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
+import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
 import { collection, query, where, addDoc, doc, updateDoc, onSnapshot, orderBy, limit, writeBatch, increment } from 'firebase/firestore';
 import { HardwareService } from '@/lib/hardware-service';
 import { useProfile } from '@/hooks/use-profile';
@@ -59,6 +61,7 @@ const CATEGORIES = ['Popular', 'Drinks', 'Food', 'Liquor', 'Tobacco', 'Other'];
 
 export default function LoungePOS() {
   const firestore = useFirestore();
+  const { user } = useUser();
   const { role, isSuperAdmin } = useProfile();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
   
@@ -115,21 +118,14 @@ export default function LoungePOS() {
   const isAuthorized = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER' || role === 'SUPERVISOR' || (role === 'CASHIER');
 
   const startOfToday = new Date().setHours(0, 0, 0, 0);
-  const todayOrdersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, 'orders'),
-      where('type', '==', 'LOUNGE'),
-      where('timestamp', '>=', startOfToday),
-      where('status', '==', 'PAID')
-    );
-  }, [firestore, startOfToday]);
 
-  const inventoryRead = useStaffInventory(0);
+  const [catalogueRevision,setCatalogueRevision] = useState(0);
+  const inventoryRead = useStaffInventory(catalogueRevision);
   const products = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'LOUNGE' && !item.archived) || null, [inventoryRead.data]);
   const tabRead = usePosReads<Order>('own-tabs', 'LOUNGE', !!activeCashier?.uid);
   const rawPendingOrders = tabRead.data;
-  const { data: todayOrders } = useCollection<Order>(todayOrdersQuery);
+  const saleRead = useManagementRead<Order>('own-orders');
+  const todayOrders = useMemo(() => saleRead.data?.filter(order => order.type === 'LOUNGE' && order.status === 'PAID' && order.timestamp >= startOfToday) || null,[saleRead.data,startOfToday]);
 
   const pendingOrders = useMemo(() => {
     if (!rawPendingOrders) return [];
@@ -139,25 +135,13 @@ export default function LoungePOS() {
   }, [rawPendingOrders, recallSearch]);
 
   useEffect(() => {
-    if (!firestore || !isAuthorized || !activeCashier) return;
-    const q = query(collection(firestore, 'orders'), where('type', '==', 'LOUNGE'), limit(50));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      snapshot.docChanges().forEach((change) => {
-        if (change.type === "added" || change.type === "modified") {
-          const order = change.doc.data() as Order;
-          const orderId = change.doc.id;
-          if (order.prepStatus === 'READY' && order.cashierId === activeCashier.uid && !notifiedReadyOrders.has(orderId)) {
-            notifiedReadyOrders.add(orderId);
-            toast({
-              title: "Kitchen Alert: Order Ready",
-              description: `Table ${order.tableNumber || 'WALK-IN'} is ready.`,
-            });
-          }
-        }
-      });
-    });
-    return () => unsubscribe();
-  }, [firestore, isAuthorized, notifiedReadyOrders, activeCashier]);
+    for (const order of saleRead.data || []) {
+      if (order.type === 'LOUNGE' && order.prepStatus === 'READY' && order.id && !notifiedReadyOrders.has(order.id)) {
+        notifiedReadyOrders.add(order.id);
+        toast({ title: "Kitchen Alert: Order Ready",description:`Table ${order.tableNumber || 'WALK-IN'} is ready.` });
+      }
+    }
+  },[saleRead.data,notifiedReadyOrders]);
 
   const filteredProducts = useMemo(() => {
     if (!products) return [];
@@ -285,57 +269,27 @@ export default function LoungePOS() {
   };
 
   const handleFinalizeSale = async (method: 'CASH' | 'MOBILE', metadata?: any) => {
-    if (!firestore || !activeCashier || cart.length === 0) return;
+    if (!user || !activeCashier || cart.length === 0 || isProcessing) return;
     setIsProcessing(true);
-    const totalValue = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const orderData = {
-      type: 'LOUNGE' as const,
-      status: 'PAID' as const,
-      total: totalValue,
-      paymentMethod: method,
-      paymentRef: metadata?.reference || null,
-      tableNumber: tableNumber || 'WALK-IN',
-      cashierId: activeCashier.uid,
-      cashierName: activeCashier.displayName,
-      timestamp: Date.now(),
-      inventorySynced: true,
-      items: cart.map(item => ({ ...item, status: 'COMMITTED' as const }))
-    };
-
-    const batch = writeBatch(firestore);
-    const orderRef = doc(collection(firestore, 'orders'));
-    batch.set(orderRef, orderData);
-
-    // Deduct stock for physical inventory
-    for (const item of cart) {
-      if (item.productId) {
-        const productRef = doc(firestore, 'inventory', item.productId);
-        batch.update(productRef, {
-          stockLevel: increment(-item.quantity),
-          updatedAt: Date.now()
-        });
-      }
-    }
-
-    if (editingOrderId) {
-      const heldRef = doc(firestore, 'users', activeCashier.uid, 'held_bills', editingOrderId);
-      batch.delete(heldRef);
-    }
-
-    batch.commit()
-      .then(async () => {
-        const finalReceipt = { ...orderData, id: orderRef.id };
-        await HardwareService.printReceipt(finalReceipt);
-        setReceiptData(finalReceipt);
-        setCheckoutStep('SUCCESS');
-        setIsProcessing(false);
-        toast({ title: "Transaction Authorized" });
-      })
-      .catch((err) => {
-        console.error('[FINALIZE_SALE_ERROR]', err);
-        setIsProcessing(false);
-        toast({ variant: "destructive", title: "Sync Failed" });
+    try {
+      const receipt = await submitCheckout(user, {
+        unit:'LOUNGE', items:cart.map(item => ({ productId:item.productId,quantity:item.quantity })),
+        total:cart.reduce((sum,item) => sum+item.price*item.quantity,0),method,
+        reference:metadata?.reference || '',manual:metadata?.isManual === true,
+        cashReceived:method === 'CASH' ? metadata?.cashReceived : null,heldId:editingOrderId || '',tableNumber:tableNumber || 'WALK-IN',
       });
+      setCatalogueRevision(value=>value+1);
+      tabRead.refresh();
+      saleRead.refresh();
+      setReceiptData(receipt);
+      setCheckoutStep('SUCCESS');
+      toast({ title:"Transaction recorded" });
+      // Printing failures must never be reported as a failed sale or cause another charge.
+      try { await HardwareService.printReceipt(receipt); }
+      catch { toast({ title:"Sale saved — printing failed",description:"Use the saved receipt to reprint. Do not finalize this sale again." }); }
+    } catch (error) {
+      toast({ variant:"destructive",title:"Checkout not confirmed",description:error instanceof Error ? error.message : "Keep the cart unchanged and check Sales History before retrying." });
+    } finally { setIsProcessing(false); }
   };
 
   const handleNewTransaction = () => {
@@ -364,6 +318,7 @@ export default function LoungePOS() {
     <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
         <header className="space-y-4 px-1">
+          <PosReadNotice label="Own sales" error={saleRead.error} onRetry={saleRead.refresh} />
           <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
           <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
 

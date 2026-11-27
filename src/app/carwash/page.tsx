@@ -1,4 +1,5 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
 
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { PosReadNotice } from '@/components/pos/read-notice';
@@ -105,12 +106,8 @@ export default function CarwashPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const jobsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'));
-  }, [firestore]);
-
-  const { data: jobs, loading } = useCollection<CarwashJob>(jobsQuery);
+  const jobsRead = useManagementRead<CarwashJob>('jobs');
+  const { data: jobs, loading } = jobsRead;
   const inventoryRead = useStaffInventory(0);
   const inventoryServices = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'CARWASH' && !item.archived) || null, [inventoryRead.data]);
 
@@ -183,6 +180,7 @@ export default function CarwashPage() {
 
   return (
     <div className="space-y-6 pb-20 max-w-[1600px] mx-auto px-1 md:px-0">
+      <PosReadNotice label="jobs" error={jobsRead.error} onRetry={jobsRead.refresh} />
       <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2 pt-2 md:pt-4">
         <div>

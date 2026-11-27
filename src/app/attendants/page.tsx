@@ -1,5 +1,7 @@
 
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
+import { PosReadNotice } from '@/components/pos/read-notice';
 
 import React, { useState, useMemo } from 'react';
 import { 
@@ -89,18 +91,10 @@ export default function AttendantsPage() {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
 
-  const attendantsQuery = useMemo(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'users'), where('role', '==', 'ATTENDANT'));
-  }, [firestore]);
-
-  const jobsQuery = useMemo(() => {
-    if (!firestore) return null;
-    return collection(firestore, 'carwash_jobs');
-  }, [firestore]);
-
-  const { data: staff, loading } = useCollection<UserProfile>(attendantsQuery);
-  const { data: allActiveJobs } = useCollection<CarwashJob>(jobsQuery);
+  const primaryRead = useManagementRead<UserProfile>('attendants');
+  const { data: staff, loading } = primaryRead;
+  const allActiveJobsRead = useManagementRead<CarwashJob>('jobs');
+  const { data: allActiveJobs } = allActiveJobsRead;
 
   const startOfToday = useMemo(() => {
     const d = new Date();
@@ -313,6 +307,9 @@ export default function AttendantsPage() {
 
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
+      <PosReadNotice label="jobs" error={allActiveJobsRead.error} onRetry={allActiveJobsRead.refresh} />
+      <button type="button" onClick={primaryRead.refresh} className="px-4 py-2 border rounded-lg text-sm">Refresh records</button>
+      <PosReadNotice label="Attendants" error={primaryRead.error} onRetry={primaryRead.refresh} />
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 px-2 pt-4">
         <div>
           <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter">Team Performance</h1>
