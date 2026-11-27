@@ -46,6 +46,9 @@ export interface UserProfile {
   mpesaNumber?: string | null; // Dedicated M-Pesa Payout Destination
   paystackRecipientCode?: string | null;
   mustChangePassword?: boolean;
+  isSuperAdmin?: boolean;
+  disabled?: boolean;
+  hasPin?: boolean;
   accountType?: 'STAFF' | 'CLIENT';
   pin?: string; // 4-digit security code
   baseSalary?: number;
