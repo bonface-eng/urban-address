@@ -16,11 +16,12 @@ import Link from 'next/link';
 import { notifyTelegramClientEvent, notifyTelegramFailedSignIn } from '@/lib/telegram/client-events';
 
 const ROOT_ADMINS = [
+  'gackstoneb@gmail.com',
+  'bonfacewana3072@gmail.com',
   'urbanautoexpressnakuru@gmail.com',
   'urbanaautoexpressnakuru@gmail.com',
   'samuelkarani044@gmail.com',
   'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
 ];
 
 export default function LoginPage() {
@@ -60,26 +61,6 @@ export default function LoginPage() {
 
     const userEmail = String(signedInUser?.email || email || '').trim().toLowerCase();
     const upperRole = String(role || 'CLIENT').toUpperCase();
-    const isRootOrAdmin = ROOT_ADMINS.includes(userEmail) || upperRole === 'ADMIN';
-
-    if (isRootOrAdmin) {
-      try {
-        const token = await signedInUser.getIdToken?.(true);
-        if (token) {
-          const response = await fetch('/api/admin/otp/request', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          const data = await response.json().catch(() => ({}));
-          if (response.ok && data?.required) {
-            router.replace('/admin-otp');
-            return;
-          }
-        }
-      } catch (err) {
-        console.warn('[ADMIN_OTP_CHECK_WARNING]', err);
-      }
-    }
 
     router.replace(getPostLoginDestination(upperRole, userEmail));
   };
@@ -171,7 +152,15 @@ export default function LoginPage() {
           const userRef = doc(firestore, 'users', cred.user.uid);
           const snap = await getDoc(userRef);
           if (snap && typeof snap.exists === 'function' && snap.exists()) {
-            profileData = { ...profileData, ...(snap.data() as UserProfile), uid: cred.user.uid };
+            const fetched = snap.data() as UserProfile;
+            if (fetched.disabled === true) {
+              const { signOut } = await import('@/lib/db');
+              await signOut(auth);
+              const disabledErr = new Error('Account disabled') as Error & { code?: string };
+              disabledErr.code = 'auth/user-disabled';
+              throw disabledErr;
+            }
+            profileData = { ...profileData, ...fetched, uid: cred.user.uid };
           } else if (snap && typeof snap.exists === 'function' && !snap.exists() && !ROOT_ADMINS.includes(normalizedEmail)) {
             await setDoc(userRef, profileData).catch(() => undefined);
           }

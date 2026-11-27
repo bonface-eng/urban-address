@@ -26,7 +26,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const { role, isSuperAdmin, isEmployee, isKitchen, loading: profileLoading, profile } = useProfile();
   const [mounted, setMounted] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [adminOtpCheck, setAdminOtpCheck] = useState<'checking' | 'verified' | 'required'>('checking');
   const previousStaffPath = useRef<string | null>(null);
 
   // Check if we are in "Preview Mode" (rendered inside the mobile mockup)
@@ -47,8 +46,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const { data: permMap } = useDoc<any>(permissionsRef);
   const { data: globalConfig } = useDoc<any>(configRef);
 
-  const isAdminOtpRoute = pathname === '/admin-otp';
-  const isAuthRoute = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/auth/') || isAdminOtpRoute;
+  const isAuthRoute = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/auth/');
   const isClientView = pathname === '/' || 
                        pathname.startsWith('/client') || 
                        pathname === '/about' || 
@@ -61,28 +59,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   
   const isSetupPage = pathname === '/setup-profile';
   const isProtectedStaffRoute = !isAuthRoute && !isClientView && !isSetupPage;
-
-  // Super administrators must complete one email OTP verification per UTC day
-  // before any staff workspace or administrative screen is rendered.
-  useEffect(() => {
-    if (!mounted || authLoading || profileLoading || isPreviewMode) return;
-    if (!user || !isSuperAdmin || isClientView || isSetupPage || isAdminOtpRoute) {
-      setAdminOtpCheck('verified');
-      return;
-    }
-    let active = true;
-    setAdminOtpCheck('checking');
-    user.getIdTokenResult(true).then((tokenResult) => {
-      const today = new Date().toISOString().slice(0, 10);
-      const verified = tokenResult.claims.adminOtpVerifiedDate === today;
-      if (active) setAdminOtpCheck(verified ? 'verified' : 'required');
-      if (!verified) router.replace('/admin-otp');
-    }).catch(() => {
-      if (active) setAdminOtpCheck('required');
-      router.replace('/admin-otp');
-    });
-    return () => { active = false; };
-  }, [mounted, authLoading, profileLoading, isPreviewMode, user, isSuperAdmin, isClientView, isSetupPage, isAdminOtpRoute, router]);
 
   // Browser back/forward can restore a page from the back-forward cache without
   // remounting React. Force a fresh document/auth check before showing staff data.
@@ -170,21 +146,12 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       return;
     }
     if (isAuthRoute) {
-      if (isAdminOtpRoute) return;
       router.replace(isKitchen ? '/kds' : (isEmployee || isSuperAdmin) ? '/dashboard' : '/');
       return;
     }
     if (!isEmployee && !isSuperAdmin && !isClientView) {
       router.replace('/');
       return;
-    }
-
-    if (!isClientView && !isSetupPage && isIncomplete) {
-      const hasReminded = sessionStorage.getItem('uax_setup_reminded');
-      if (!hasReminded) {
-        router.replace('/setup-profile');
-        return;
-      }
     }
 
     if (!isSuperAdmin && permMap && role && !isClientView && !isSetupPage) {
@@ -235,10 +202,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   };
 
   if (!mounted) return null;
-
-  if (!isPreviewMode && isProtectedStaffRoute && isSuperAdmin && adminOtpCheck !== 'verified') {
-    return <div className="min-h-screen bg-white flex items-center justify-center px-6"><div className="text-center space-y-3" role="status" aria-live="polite"><div className="mx-auto h-8 w-8 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" /><p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Verifying administrator access…</p></div></div>;
-  }
 
   // Never render staff/admin content while the auth session is restoring or has no user.
   if (!isPreviewMode && isProtectedStaffRoute && (authLoading || profileLoading || !user)) {

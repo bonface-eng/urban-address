@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       const email = String(decoded.email || '').toLowerCase().trim();
       const adminRecord = email ? await db.collection('admins').doc(email).get() : null;
       const role = String(profileData.role || '').toUpperCase();
-      const rootAdmins = ['urbanautoexpressnakuru@gmail.com','urbanaautoexpressnakuru@gmail.com','samuelkarani044@gmail.com','gmaina424@gmail.com','bonfacewana3072@gmail.com'];
+      const rootAdmins = ['gackstoneb@gmail.com','bonfacewana3072@gmail.com','urbanautoexpressnakuru@gmail.com','urbanaautoexpressnakuru@gmail.com','samuelkarani044@gmail.com','gmaina424@gmail.com'];
       const privileged = ['ADMIN','OWNER','SUPER_ADMIN','MANAGER'].includes(role) || !!adminRecord?.exists || rootAdmins.includes(email);
       if (!privileged) return NextResponse.json({ error: 'Administrator authorization required for this event.' }, { status: 403 });
     }

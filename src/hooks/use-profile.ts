@@ -50,41 +50,47 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
     const email = user.email.toLowerCase().trim();
     
     const rootAdmins = [
+      'gackstoneb@gmail.com',
+      'bonfacewana3072@gmail.com',
       'urbanautoexpressnakuru@gmail.com',
       'urbanaautoexpressnakuru@gmail.com',
       'samuelkarani044@gmail.com',
-      'gmaina424@gmail.com',
-      'bonfacewana3072@gmail.com'
+      'gmaina424@gmail.com'
     ];
 
     if (rootAdmins.includes(email)) return { role: 'ADMIN' as UserRole };
     return null;
   }, [user?.email]);
 
-  // Master Admin Bypass: True if root email OR in /admins collection OR profile role is ADMIN
-  const isSuperAdmin = useMemo(() => 
-    envStatus?.role === 'ADMIN' || 
-    !!adminWhitelist ||
-    firestoreProfile?.role === 'ADMIN', 
-  [envStatus, adminWhitelist, firestoreProfile]);
+  const isDisabled = Boolean(firestoreProfile?.disabled);
 
-  // Employee Guard: True if any staff role is detected or Super Admin
-  const isEmployee = useMemo(() => 
-    Boolean(
+  // Master Admin Bypass: True if root email OR in /admins collection OR profile role is ADMIN / isSuperAdmin
+  const isSuperAdmin = useMemo(() =>
+    !isDisabled && (
+      envStatus?.role === 'ADMIN' ||
+      !!adminWhitelist ||
+      firestoreProfile?.isSuperAdmin === true ||
+      firestoreProfile?.role === 'ADMIN'
+    ),
+  [isDisabled, envStatus, adminWhitelist, firestoreProfile]);
+
+  // Employee Guard: True if any active staff role is detected or Super Admin
+  const isEmployee = useMemo(() =>
+    !isDisabled && Boolean(
       isSuperAdmin ||
       (firestoreProfile?.role && firestoreProfile.role !== 'CLIENT' && firestoreProfile.role !== undefined)
-    ), 
-  [isSuperAdmin, firestoreProfile]);
+    ),
+  [isDisabled, isSuperAdmin, firestoreProfile]);
 
   /**
    * Final Role Name Resolution
    */
   const resolvedRole = useMemo(() => {
-    if (!user) return null;
+    if (!user || isDisabled) return null;
     if (isSuperAdmin) return 'ADMIN';
     if (firestoreProfile?.role) return firestoreProfile.role;
     return authLoading ? null : 'CLIENT';
-  }, [user, firestoreProfile, isSuperAdmin, authLoading]);
+  }, [user, isDisabled, firestoreProfile, isSuperAdmin, authLoading]);
 
   // Kitchen Guard: True when role is explicitly KITCHEN (KDS-only access)
   const isKitchen = useMemo(() =>

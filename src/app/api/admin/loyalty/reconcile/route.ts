@@ -1,41 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as admin from '@/lib/db/admin';
 import crypto from 'crypto';
+import { authorizeAdminRequest } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const MIGRATION_ID = 'historical-spend-v1';
 const POINTS_PER_KES = 10;
-const ROOT_ADMINS = [
-  'urbanautoexpressnakuru@gmail.com',
-  'urbanaautoexpressnakuru@gmail.com',
-  'samuelkarani044@gmail.com',
-  'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
-];
 
 function getDb() {
   return admin.firestore();
 }
 
-async function authorize(req: NextRequest, db: admin.firestore.Firestore) {
-  const header = req.headers.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token) return null;
-  try {
-    const decoded = await admin.auth().verifyIdToken(token);
-    const email = String(decoded.email || '').toLowerCase();
-    const userDoc = await db.collection('users').doc(decoded.uid).get();
-    const role = String(userDoc.data()?.role || '').toUpperCase();
-    const isSuperAdmin = ROOT_ADMINS.includes(email) || (email ? (await db.collection('admins').doc(email).get()).exists : false);
-    if (!isSuperAdmin && !['ADMIN', 'MANAGER', 'SUPERVISOR'].includes(role)) return null;
-    const requiresDailyOtp = isSuperAdmin || role === 'ADMIN';
-    if (requiresDailyOtp && decoded.adminOtpVerifiedDate !== new Date().toISOString().slice(0, 10)) return null;
-    return { uid: decoded.uid, email };
-  } catch {
-    return null;
-  }
+async function authorize(req: NextRequest, _db: admin.firestore.Firestore) {
+  const caller = await authorizeAdminRequest(req, { allowManagers: true });
+  return caller ? { uid: caller.uid, email: caller.email } : null;
 }
 
 function normalizePlate(value: unknown) {

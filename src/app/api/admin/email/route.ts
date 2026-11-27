@@ -1,20 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from '@/lib/db/admin';
 import { createHash } from 'node:crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
+import { authorizeAdminRequest } from '@/lib/admin-auth';
 import { sendTransactionalEmail } from '@/lib/resend';
 import { adminCommunicationEmail, type AdminEmailKind } from '@/lib/email/templates';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const ROOT_ADMINS = [
-  'urbanautoexpressnakuru@gmail.com',
-  'urbanaautoexpressnakuru@gmail.com',
-  'samuelkarani044@gmail.com',
-  'gmaina424@gmail.com',
-  'bonfacewana3072@gmail.com',
-];
 const KINDS: AdminEmailKind[] = ['DISMISSAL', 'PURCHASE_ORDER', 'WARNING_LETTER', 'OFFICIAL_COMMUNICATION', 'MARKETING', 'GENERAL'];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -23,24 +15,7 @@ function hashEmail(email: string) {
 }
 
 async function authorize(request: NextRequest) {
-  const header = request.headers.get('authorization') || '';
-  const token = header.startsWith('Bearer ') ? header.slice(7) : '';
-  if (!token) return null;
-  try {
-    const app = getAdminApp();
-    const decoded = await admin.auth(app).verifyIdToken(token);
-    const email = String(decoded.email || '').toLowerCase().trim();
-    const db = getDbAdmin();
-    const [profile, whitelist] = await Promise.all([
-      db.collection('users').doc(decoded.uid).get(),
-      email ? db.collection('admins').doc(email).get() : Promise.resolve(null),
-    ]);
-    const isAdmin = ROOT_ADMINS.includes(email) || !!whitelist?.exists || String(profile.data()?.role || '').toUpperCase() === 'ADMIN';
-    const verifiedToday = decoded.adminOtpVerifiedDate === new Date().toISOString().slice(0, 10);
-    return isAdmin && verifiedToday ? { uid: decoded.uid, email, db } : null;
-  } catch {
-    return null;
-  }
+  return authorizeAdminRequest(request);
 }
 
 function validEmail(value: unknown): value is string {
