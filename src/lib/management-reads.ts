@@ -1,3 +1,4 @@
+import { reportDateMillis } from './report-date';
 import { FieldPath } from 'firebase-admin/firestore';
 import type { Firestore } from 'firebase-admin/firestore';
 import { staffAccess,StaffAccessError,type StaffIdentity } from './staff-access';
@@ -22,7 +23,12 @@ export async function managementRead(db:Firestore,identity:StaffIdentity,params:
   query=query.orderBy(FieldPath.documentId()).limit(200);if(cursor)query=query.startAfter(cursor);
   const snap=await query.get();
   const records=snap.docs.map((doc:any)=>{
-    const data=doc.data();
+    const data={...doc.data()};
+    for (const field of ['timestamp','createdAt','servedAt','lastActive']) {
+      const time=reportDateMillis(data[field]);
+      if(time !== null) data[field]=time;
+      else delete data[field];
+    }
     if(resource==='directory'||resource==='attendants') {
       const safe=project(data,['displayName','email','phoneNumber','photoURL','role','createdAt']);
       if(resource==='directory') Object.assign(safe,project(data,['baseSalary','mpesaNumber','accountType','disabled','active','status']),{assignedUnits:Array.isArray(data.assignedUnits)?data.assignedUnits.filter((u:unknown)=>['STORE','LOUNGE','CARWASH'].includes(String(u))):[]});

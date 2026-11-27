@@ -361,9 +361,17 @@ export default function DashboardPage() {
   };
 
   if (!mounted) return null;
+  if (allOrdersRead.loading) return <div className="p-6" role="status">Loading the complete sales history. Totals will appear when all pages have loaded.</div>;
+  if (allOrdersRead.error) return <div className="p-6"><PosReadNotice label="Sales history" error={allOrdersRead.error} onRetry={allOrdersRead.refresh} /></div>;
+  const missingSaleDates = (allOrders || []).filter(order => typeof order.timestamp !== 'number' || !Number.isFinite(order.timestamp)).length;
 
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1">
+      <div role="status" className="p-3 border rounded-xl text-sm space-y-2">
+        <p>{(allOrders || []).length} sales/order records loaded across available dates. Date totals include only PAID records.</p>
+        {missingSaleDates > 0 && <p>{missingSaleDates} records have no usable sale date and cannot appear in dated totals. No dates or transactions have been altered.</p>}
+        <button type="button" onClick={allOrdersRead.refresh} className="underline">Refresh sales history</button>
+      </div>
       <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
       <PosReadNotice label="allOrders" error={allOrdersRead.error} onRetry={allOrdersRead.refresh} />
       <PosReadNotice label="terminals" error={terminalsRead.error} onRetry={terminalsRead.refresh} />
