@@ -279,9 +279,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
               <div className="flex-1">
                 {children}
               </div>
-              <footer className="py-4 bg-transparent text-center shrink-0">
-                <p className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.4em]">powered by milleast global</p>
-              </footer>
+
             </main>
           </div>
           <BottomNav />

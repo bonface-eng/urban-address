@@ -246,11 +246,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      <footer className="py-4 bg-transparent text-center shrink-0 hidden lg:block">
-        <p className="text-[8px] font-black text-zinc-300 uppercase tracking-[0.4em]">
-          powered by milleast global
-        </p>
-      </footer>
+
     </div>
   );
 }
