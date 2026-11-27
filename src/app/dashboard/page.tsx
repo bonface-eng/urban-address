@@ -1,4 +1,6 @@
 'use client';
+import {useDashboardSummary} from '@/hooks/use-dashboard-summary';
+import {summarizeDashboard} from '@/lib/dashboard-summary';
 import { useManagementRead } from '@/hooks/use-management-read';
 
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
@@ -126,24 +128,9 @@ export default function DashboardPage() {
     }
   }, [dateFilter, mounted]);
 
-  const timeThreshold = useMemo(() => {
-    const startOfToday = new Date().setHours(0, 0, 0, 0);
-    
-    switch (dateFilter) {
-      case 'TODAY': return startOfToday;
-      case 'YESTERDAY': return startOfToday - (24 * 60 * 60 * 1000);
-      case 'LAST_7_DAYS': return startOfToday - (7 * 24 * 60 * 60 * 1000);
-      case 'LAST_30_DAYS': return startOfToday - (30 * 24 * 60 * 60 * 1000);
-      default: return 0;
-    }
-  }, [dateFilter]);
-
-  // Security Gate: Only initiate global queries once the role is resolved as staff/admin
-
-  // Held Bills Query: Private scratchpad for individual cashier pending bills
-
-  const allOrdersRead = useManagementRead<Order>(isAdmin ? 'history' : 'own-orders');
-  const { data: allOrders } = allOrdersRead;
+  const summaryRead = useDashboardSummary(dateFilter);
+  const [reportOrders,setReportOrders] = useState<Order[]>([]);
+  const [reportLoading,setReportLoading] = useState(false);
   const inventoryRead = useStaffInventory(0);
   const inventory = inventoryRead.data;
   const terminalsRead = useManagementRead<POSTerminal>('terminals');
@@ -160,188 +147,50 @@ export default function DashboardPage() {
     return myHeldBills.reduce((sum, b) => sum + (b.total || 0), 0);
   }, [myHeldBills]);
 
-  // Global backlog volume for Admin
-  const globalBacklog = useMemo(() => {
-    if (!allOrders || !isAdmin) return { count: 0, volume: 0, items: [] };
-    const pending = allOrders.filter(o => o.status === 'PENDING').slice(0, 10);
-    const volume = allOrders.filter(o => o.status === 'PENDING').reduce((s, o) => s + (o.total || 0), 0);
-    return { count: allOrders.filter(o => o.status === 'PENDING').length, volume, items: pending };
-  }, [allOrders, isAdmin]);
+  const globalBacklog = summaryRead.data?.backlog || {count:0,volume:0,items:[]};
+  const stats = useMemo(() => ({
+    ...(summaryRead.data?.stats || summarizeDashboard([],dateFilter,!isAdmin)),
+    lowStockItems: inventory?.filter(i => i.unit !== 'CARWASH' && (i.stockLevel || 0) <= (i.minStock || 0)) || [],
+    activeNodes: terminals?.filter(t=>t.status==='OPEN').length || 0,
+  }),[summaryRead.data,dateFilter,isAdmin,inventory,terminals]);
 
-  const stats = useMemo(() => {
-    const canSeeAll = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER';
-    const startOfToday = new Date().setHours(0, 0, 0, 0);
-    
-    const baseOrders = allOrders?.filter(o => {
-      const isInRange = o.timestamp >= timeThreshold;
-      const isPaid = o.status === 'PAID';
-      
-      if (dateFilter === 'YESTERDAY' && o.timestamp >= startOfToday) return false;
-      if (!isInRange || !isPaid) return false;
-      if (canSeeAll) return true;
-      
-      return o.cashierId === profile?.uid;
-    }) || [];
-    
-    const loungeSales = baseOrders.filter(o => o.type === 'LOUNGE').reduce((sum, o) => sum + o.total, 0);
-    const storeSales = baseOrders.filter(o => o.type === 'STORE').reduce((sum, o) => sum + o.total, 0);
-    const carwashSales = baseOrders.filter(o => o.type === 'CARWASH').reduce((sum, o) => sum + o.total, 0);
-    const totalSales = loungeSales + storeSales + carwashSales;
-
-    const departmentalData = [
-      { name: 'Lounge', value: loungeSales, color: 'hsl(35, 91%, 50%)' },
-      { name: 'Store', value: storeSales, color: 'hsl(240, 5%, 10%)' },
-      { name: 'Carwash', value: carwashSales, color: 'hsl(25, 100%, 50%)' },
-    ];
-
-    let velocityData = [];
-    if (dateFilter === 'TODAY' || dateFilter === 'YESTERDAY') {
-      const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00'];
-      velocityData = hours.map(h => ({ name: h, total: 0 }));
-      baseOrders.forEach(o => {
-        const hour = new Date(o.timestamp).getHours();
-        const timeSlot = velocityData.find(d => parseInt(d.name) <= hour && parseInt(d.name) + 2 > hour);
-        if (timeSlot) timeSlot.total += o.total;
-      });
-    } else {
-      const days: Record<string, number> = {};
-      baseOrders.forEach(o => {
-        const dayStr = new Date(o.timestamp).toLocaleDateString('en-KE', { day: '2-digit', month: 'short' });
-        days[dayStr] = (days[dayStr] || 0) + o.total;
-      });
-      velocityData = Object.entries(days).map(([name, total]) => ({ name, total })).reverse();
-    }
-
-    const lowStockItems = inventory?.filter(i => i.unit !== 'CARWASH' && (i.stockLevel || 0) <= (i.minStock || 0)) || [];
-    const activeNodes = terminals?.filter(t => t.status === 'OPEN').length || 0;
-
-    const productCounts: Record<string, { name: string, count: number }> = {};
-    baseOrders.forEach(o => {
-      o.items?.forEach(item => {
-        if (!productCounts[item.productId]) productCounts[item.productId] = { name: item.name, count: 0 };
-        productCounts[item.productId].count += item.quantity;
-      });
-    });
-    const topProducts = Object.values(productCounts)
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    const cashierLeaderboard: Record<string, { name: string, volume: number }> = {};
-    baseOrders.forEach(o => {
-      const cid = o.cashierId || 'System';
-      if (!cashierLeaderboard[cid]) cashierLeaderboard[cid] = { name: o.cashierName || 'Staff', volume: 0 };
-      cashierLeaderboard[cid].volume += o.total;
-    });
-    
-    const topCashier = Object.values(cashierLeaderboard)
-      .sort((a, b) => b.volume - a.volume)[0];
-
-    // Services vs Products comparison metrics
-    let serviceVolume = 0;
-    let serviceCount = 0;
-    let productVolume = 0;
-    let productCount = 0;
-
-    baseOrders.forEach(o => {
-      const itemsCount = o.items?.reduce((s, it) => s + (it.quantity || 1), 0) || 1;
-      if (o.type === 'CARWASH') {
-        serviceVolume += (o.total || 0);
-        serviceCount += itemsCount;
-      } else {
-        productVolume += (o.total || 0);
-        productCount += itemsCount;
-      }
-    });
-
-    const servicesVsProducts = [
-      { name: 'Services (Carwash)', value: serviceVolume, count: serviceCount, color: 'hsl(25, 100%, 50%)' },
-      { name: 'Products (Store & F&B)', value: productVolume, count: productCount, color: 'hsl(240, 5%, 26%)' }
-    ];
-
-    const departmentalComparison = [
-      { name: 'Carwash Services', value: carwashSales, count: baseOrders.filter(o => o.type === 'CARWASH').length, color: 'hsl(25, 100%, 50%)' },
-      { name: 'Retail Store', value: storeSales, count: baseOrders.filter(o => o.type === 'STORE').length, color: 'hsl(240, 5%, 15%)' },
-      { name: 'Lounge & Bar', value: loungeSales, count: baseOrders.filter(o => o.type === 'LOUNGE').length, color: 'hsl(38, 92%, 50%)' }
-    ];
-
-    const itemSalesMap: Record<string, { name: string; value: number; count: number; isService: boolean }> = {};
-    baseOrders.forEach(o => {
-      const isService = o.type === 'CARWASH';
-      o.items?.forEach(it => {
-        const key = it.name.trim();
-        if (!itemSalesMap[key]) {
-          itemSalesMap[key] = { name: key, value: 0, count: 0, isService };
-        }
-        itemSalesMap[key].value += (it.price || 0) * (it.quantity || 1);
-        itemSalesMap[key].count += (it.quantity || 1);
-      });
-    });
-
-    const PIE_COLORS = [
-      'hsl(25, 100%, 50%)',
-      'hsl(217, 91%, 60%)',
-      'hsl(38, 92%, 50%)',
-      'hsl(142, 71%, 45%)',
-      'hsl(262, 83%, 58%)',
-      'hsl(240, 5%, 35%)'
-    ];
-
-    const topSoldComparison = Object.values(itemSalesMap)
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 5)
-      .map((it, idx) => ({
-        name: it.name,
-        value: it.value,
-        count: it.count,
-        color: PIE_COLORS[idx % PIE_COLORS.length]
-      }));
-
-    return {
-      loungeSales,
-      storeSales,
-      carwashSales,
-      totalSales,
-      velocityData,
-      departmentalData,
-      topProducts,
-      topCashier,
-      lowStockItems,
-      activeNodes,
-      orderCount: baseOrders.length,
-      isPersonalView: !canSeeAll,
-      baseOrders,
-      servicesVsProducts,
-      departmentalComparison,
-      topSoldComparison
-    };
-  }, [allOrders, timeThreshold, inventory, terminals, role, profile, isSuperAdmin, dateFilter]);
-
-  const handleOpenShiftReport = (type: 'X' | 'Z') => {
+  const handleOpenShiftReport = async (type: 'X' | 'Z') => {
+    if(reportLoading || summaryRead.loading)return;
+    setReportLoading(true);
+    try { const orders=await summaryRead.details();setReportOrders(orders);
     setShiftReportType(type);
     setIsShiftReportOpen(true);
+    } catch {toast({variant:"destructive",title:"Report details unavailable",description:"No partial shift report was generated. Retry when the connection is restored."});}
+    finally {setReportLoading(false);}
   };
 
-  const handleQuickDownload = (type: 'X' | 'Z') => {
+  const handleQuickDownload = async (type: 'X' | 'Z') => {
+    if(reportLoading || summaryRead.loading)return;
+    setReportLoading(true);
+    try { const detailedOrders=await summaryRead.details();
+    const reportStats=summarizeDashboard(detailedOrders,dateFilter,!isAdmin);
     const reportText = generateShiftReportTxt({
       type,
       cashierName: profile?.displayName || 'Cashier',
       cashierId: profile?.uid || 'STAFF',
       periodLabel: dateFilter.replace(/_/g, ' '),
-      orders: stats.baseOrders || [],
+      orders: detailedOrders,
       heldBills: myHeldBills,
       stats: {
-        loungeSales: stats.loungeSales,
-        storeSales: stats.storeSales,
-        carwashSales: stats.carwashSales,
-        totalSales: stats.totalSales
+        loungeSales: reportStats.loungeSales,
+        storeSales: reportStats.storeSales,
+        carwashSales: reportStats.carwashSales,
+        totalSales: reportStats.totalSales
       }
     });
 
     downloadTxtFile(reportText, 'download.txt');
     toast({
       title: `Shift ${type}-Report Downloaded`,
-      description: `Saved as download.txt (${(stats.baseOrders || []).length} receipts itemized)`
+      description: `Saved as download.txt (${detailedOrders.length} receipts itemized)`
     });
+    } catch {toast({variant:"destructive",title:"Report download unavailable",description:"No partial shift report was generated."});}
+    finally {setReportLoading(false);}
   };
 
   const handleResumeBill = (bill: Order) => {
@@ -361,19 +210,16 @@ export default function DashboardPage() {
   };
 
   if (!mounted) return null;
-  if (allOrdersRead.loading) return <div className="p-6" role="status">Loading the complete sales history. Totals will appear when all pages have loaded.</div>;
-  if (allOrdersRead.error) return <div className="p-6"><PosReadNotice label="Sales history" error={allOrdersRead.error} onRetry={allOrdersRead.refresh} /></div>;
-  const missingSaleDates = (allOrders || []).filter(order => typeof order.timestamp !== 'number' || !Number.isFinite(order.timestamp)).length;
 
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto px-1">
       <div role="status" className="p-3 border rounded-xl text-sm space-y-2">
-        <p>{(allOrders || []).length} sales/order records loaded across available dates. Date totals include only PAID records.</p>
-        {missingSaleDates > 0 && <p>{missingSaleDates} records have no usable sale date and cannot appear in dated totals. No dates or transactions have been altered.</p>}
-        <button type="button" onClick={allOrdersRead.refresh} className="underline">Refresh sales history</button>
+        <p>{summaryRead.loading ? 'Calculating complete sales totals for the selected period…' : summaryRead.error ? 'Sales totals are unavailable. They are not zero.' : `${summaryRead.data?.recordCount || 0} paid records summarized for ${dateFilter.replace(/_/g,' ')}. Recent receipts are a preview; totals cover the complete period.`}</p>
+        <button type="button" onClick={summaryRead.refresh} className="underline">Refresh sales summary</button>
+        {reportLoading && <p>Loading complete shift-report details…</p>}
       </div>
+      <PosReadNotice label="Sales summary" error={summaryRead.error} onRetry={summaryRead.refresh} />
       <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
-      <PosReadNotice label="allOrders" error={allOrdersRead.error} onRetry={allOrdersRead.refresh} />
       <PosReadNotice label="terminals" error={terminalsRead.error} onRetry={terminalsRead.refresh} />
       <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-1 pt-2">
@@ -413,6 +259,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {!summaryRead.loading && !summaryRead.error && <>
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
          <AIBriefing 
            sales={stats.totalSales} 
@@ -873,7 +720,7 @@ export default function DashboardPage() {
           cashierName={profile?.displayName || 'Cashier'}
           cashierId={profile?.uid || 'STAFF'}
           periodLabel={dateFilter.replace(/_/g, ' ')}
-          orders={stats.baseOrders || []}
+          orders={reportOrders}
           heldBills={myHeldBills}
           stats={{
             loungeSales: stats.loungeSales,
@@ -883,6 +730,7 @@ export default function DashboardPage() {
           }}
         />
       )}
+      </>}
     </div>
   );
 }
