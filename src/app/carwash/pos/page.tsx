@@ -1,6 +1,10 @@
 
 'use client';
 
+import { useStaffInventory } from '@/hooks/use-staff-inventory';
+import { usePosReads } from '@/hooks/use-pos-reads';
+import { PosReadNotice } from '@/components/pos/read-notice';
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Car, 
@@ -157,11 +161,6 @@ export default function CarwashPOS() {
     return () => clearTimeout(timer);
   }, [firestore, plateNumber, jobType]);
 
-  const servicesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'inventory'), where('unit', '==', 'CARWASH'));
-  }, [firestore]);
-
   const attendantsQuery = useMemoFirebase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'users'), where('role', '==', 'ATTENDANT'));
@@ -172,19 +171,12 @@ export default function CarwashPOS() {
     return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'), limit(150));
   }, [firestore]);
 
-  const ordersBaseQuery = useMemoFirebase(() => {
-    if (!firestore || !activeCashier?.uid) return null;
-    return query(
-      collection(firestore, 'users', activeCashier.uid, 'held_bills'),
-      where('type', '==', 'CARWASH'),
-      limit(500)
-    );
-  }, [firestore, activeCashier?.uid]);
-
-  const { data: services } = useCollection<Product>(servicesQuery);
+  const inventoryRead = useStaffInventory(0);
+  const services = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'CARWASH' && !item.archived) || null, [inventoryRead.data]);
   const { data: attendants } = useCollection<UserProfile>(attendantsQuery);
   const { data: recentJobs } = useCollection<CarwashJob>(recentJobsQuery);
-  const { data: rawPendingOrders } = useCollection<Order>(ordersBaseQuery);
+  const tabRead = usePosReads<Order>('own-tabs', 'CARWASH', !!activeCashier?.uid);
+  const rawPendingOrders = tabRead.data;
 
   const pendingOrders = useMemo(() => {
     if (!rawPendingOrders) return [];
@@ -407,6 +399,9 @@ export default function CarwashPOS() {
     <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
         <header className="space-y-4 bg-white p-6 rounded-[2.5rem] border border-zinc-100 shadow-sm shrink-0">
+          <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
+          <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
+
            <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                  <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary"><Car className="w-6 h-6" /></div>

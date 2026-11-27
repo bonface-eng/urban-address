@@ -1,6 +1,10 @@
 
 'use client';
 
+import { useStaffInventory } from '@/hooks/use-staff-inventory';
+import { usePosReads } from '@/hooks/use-pos-reads';
+import { PosReadNotice } from '@/components/pos/read-notice';
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Coffee, 
@@ -110,20 +114,6 @@ export default function LoungePOS() {
 
   const isAuthorized = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER' || role === 'SUPERVISOR' || (role === 'CASHIER');
 
-  const loungeQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'inventory'), where('unit', '==', 'LOUNGE'));
-  }, [firestore]);
-
-  const ordersBaseQuery = useMemoFirebase(() => {
-    if (!firestore || !activeCashier?.uid) return null;
-    return query(
-      collection(firestore, 'users', activeCashier.uid, 'held_bills'),
-      where('type', '==', 'LOUNGE'),
-      limit(500)
-    );
-  }, [firestore, activeCashier?.uid]);
-
   const startOfToday = new Date().setHours(0, 0, 0, 0);
   const todayOrdersQuery = useMemoFirebase(() => {
     if (!firestore) return null;
@@ -135,8 +125,10 @@ export default function LoungePOS() {
     );
   }, [firestore, startOfToday]);
 
-  const { data: products } = useCollection<Product>(loungeQuery);
-  const { data: rawPendingOrders } = useCollection<Order>(ordersBaseQuery);
+  const inventoryRead = useStaffInventory(0);
+  const products = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'LOUNGE' && !item.archived) || null, [inventoryRead.data]);
+  const tabRead = usePosReads<Order>('own-tabs', 'LOUNGE', !!activeCashier?.uid);
+  const rawPendingOrders = tabRead.data;
   const { data: todayOrders } = useCollection<Order>(todayOrdersQuery);
 
   const pendingOrders = useMemo(() => {
@@ -372,6 +364,9 @@ export default function LoungePOS() {
     <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
         <header className="space-y-4 px-1">
+          <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
+          <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
+
           <div className="flex items-center justify-between">
             <h1 className="text-xl font-black font-headline uppercase text-zinc-900">Lounge</h1>
             <div className="flex items-center gap-2">

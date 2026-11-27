@@ -1,5 +1,8 @@
 'use client';
 
+import { useStaffInventory } from '@/hooks/use-staff-inventory';
+import { PosReadNotice } from '@/components/pos/read-notice';
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Car, 
@@ -107,13 +110,9 @@ export default function CarwashPage() {
     return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'));
   }, [firestore]);
 
-  const servicesQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'inventory'), where('unit', '==', 'CARWASH'));
-  }, [firestore]);
-
   const { data: jobs, loading } = useCollection<CarwashJob>(jobsQuery);
-  const { data: inventoryServices } = useCollection<Product>(servicesQuery);
+  const inventoryRead = useStaffInventory(0);
+  const inventoryServices = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'CARWASH' && !item.archived) || null, [inventoryRead.data]);
 
   const filteredJobs = useMemo(() => {
     if (!jobs) return [];
@@ -184,6 +183,7 @@ export default function CarwashPage() {
 
   return (
     <div className="space-y-6 pb-20 max-w-[1600px] mx-auto px-1 md:px-0">
+      <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4 px-2 pt-2 md:pt-4">
         <div>
           <div className="flex items-center gap-2 mb-1">

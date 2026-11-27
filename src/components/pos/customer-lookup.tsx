@@ -6,8 +6,8 @@ import { Search, User, X, Check, Award, Phone, Mail, UserPlus, CreditCard } from
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
+import { usePosReads } from '@/hooks/use-pos-reads';
+import { PosReadNotice } from './read-notice';
 import { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -22,14 +22,7 @@ interface CustomerLookupProps {
 export function CustomerLookup({ onSelect, selectedCustomer, className }: CustomerLookupProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const firestore = useFirestore();
-
-  const customersQuery = useMemo(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'users'), where('role', '==', 'CLIENT'), limit(20));
-  }, [firestore]);
-
-  const { data: customers } = useCollection<UserProfile>(customersQuery);
+  const { data: customers, loading, error, refresh } = usePosReads<UserProfile>('customers');
 
   const results = useMemo(() => {
     if (!searchTerm || !customers) return [];
@@ -58,6 +51,7 @@ export function CustomerLookup({ onSelect, selectedCustomer, className }: Custom
 
   return (
     <div className={cn("relative", className)}>
+      <PosReadNotice label="Customer lookup" error={error} onRetry={refresh} />
       {selectedCustomer ? (
         <div className="flex items-center justify-between p-3 bg-primary/5 border border-primary/20 rounded-xl animate-in zoom-in-95 duration-300">
            <div className="flex items-center gap-3">
@@ -112,7 +106,7 @@ export function CustomerLookup({ onSelect, selectedCustomer, className }: Custom
                ))}
             </div>
           )}
-          {isOpen && searchTerm && results.length === 0 && (
+          {isOpen && searchTerm && !loading && !error && results.length === 0 && (
             <div className="absolute z-[100] left-0 right-0 top-[calc(100%+8px)] bg-white border border-zinc-100 rounded-2xl shadow-2xl p-6 text-center space-y-3">
                <UserPlus className="w-8 h-8 text-zinc-200 mx-auto" />
                <p className="text-[9px] font-black uppercase tracking-widest text-zinc-400">No member matches found</p>
