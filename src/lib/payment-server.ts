@@ -175,7 +175,7 @@ export async function markOrderPaid(input: {
   }
 }
 export function publicBaseUrl() {
-  const value = process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
-  if (!value) throw new Error('APP_BASE_URL is not configured');
+  const value = process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  if (!value) throw new Error('NEXT_PUBLIC_APP_URL is not configured');
   return value.startsWith('http') ? value : 'https://' + value;
 }

@@ -24,7 +24,7 @@ export function validatePublicSupabaseEnv(): void {
   }
   if (missing.length > 0) {
     throw new Error(
-      `[ENV] Missing required public Supabase environment variable(s): ${missing.join(', ')}. Check .env.local or deployment environment settings.`
+      `[ENV] Missing required public Supabase environment variable(s): ${missing.join(', ')}. Check .env or deployment environment settings.`
     );
   }
 }
@@ -37,7 +37,7 @@ export function validateServerSupabaseEnv(): void {
   const missing = SERVER_REQUIRED.filter((key) => !process.env[key]?.trim());
   if (missing.length > 0) {
     throw new Error(
-      `[ENV] Missing required server Supabase environment variable(s): ${missing.join(', ')}. Check .env.local or deployment environment settings.`
+      `[ENV] Missing required server Supabase environment variable(s): ${missing.join(', ')}. Check .env or deployment environment settings.`
     );
   }
 }

@@ -8,6 +8,7 @@
 import { createClient } from '@supabase/supabase-js';
 import * as dotenv from 'dotenv';
 import { Client as Pg } from 'pg';
+dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local' });
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;

@@ -474,7 +474,7 @@ export async function checkAdminStatus() {
 }
 
 export async function checkAiStatus() {
-  const geminiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY;
+  const geminiKey = process.env.GOOGLE_GENAI_API_KEY;
   return {
     hasKey: !!geminiKey,
     provider: 'Google Gemini',

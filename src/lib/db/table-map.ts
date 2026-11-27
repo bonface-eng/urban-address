@@ -268,8 +268,43 @@ const CAMEL_TO_SNAKE_OVERRIDES: Record<string, Record<string, string>> = {
   },
 };
 
+const TABLES_WITH_CREATED_AT_MS = new Set([
+  'branches', 'email_campaigns', 'email_outbox', 'email_verification_otps',
+  'inventory', 'live_audio_sessions', 'pos_terminals', 'profiles',
+  'refund_requests', 'staff_navigation_logs', 'stock_adjustment_requests',
+  'suppliers', 'system_audit_logs', 'system_incidents',
+  'telegram_event_deliveries', 'telegram_link_challenges',
+  'telegram_user_access', 'terminal_pin_reset_otps',
+]);
+
+const TABLES_WITH_UPDATED_AT_MS = new Set([
+  'admin_daily_otps', 'app_releases', 'branches', 'digital_menus',
+  'email_campaigns', 'email_outbox', 'email_verification_otps', 'inventory',
+  'maps_geocode_cache', 'orders', 'pos_terminals', 'profiles', 'settings',
+  'suppliers', 'system_config', 'telegram_controls',
+  'telegram_event_deliveries', 'telegram_link_challenges',
+  'telegram_monitor_state', 'telegram_presence', 'telegram_security_throttle',
+  'telegram_user_access', 'terminal_devices',
+]);
+
+const TIMESTAMPTZ_EXTRA_COLUMNS: Record<string, Set<string>> = {
+  firebase_uid_map: new Set(['migrated_at']),
+  terminal_device_staff: new Set([
+    'disclaimer_acknowledged_at', 'pin_updated_at', 'pin_reset_at',
+    'registered_at', 'last_seen_at',
+  ]),
+  terminal_sessions: new Set(['expires_at']),
+};
+
+function isTimestamptzColumn(table: string, col: string): boolean {
+  if (col === 'created_at' || col === 'updated_at') return true;
+  return Boolean(TIMESTAMPTZ_EXTRA_COLUMNS[table]?.has(col));
+}
+
 export function toSnakeColumn(table: string, field: string): string {
   if (field === 'id' || field === '__name__') return table === 'profiles' ? 'uid' : table === 'admins' ? 'email' : 'id';
+  if (field === 'createdAt') return TABLES_WITH_CREATED_AT_MS.has(table) ? 'created_at_ms' : 'created_at';
+  if (field === 'updatedAt') return TABLES_WITH_UPDATED_AT_MS.has(table) ? 'updated_at_ms' : 'updated_at';
   const tableOverrides = CAMEL_TO_SNAKE_OVERRIDES[table];
   if (tableOverrides && tableOverrides[field]) return tableOverrides[field];
   if (CAMEL_TO_SNAKE_OVERRIDES['*'][field]) return CAMEL_TO_SNAKE_OVERRIDES['*'][field];
@@ -500,6 +535,14 @@ export function documentToRow(
     }
     if (resolved.table === 'salary_advances' && k === 'userId' && !data.staffId) {
       col = 'staff_id';
+    }
+
+    if (isTimestamptzColumn(resolved.table, col)) {
+      if (typeof val === 'number' && Number.isFinite(val)) {
+        val = new Date(val).toISOString();
+      } else if (val instanceof Date) {
+        val = val.toISOString();
+      }
     }
 
     if (allowedCols && !allowedCols.has(col)) {

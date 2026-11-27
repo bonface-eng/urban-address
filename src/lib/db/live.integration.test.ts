@@ -10,6 +10,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import * as dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
 
+dotenv.config({ path: '.env' });
 dotenv.config({ path: '.env.local' });
 
 const live =
