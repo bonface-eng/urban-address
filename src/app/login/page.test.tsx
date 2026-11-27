@@ -58,7 +58,7 @@ describe('LoginPage Auth Logic', () => {
       user: {
         uid: 'client-1',
         email: 'client@urban.co.ke',
-        emailVerified: true,
+        emailVerified: false,
         reload: vi.fn().mockResolvedValue(undefined),
         getIdToken: vi.fn().mockResolvedValue('id-token'),
       },

@@ -89,8 +89,8 @@ async function main() {
   rec('client blocked from inventory by RLS (0 rows, no grant error)', !inv.error && (inv.data?.length ?? 0) === 0, inv.error?.message || `rows visible=${inv.data?.length}`);
   const adm = await c2.from('admins').select('email').limit(5);
   rec('client blocked from admins whitelist by RLS', !adm.error && (adm.data?.length ?? 0) === 0, adm.error?.message || `rows visible=${adm.data?.length}`);
-  const otps = await c2.from('email_verification_otps').select('id').limit(1);
-  rec('client blocked from server-only table (email_verification_otps)', (otps.data?.length ?? 0) === 0, otps.error?.message || 'no rows / denied');
+  const otps = await c2.from('admin_daily_otps').select('id').limit(1);
+  rec('client blocked from server-only table (admin_daily_otps)', (otps.data?.length ?? 0) === 0, otps.error?.message || 'no rows / denied');
   const escalate = await c2.from('profiles').update({ role: 'ADMIN' }).eq('id', clientId).select();
   const after = await admin.from('profiles').select('role').eq('id', clientId).maybeSingle();
   rec('client cannot self-promote to ADMIN', after.data?.role === 'CLIENT', escalate.error?.message || `role still ${after.data?.role}`);

@@ -77,12 +77,6 @@ function button(url: string, label: string) {
   return `<p style="margin:28px 0"><a href="${escape(url)}" style="display:inline-block;background:${BRAND.orange};color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:6px;font-size:14px;font-weight:700">${escape(label)}</a></p>`;
 }
 
-export function verificationEmail(input: TemplateInput & { verificationUrl: string }): EmailTemplate {
-  const name = escape(input.name || 'there');
-  const html = layout(`<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;color:${BRAND.ink}">Verify your email address</h1><p style="font-size:15px;line-height:1.7">Hello ${name},</p><p style="font-size:15px;line-height:1.7">Confirm your email address to finish setting up your Urban Auto Express account.</p>${button(input.verificationUrl, 'Verify email address')}<p style="font-size:12px;line-height:1.6;color:${BRAND.muted}">If the button does not work, copy this link into your browser:<br><a href="${escape(input.verificationUrl)}" style="color:${BRAND.orange};word-break:break-all">${escape(input.verificationUrl)}</a></p><p style="font-size:12px;color:${BRAND.muted}">If you did not create this account, you can ignore this message.</p>`, input.email);
-  return { subject: 'Verify your Urban Auto Express account', html, text: `Hello ${input.name || 'there'}, verify your email address: ${input.verificationUrl}. If you did not create this account, ignore this email.` };
-}
-
 export function passwordResetEmail(input: TemplateInput & { resetUrl: string }): EmailTemplate {
   const html = layout(`<h1 style="margin:0 0 18px;font-size:24px;line-height:1.3;color:${BRAND.ink}">Reset your password</h1><p style="font-size:15px;line-height:1.7">We received a request to reset the password for <strong>${escape(input.email)}</strong>.</p>${button(input.resetUrl, 'Choose a new password')}<p style="font-size:12px;line-height:1.6;color:${BRAND.muted}">If the button does not work, copy this link into your browser:<br><a href="${escape(input.resetUrl)}" style="color:${BRAND.orange};word-break:break-all">${escape(input.resetUrl)}</a></p><p style="font-size:12px;color:${BRAND.muted}">If you did not request a password reset, you can safely ignore this message. Your password will not change.</p>`, input.email);
   return { subject: 'Reset your Urban Auto Express password', html, text: `A password reset was requested for ${input.email}. Choose a new password here: ${input.resetUrl}. If you did not request this, ignore this email.` };

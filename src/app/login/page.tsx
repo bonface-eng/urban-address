@@ -62,22 +62,6 @@ export default function LoginPage() {
     const upperRole = String(role || 'CLIENT').toUpperCase();
     const isRootOrAdmin = ROOT_ADMINS.includes(userEmail) || upperRole === 'ADMIN';
 
-    if (!isRootOrAdmin && upperRole === 'CLIENT' && signedInUser?.emailVerified === false) {
-      try {
-        const verificationToken = await signedInUser.getIdToken?.(true);
-        if (verificationToken) {
-          await fetch('/api/auth/send-verification', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${verificationToken}` },
-          });
-        }
-      } catch {
-        // Non-fatal: verify-email page allows manual resend
-      }
-      router.replace('/auth/verify-email');
-      return;
-    }
-
     if (isRootOrAdmin) {
       try {
         const token = await signedInUser.getIdToken?.(true);
@@ -212,11 +196,8 @@ export default function LoginPage() {
       console.error('[LOGIN] signInWithPassword failed:', error);
       void notifyTelegramFailedSignIn(email);
       const code = error?.code || '';
-      const rawMessage = String(error?.message || '');
       const description =
-        /email not confirmed/i.test(rawMessage)
-          ? 'Your email address is not confirmed yet. Open the confirmation link we emailed you, then sign in.'
-          : code === 'auth/too-many-requests'
+        code === 'auth/too-many-requests'
           ? 'Too many unsuccessful sign-in attempts. Please wait a few minutes or reset your password.'
           : code === 'auth/network-request-failed'
             ? 'Network error. Please check your internet connection and try again.'

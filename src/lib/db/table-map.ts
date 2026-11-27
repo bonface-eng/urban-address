@@ -52,7 +52,6 @@ const TOP_LEVEL_TABLE_MAP: Record<string, { table: string; pkColumn?: string; is
   terminal_pin_attempts: { table: 'terminal_pin_attempts' },
   terminal_pin_reset_otps: { table: 'terminal_pin_reset_otps' },
   terminal_sessions: { table: 'terminal_sessions' },
-  email_verification_otps: { table: 'email_verification_otps' },
   admin_daily_otps: { table: 'admin_daily_otps' },
   email_rate_limits: { table: 'email_rate_limits' },
   email_preferences: { table: 'email_preferences' },
@@ -210,12 +209,6 @@ const CAMEL_TO_SNAKE_OVERRIDES: Record<string, Record<string, string>> = {
     consumedAt: 'consumed_at',
     verifiedAt: 'verified_at',
   },
-  email_verification_otps: {
-    lastSentAt: 'last_sent_at',
-    expiresAt: 'expires_at',
-    consumedAt: 'consumed_at',
-    hourlyCount: 'hourly_count',
-  },
   terminal_pin_reset_otps: {
     lastSentAt: 'last_sent_at',
     expiresAt: 'expires_at',
@@ -269,7 +262,7 @@ const CAMEL_TO_SNAKE_OVERRIDES: Record<string, Record<string, string>> = {
 };
 
 const TABLES_WITH_CREATED_AT_MS = new Set([
-  'branches', 'email_campaigns', 'email_outbox', 'email_verification_otps',
+  'branches', 'email_campaigns', 'email_outbox',
   'inventory', 'live_audio_sessions', 'pos_terminals', 'profiles',
   'refund_requests', 'staff_navigation_logs', 'stock_adjustment_requests',
   'suppliers', 'system_audit_logs', 'system_incidents',
@@ -279,7 +272,7 @@ const TABLES_WITH_CREATED_AT_MS = new Set([
 
 const TABLES_WITH_UPDATED_AT_MS = new Set([
   'admin_daily_otps', 'app_releases', 'branches', 'digital_menus',
-  'email_campaigns', 'email_outbox', 'email_verification_otps', 'inventory',
+  'email_campaigns', 'email_outbox', 'inventory',
   'maps_geocode_cache', 'orders', 'pos_terminals', 'profiles', 'settings',
   'suppliers', 'system_config', 'telegram_controls',
   'telegram_event_deliveries', 'telegram_link_challenges',
