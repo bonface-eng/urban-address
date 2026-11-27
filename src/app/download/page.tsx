@@ -21,12 +21,12 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, orderBy, limit } from '@/lib/db';
 import { cn } from '@/lib/utils';
 
 export default function DownloadAppPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   
   // Fetch only the single latest release
   const releasesQuery = useMemo(() => {

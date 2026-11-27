@@ -33,8 +33,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, where, orderBy, limit } from '@/lib/db';
 import {
   Dialog,
   DialogContent,
@@ -49,7 +49,7 @@ import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 
 export default function CustomerCRM() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   
@@ -57,7 +57,7 @@ export default function CustomerCRM() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  const customersQuery = useMemoFirebase(() => {
+  const customersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'users'), where('role', '==', 'CLIENT'), orderBy('createdAt', 'desc'));
   }, [firestore]);

@@ -2,7 +2,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import LoginPage from './page';
 import { mockUseFirestore } from '@/test/setup';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword } from '@/lib/db';
 import { Toaster } from '@/components/ui/toaster';
 
 const mockReplace = vi.fn();
@@ -20,20 +20,13 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-vi.mock('firebase/auth', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('firebase/auth')>();
+vi.mock('@/lib/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/db')>();
   return {
     ...actual,
     signInWithEmailAndPassword: vi.fn(),
     GoogleAuthProvider: vi.fn(),
     signInWithPopup: vi.fn(),
-  };
-});
-
-vi.mock('firebase/firestore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('firebase/firestore')>();
-  return {
-    ...actual,
     doc: vi.fn(() => ({ path: 'users/uid' })),
     getDoc: vi.fn().mockResolvedValue({
       exists: () => true,
@@ -59,7 +52,7 @@ describe('LoginPage Auth Logic', () => {
   });
 
   it('completes customer login and redirects even when audit_logs write is denied for CLIENT role', async () => {
-    const { addDoc } = await import('firebase/firestore');
+    const { addDoc } = await import('@/lib/db');
     vi.mocked(addDoc).mockRejectedValueOnce({ code: 'permission-denied' });
     vi.mocked(signInWithEmailAndPassword).mockResolvedValueOnce({
       user: {
@@ -82,7 +75,7 @@ describe('LoginPage Auth Logic', () => {
     });
   });
 
-  it('masks Firebase errors for security', async () => {
+  it('masks provider errors for security', async () => {
     vi.mocked(signInWithEmailAndPassword).mockRejectedValueOnce({ code: 'auth/invalid-credential' });
 
     render(

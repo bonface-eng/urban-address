@@ -1,5 +1,5 @@
 import { Telegraf, Markup } from 'telegraf';
-import { getDbAdmin } from '../firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { getTelegramDashboard, getTelegramLowStock, getTelegramSalesBreakdown, getTelegramPendingExpenses, getTelegramStationSalesReport, getTelegramCashierAnalyticsReport, getTelegramTopItems12HourReport } from './actions';
 import { logger } from '../logger';
 import { getTelegramOnlineReport, getTelegramJobsReport, getTelegramAttendantsReport, getTelegramPaymentsReport, getTelegramAlertsReport, getTelegramHealthReport } from './extended-actions';

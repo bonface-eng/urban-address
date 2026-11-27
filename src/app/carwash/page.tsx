@@ -3,7 +3,7 @@
 import { PageHeader } from '@/components/shared/page-layout';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '@/lib/db';
 import { 
   Car, 
   Plus, 
@@ -72,8 +72,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, addDoc, updateDoc, doc, query, orderBy, where, deleteDoc } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, addDoc, updateDoc, doc, query, orderBy, where, deleteDoc } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { CarwashJob, UserProfile, Product } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
@@ -81,7 +81,7 @@ import { useProfile } from '@/hooks/use-profile';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 
 export default function CarwashPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile } = useProfile();
   
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -106,12 +106,12 @@ export default function CarwashPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const jobsQuery = useMemoFirebase(() => {
+  const jobsQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'));
   }, [firestore]);
 
-  const servicesQuery = useMemoFirebase(() => {
+  const servicesQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'inventory'), where('unit', '==', 'CARWASH'));
   }, [firestore]);

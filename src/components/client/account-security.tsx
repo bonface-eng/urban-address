@@ -2,10 +2,10 @@
 
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, signOut } from 'firebase/auth';
-import { collection, addDoc } from 'firebase/firestore';
+import { EmailAuthProvider, reauthenticateWithCredential, updatePassword, signOut } from '@/lib/db';
+import { collection, addDoc } from '@/lib/db';
 import { LogOut, KeyRound, ShieldAlert, Loader2 } from 'lucide-react';
-import { useAuth, useFirestore, useUser } from '@/firebase';
+import { useAuth, useDb, useUser } from '@/lib/data';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,7 +14,7 @@ import { toast } from '@/hooks/use-toast';
 export function AccountSecurity() {
   const { user } = useUser();
   const auth = useAuth();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');

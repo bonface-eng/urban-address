@@ -6,8 +6,8 @@ import { Search, User, X, Check, Award, Phone, Mail, UserPlus, CreditCard } from
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, limit } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, where, limit } from '@/lib/db';
 import { UserProfile } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -22,7 +22,7 @@ interface CustomerLookupProps {
 export function CustomerLookup({ onSelect, selectedCustomer, className }: CustomerLookupProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   const customersQuery = useMemo(() => {
     if (!firestore) return null;

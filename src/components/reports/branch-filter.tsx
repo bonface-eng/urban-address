@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { collection, query, orderBy } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, query, orderBy } from '@/lib/db';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { BusinessBranch } from '@/lib/types';
@@ -14,9 +14,9 @@ type BranchFilterProps = {
 };
 
 export function BranchFilter({ value, onChange, className }: BranchFilterProps) {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, role, isSuperAdmin } = useProfile();
-  const branchesQuery = useMemoFirebase(() => firestore
+  const branchesQuery = useMemoSupabase(() => firestore
     ? query(collection(firestore, 'branches'), orderBy('createdAt', 'asc'))
     : null, [firestore]);
   const { data: branches } = useCollection<BusinessBranch>(branchesQuery);

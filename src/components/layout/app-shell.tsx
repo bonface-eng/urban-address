@@ -5,8 +5,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from './sidebar';
 import { Header } from './header';
 import { BottomNav } from './bottom-nav';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useUser, useDb, useDoc } from '@/lib/data';
+import { doc } from '@/lib/db';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
@@ -19,7 +19,7 @@ const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
 
 function AppShellContent({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -241,7 +241,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
     return <div className="min-h-screen bg-white flex items-center justify-center px-6"><div className="text-center space-y-3" role="status" aria-live="polite"><div className="mx-auto h-8 w-8 rounded-full border-2 border-zinc-200 border-t-primary animate-spin" /><p className="text-xs font-bold uppercase tracking-widest text-zinc-500">Verifying administrator access…</p></div></div>;
   }
 
-  // Never render staff/admin content while Firebase is restoring or has no user.
+  // Never render staff/admin content while the auth session is restoring or has no user.
   if (!isPreviewMode && isProtectedStaffRoute && (authLoading || profileLoading || !user)) {
     return (
       <div className="min-h-screen bg-white flex items-center justify-center px-6">

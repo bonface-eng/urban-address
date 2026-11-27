@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { createOtp, hashOtp } from '@/lib/otp-security';
 import { customerNotificationEmail } from '@/lib/email/templates';
 import { sendTransactionalEmail } from '@/lib/resend';

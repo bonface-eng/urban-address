@@ -24,8 +24,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useFirestore, useUser } from '@/firebase';
-import { doc, writeBatch, increment, getDoc } from 'firebase/firestore';
+import { useDb, useUser } from '@/lib/data';
+import { doc, writeBatch, increment, getDoc } from '@/lib/db';
 import { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -78,7 +78,7 @@ const QUICK_COLORS = [
 export default function CarwashBookingPage() {
   const router = useRouter();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   
   const [selectedServiceId, setSelectedServiceId] = useState<string>('');
   const [valetType, setValetType] = useState('NONE');
@@ -96,7 +96,7 @@ export default function CarwashBookingPage() {
 
   // Public service discovery uses the same cached, server-authorized catalogue
   // as the other public product pages. Booking writes still use the signed-in
-  // customer's Firebase session and existing Firestore transaction workflow.
+  // customer's Supabase session and existing transaction workflow.
   useEffect(() => {
     const controller = new AbortController();
 

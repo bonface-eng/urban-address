@@ -3,9 +3,9 @@
 import { PageHeader } from '@/components/shared/page-layout';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, collection, doc, orderBy, query, updateDoc, writeBatch } from 'firebase/firestore';
+import { addDoc, collection, doc, orderBy, query, updateDoc, writeBatch } from '@/lib/db';
 import { Building2, MapPin, Plus, Pencil, Check, X, ExternalLink, MapPinned, Phone, Search, Loader2, Archive, Star } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
+import { useDb, useCollection, useMemoSupabase, useUser } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
@@ -40,7 +40,7 @@ const EMPTY_FORM: BranchForm = {
 const slugify = (value: string) => value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
 export default function BranchManagementPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { user } = useUser();
   const { isSuperAdmin } = useProfile();
   const { toast } = useToast();
@@ -52,7 +52,7 @@ export default function BranchManagementPage() {
 
   useEffect(() => setMounted(true), []);
 
-  const branchesQuery = useMemoFirebase(() => {
+  const branchesQuery = useMemoSupabase(() => {
     if (!firestore || !user || !isSuperAdmin) return null;
     return query(collection(firestore, 'branches'), orderBy('createdAt', 'asc'));
   }, [firestore, user, isSuperAdmin]);

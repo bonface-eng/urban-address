@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { bot } from '@/lib/telegram/bot';
-import { getDbAdmin } from '@/lib/firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { getTelegramDashboard, getTelegramSalesBreakdown, getTelegramPendingExpenses, getTelegramStationSalesReport, getTelegramCashierAnalyticsReport, getTelegramTopItems12HourReport } from '@/lib/telegram/actions';
 import { getTelegramWeeklySummary, getTelegramHourlyClientOrders, getTelegramAllCashierHeldBills } from '@/lib/telegram/extended-actions';
 import { logger } from '@/lib/logger';

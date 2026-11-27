@@ -2,10 +2,9 @@
 
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTerminal } from '@/hooks/use-terminal';
-import { useUser } from '@/firebase';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, signOut } from 'firebase/auth';
-import { firebaseConfig } from '@/firebase/config';
+import { useUser } from '@/lib/data';
+import { initializeApp, deleteApp } from '@/lib/db';
+import { getAuth, signInWithEmailAndPassword, signOut } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -493,7 +492,7 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
     let secondaryApp: ReturnType<typeof initializeApp> | null = null;
     let secondaryAuth: ReturnType<typeof getAuth> | null = null;
     try {
-      secondaryApp = initializeApp(firebaseConfig, 'terminal-enrol-' + crypto.randomUUID());
+      secondaryApp = initializeApp(undefined, 'terminal-enrol-' + crypto.randomUUID());
       secondaryAuth = getAuth(secondaryApp);
       const credential = await signInWithEmailAndPassword(secondaryAuth, email.toLowerCase().trim(), password);
       const token = await credential.user.getIdToken();
@@ -512,7 +511,7 @@ export function TerminalLock({ children, unit }: { children: React.ReactNode; un
       const pinResult = await pinResponse.json();
       if (!pinResponse.ok) throw new Error(pinResult.error || 'Could not save the staff PIN.');
       if (!authUser) {
-        // The first enrolled operator becomes the device's authenticated Firebase identity.
+        // The first enrolled operator becomes the device's authenticated Supabase identity.
         await signInWithEmailAndPassword(getAuth(), email.toLowerCase().trim(), password);
       }
       const profile = { ...registered.profile, pinConfigured: true } as UserProfile;

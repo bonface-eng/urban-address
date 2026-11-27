@@ -1,4 +1,4 @@
-import type { User } from 'firebase/auth';
+import type { User } from '@/lib/db';
 
 export type TelegramClientEvent =
   | { type: 'SIGNUP'; name?: string }

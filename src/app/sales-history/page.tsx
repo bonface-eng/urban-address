@@ -66,8 +66,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, doc, addDoc, writeBatch, increment, where, deleteDoc } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy, limit, doc, addDoc, writeBatch, increment, where, deleteDoc } from '@/lib/db';
 import { Order, BusinessUnit } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { useTerminal } from '@/hooks/use-terminal';
@@ -77,7 +77,7 @@ import { ReceiptPreview } from '@/components/pos/receipt-preview';
 type DatePreset = 'TODAY' | 'YESTERDAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'ALL_TIME' | 'CUSTOM';
 
 export default function SalesHistoryPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin, role } = useProfile();
   const { clientIp } = useTerminal();
   const [mounted, setMounted] = useState(false);
@@ -135,7 +135,7 @@ export default function SalesHistoryPage() {
     }
   }, [activeTab, filterUnit, datePreset, dateFrom, dateTo, mounted]);
 
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'));
   }, [firestore]);

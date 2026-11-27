@@ -29,11 +29,11 @@ export const SYSTEM_CONFIG = {
  * Explicit mapping of required variables for secure system integration.
  */
 export const ENV_CONFIG = {
-  FIREBASE: {
-    API_KEY: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    PROJECT_ID: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    // Secret (Server-Side Only)
-    SERVICE_ACCOUNT: process.env.FIREBASE_SERVICE_ACCOUNT_KEY,
+  SUPABASE: {
+    URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
+    ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+    // Secret (server-side only): never reference from client code.
+    SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   },
   STORAGE: {
     PROVIDER: 'CLOUDFLARE_R2',

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import crypto from 'crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { bot } from '@/lib/telegram/bot';
 import { Markup } from 'telegraf';
 import { logger } from '@/lib/logger';

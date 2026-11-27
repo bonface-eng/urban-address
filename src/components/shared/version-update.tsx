@@ -3,8 +3,8 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { useProfile } from '@/hooks/use-profile';
-import { useFirestore, useUser } from '@/firebase';
-import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
+import { useDb, useUser } from '@/lib/data';
+import { doc, updateDoc, arrayUnion } from '@/lib/db';
 import { SYSTEM_CONFIG } from '@/lib/config';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
@@ -163,7 +163,7 @@ const SYSTEM_UPDATES: UpdateItem[] = [
 export function VersionUpdateBriefing() {
   const { profile, role, isSuperAdmin, isEmployee, loading: profileLoading } = useProfile();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   const [isOpen, setIsOpen] = useState(false);
   const [isAcknowledging, setIsAcknowledging] = useState(false);

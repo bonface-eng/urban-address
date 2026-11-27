@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDbAdmin } from '@/lib/firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { markOrderPaid } from '@/lib/payment-server';
 import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 export const runtime = 'nodejs';

@@ -20,14 +20,14 @@ describe('Service Queue Integrity', () => {
     expect(screen.getByText(/KDA 111A/i)).toBeInTheDocument();
     expect(screen.getByText(/KDB 222B/i)).toBeInTheDocument();
     
-    // Check column labels
-    expect(screen.getByText(/Waiting/i)).toBeInTheDocument();
-    expect(screen.getByText(/In Progress/i)).toBeInTheDocument();
+    // Check tab labels
+    expect(screen.getByRole('tab', { name: /Active/i })).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: /History/i })).toBeInTheDocument();
   });
 
   it('shows empty queue message when no jobs active', () => {
     mockUseCollection.mockReturnValue({ data: [], loading: false, error: null });
     render(<CarwashPage />);
-    expect(screen.getAllByText(/No vehicles/i)).toHaveLength(3); // One for each col
+    expect(screen.getByText(/Station clear/i)).toBeInTheDocument();
   });
 });

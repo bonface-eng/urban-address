@@ -3,8 +3,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Headphones, Mic, PhoneOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useFirestore } from '@/firebase';
-import { addDoc, collection, doc, onSnapshot, query, updateDoc, where } from 'firebase/firestore';
+import { useDb } from '@/lib/data';
+import { addDoc, collection, doc, onSnapshot, query, updateDoc, where } from '@/lib/db';
 
 type AudioSession = {
   id: string;
@@ -18,7 +18,7 @@ type AudioSession = {
 };
 
 export function TerminalLiveAudioAgent({ terminalId, cashierId, cashierName }: { terminalId?: string; cashierId?: string; cashierName?: string }) {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [request, setRequest] = useState<AudioSession | null>(null);
   const [active, setActive] = useState(false);
   const [busy, setBusy] = useState(false);

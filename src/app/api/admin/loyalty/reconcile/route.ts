@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import crypto from 'crypto';
 
 export const runtime = 'nodejs';
@@ -16,18 +16,7 @@ const ROOT_ADMINS = [
 ];
 
 function getDb() {
-  let app = admin.apps[0];
-  if (!app) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-    if (raw) {
-      const credentials = JSON.parse(raw);
-      if (credentials.private_key) credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
-      app = admin.initializeApp({ credential: admin.credential.cert(credentials) });
-    } else {
-      app = admin.initializeApp();
-    }
-  }
-  return admin.firestore(app);
+  return admin.firestore();
 }
 
 async function authorize(req: NextRequest, db: admin.firestore.Firestore) {

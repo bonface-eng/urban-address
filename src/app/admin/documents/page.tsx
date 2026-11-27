@@ -27,8 +27,8 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy } from '@/lib/db';
 import { Product, BusinessUnit } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -46,7 +46,7 @@ const TEMPLATE_PREVIEWS = [
 ];
 
 export default function DocumentsPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [searchTerm, setSearchTerm] = useState('');
   const [activeUnit, setActiveUnit] = useState<BusinessUnit>('STORE');
   const [selectedTemplate, setSelectedTemplate] = useState<any>(null);
@@ -54,7 +54,7 @@ export default function DocumentsPage() {
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   const [isReceiptSettingsOpen, setIsReceiptSettingsOpen] = useState(false);
 
-  const inventoryQuery = useMemoFirebase(() => {
+  const inventoryQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
   }, [firestore]);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { createHash } from 'node:crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { sendTransactionalEmail } from '@/lib/resend';
 import { adminCommunicationEmail, type AdminEmailKind } from '@/lib/email/templates';
 

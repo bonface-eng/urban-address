@@ -24,7 +24,7 @@ describe('Thermal Receipt Formatting', () => {
 
   it('renders the PAID status tag prominently', () => {
     render(<ReceiptPreview data={mockOrder} />);
-    expect(screen.getByText(/-PAID RECEIPT-/i)).toBeInTheDocument();
+    expect(screen.getByText(/PAYMENT RECEIVED/i)).toBeInTheDocument();
   });
 
   it('displays the correct departmental brand header', () => {

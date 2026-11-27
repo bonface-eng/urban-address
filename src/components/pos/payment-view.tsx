@@ -22,7 +22,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { verifyPaystackTransaction } from '@/lib/actions';
 import { useTerminal } from '@/hooks/use-terminal';
-import { useUser } from '@/firebase';
+import { useUser } from '@/lib/data';
 
 interface PaymentViewProps {
   total: number;

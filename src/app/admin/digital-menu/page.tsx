@@ -1,8 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { collection, doc, setDoc } from 'firebase/firestore';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { collection, doc, setDoc } from '@/lib/db';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { Product } from '@/lib/types';
 import { PageHeader } from '@/components/shared/page-layout';
@@ -18,9 +18,9 @@ type MenuItem = { productId: string; name: string; category: string; price: numb
 type MenuDoc = { status: 'DRAFT' | 'PUBLISHED'; items: MenuItem[]; updatedAt: number; updatedBy: string; rotationSeconds: number; headline: string; promotion: string; template?: MenuTemplate };
 
 export default function DigitalMenuAdminPage() {
-  const db = useFirestore();
+  const db = useDb();
   const { profile, isSuperAdmin } = useProfile();
-  const productsQuery = useMemoFirebase(() => db && isSuperAdmin ? collection(db, 'inventory') : null, [db, isSuperAdmin]);
+  const productsQuery = useMemoSupabase(() => db && isSuperAdmin ? collection(db, 'inventory') : null, [db, isSuperAdmin]);
   const { data: products, loading } = useCollection<Product>(productsQuery);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [featured, setFeatured] = useState<Record<string, boolean>>({});

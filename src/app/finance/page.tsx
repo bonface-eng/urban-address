@@ -43,8 +43,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection, useMemoFirebase, useAuth } from '@/firebase';
-import { collection, query, orderBy, limit, addDoc, where, doc, updateDoc } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase, useAuth } from '@/lib/data';
+import { collection, query, orderBy, limit, addDoc, where, doc, updateDoc } from '@/lib/db';
 import { PettyCashRequest, Order, Reconciliation } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
@@ -53,7 +53,7 @@ import { ReceiptPreview } from '@/components/pos/receipt-preview';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 
 export default function FinanceDashboard() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const auth = useAuth();
   const { profile, role, isSuperAdmin } = useProfile();
   const canManageExpenses = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER' || role === 'SUPERVISOR';
@@ -79,7 +79,7 @@ export default function FinanceDashboard() {
     return query(collection(firestore, 'petty_cash'), orderBy('timestamp', 'desc'), limit(50));
   }, [firestore]);
 
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'orders'),

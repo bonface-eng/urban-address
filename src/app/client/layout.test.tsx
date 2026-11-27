@@ -1,6 +1,6 @@
 import React from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import ClientLayout from './layout';
 import { mockUseUser, mockUseProfile } from '@/test/setup';
 
@@ -24,8 +24,8 @@ vi.mock('@/components/layout/notifications', () => ({
   Notifications: () => <button aria-label="Notifications">Notifications</button>,
 }));
 
-vi.mock('firebase/firestore', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('firebase/firestore')>();
+vi.mock('@/lib/db', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/db')>();
   return { ...actual, doc: vi.fn(() => ({ path: 'system/config' })) };
 });
 
@@ -55,22 +55,23 @@ describe('customer-facing navigation', () => {
 
     const navigation = screen.getByRole('navigation', { name: /customer navigation/i });
     expect(navigation).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
-    expect(screen.getByRole('link', { name: 'Shop' })).toHaveAttribute('href', '/client/store');
-    expect(screen.getByRole('link', { name: 'Carwash' })).toHaveAttribute('href', '/client/carwash');
-    expect(screen.getByRole('link', { name: 'Lounge' })).toHaveAttribute('href', '/client/lounge');
-    expect(screen.getByRole('link', { name: 'Profile' })).toHaveAttribute('href', '/client/profile');
-    expect(screen.getByRole('link', { name: 'Profile' }).querySelector('.rounded-full')).toBeTruthy();
+    expect(within(navigation).getByRole('link', { name: 'Home' })).toHaveAttribute('href', '/');
+    expect(within(navigation).getByRole('link', { name: 'Shop' })).toHaveAttribute('href', '/client/store');
+    expect(within(navigation).getByRole('link', { name: 'Carwash' })).toHaveAttribute('href', '/client/carwash');
+    expect(within(navigation).getByRole('link', { name: 'Lounge' })).toHaveAttribute('href', '/client/lounge');
+    expect(within(navigation).getByRole('link', { name: /Profile/i })).toHaveAttribute('href', '/client/profile');
+    expect(within(navigation).getByRole('link', { name: /Profile/i }).querySelector('.rounded-full')).toBeTruthy();
     expect(screen.getByRole('link', { name: 'Open cart' })).toHaveAttribute('href', '/client/cart');
     expect(screen.getByRole('button', { name: 'Notifications' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Orders' })).not.toBeInTheDocument();
+    expect(within(navigation).queryByRole('link', { name: 'Orders' })).not.toBeInTheDocument();
   });
 
   it('marks the current customer section as active', () => {
     render(<ClientLayout><div>Customer page</div></ClientLayout>);
 
-    expect(screen.getByRole('link', { name: 'Shop' })).toHaveAttribute('aria-current', 'page');
-    expect(screen.getByRole('link', { name: 'Carwash' })).not.toHaveAttribute('aria-current', 'page');
+    const navigation = screen.getByRole('navigation', { name: /customer navigation/i });
+    expect(within(navigation).getByRole('link', { name: 'Shop' })).toHaveAttribute('aria-current', 'page');
+    expect(within(navigation).getByRole('link', { name: 'Carwash' })).not.toHaveAttribute('aria-current', 'page');
   });
 
   it('routes guests to sign in from the account destination', () => {
@@ -99,7 +100,7 @@ describe('customer-facing navigation', () => {
     });
   });
 
-  it('waits for Firebase auth state before deciding access to a protected route', () => {
+  it('waits for auth state before deciding access to a protected route', () => {
     navigationState.pathname = '/client/profile';
     mockUseUser.mockReturnValue({ user: null, loading: true } as any);
 

@@ -13,22 +13,22 @@ describe('Personnel Management Actions', () => {
     
     render(<EmployeeDirectory />);
     
-    const createButton = screen.getByText(/Create Staff Account/i);
+    const createButton = screen.getByRole('button', { name: /Add Staff/i });
     fireEvent.click(createButton);
     
-    expect(screen.getByText(/New Staff Member/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/New Staff Member/i).length).toBeGreaterThan(0);
     expect(screen.getByPlaceholderText(/e.g. Samuel Maina/i)).toBeInTheDocument();
   });
 
   it('validates required fields in the provisioning form', async () => {
     render(<EmployeeDirectory />);
-    fireEvent.click(screen.getByText(/Create Staff Account/i));
+    fireEvent.click(screen.getByRole('button', { name: /Add Staff/i }));
     
-    const submitButton = screen.getByText(/Add Staff Account/i);
+    const submitButton = screen.getByRole('button', { name: /Authorize Staff Member/i });
     fireEvent.click(submitButton);
     
     // Form should still be open as HTML5 validation prevents sub
-    expect(screen.getByText(/New Staff Member/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/New Staff Member/i).length).toBeGreaterThan(0);
   });
 
   it('filters personnel table based on search input', () => {
@@ -42,10 +42,10 @@ describe('Personnel Management Actions', () => {
 
     render(<EmployeeDirectory />);
     
-    const searchInput = screen.getByPlaceholderText(/Find staff by name or role/i);
+    const searchInput = screen.getByPlaceholderText(/Search records.../i);
     fireEvent.change(searchInput, { target: { value: 'Jane' } });
     
-    expect(screen.getByText(/Jane Doe/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/Jane Doe/i).length).toBeGreaterThan(0);
     expect(screen.queryByText(/John Smith/i)).not.toBeInTheDocument();
   });
 });

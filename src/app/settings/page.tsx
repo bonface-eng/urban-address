@@ -8,10 +8,10 @@ import {
   RefreshCcw, ShieldCheck, Usb, UserCircle, Maximize2,
   Settings2, Send
 } from 'lucide-react';
-import { signOut, updateProfile } from 'firebase/auth';
-import { addDoc, collection, doc, updateDoc } from 'firebase/firestore';
+import { signOut, updateProfile } from '@/lib/db';
+import { addDoc, collection, doc, updateDoc } from '@/lib/db';
 import { useRouter } from 'next/navigation';
-import { useAuth, useFirestore, useUser } from '@/firebase';
+import { useAuth, useDb, useUser } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { HardwareService } from '@/lib/hardware-service';
 import { toast } from '@/hooks/use-toast';
@@ -28,7 +28,7 @@ import { ReceiptSettingsDialog } from '@/components/admin/receipt-settings-dialo
 export default function ProfilePage() {
   const { user } = useUser();
   const auth = useAuth();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
   const { role, profile, loading: profileLoading, isSuperAdmin } = useProfile();
 

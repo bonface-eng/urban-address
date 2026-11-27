@@ -17,7 +17,7 @@ describe('DashboardPage Role Branching', () => {
     });
 
     render(<DashboardPage />);
-    expect(screen.getByText(/Business Overview/i)).toBeInTheDocument();
+    expect(screen.getByText(/Global Network Overview/i)).toBeInTheDocument();
   });
 
   it('renders Attendant Dashboard for detailers', () => {
@@ -32,7 +32,7 @@ describe('DashboardPage Role Branching', () => {
     });
 
     render(<DashboardPage />);
-    expect(screen.getByText(/My Daily Performance/i)).toBeInTheDocument();
+    expect(screen.getByText(/Personal Shift Summary/i)).toBeInTheDocument();
   });
 
   it('renders Cashier Dashboard for POS operators', () => {
@@ -47,6 +47,6 @@ describe('DashboardPage Role Branching', () => {
     });
 
     render(<DashboardPage />);
-    expect(screen.getByText(/Shift Summary/i)).toBeInTheDocument();
+    expect(screen.getByText(/Personal Shift Summary/i)).toBeInTheDocument();
   });
 });

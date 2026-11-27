@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect } from 'react';
-import { addDoc, collection } from 'firebase/firestore';
-import { useFirestore, useUser } from '@/firebase';
-import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
+import { addDoc, collection } from '@/lib/db';
+import { useDb, useUser } from '@/lib/data';
+import { errorEmitter } from '@/lib/data';
+import { FirestorePermissionError } from '@/lib/data';
 import { toast } from '@/hooks/use-toast';
 
 function safeSummary(value: unknown) {
@@ -27,8 +27,8 @@ function safeSummary(value: unknown) {
     .slice(0, 1000);
 }
 
-export function FirebaseErrorListener() {
-  const firestore = useFirestore();
+export function DataErrorListener() {
+  const firestore = useDb();
   const { user } = useUser();
 
   useEffect(() => {

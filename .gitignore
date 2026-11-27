@@ -47,11 +47,19 @@ next-env.d.ts
 
 .genkit/*
 .env
+.env*
 .env.*
 !.env.example
 
-# firebase
+# firebase & migration backups
 firebase-debug.log
 firestore-debug.log
-# Never commit Firebase Admin service-account credentials
+# Never commit Firebase Admin service-account credentials or migration exports
+/backup/
+/migration-output/
+serviceAccount*.json
+*firebase-admin*.json
 *firebase-adminsdk-*.json
+
+.env*
+!.env.example

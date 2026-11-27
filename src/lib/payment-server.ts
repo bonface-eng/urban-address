@@ -1,6 +1,6 @@
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { NextRequest } from 'next/server';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { paymentReceiptEmail } from '@/lib/email/templates';
 import { sendTransactionalEmail } from '@/lib/resend';
 import { notifyTelegramSale } from '@/lib/telegram/notifications';
@@ -82,7 +82,7 @@ export async function markOrderPaid(input: {
     const items = Array.isArray(order.items) ? order.items : [];
     const productRefs = items.filter((item: any) => item?.productId)
       .map((item: any) => db.collection('inventory').doc(String(item.productId)));
-    const productSnaps = await Promise.all(productRefs.map(ref => transaction.get(ref)));
+    const productSnaps = await Promise.all(productRefs.map((ref: any) => transaction.get(ref)));
     let index = 0;
     for (const item of items) {
       if (!item?.productId) continue;

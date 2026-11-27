@@ -27,15 +27,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, addDoc, limit } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, where, orderBy, doc, updateDoc, addDoc, limit } from '@/lib/db';
 import { Order } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 
 export default function KitchenDisplaySystem() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile } = useProfile();
   const [activeTab, setActiveTab] = useState('live');
   const [now, setNow] = useState(Date.now());
@@ -46,7 +46,7 @@ export default function KitchenDisplaySystem() {
   }, []);
 
   // Removed 24-hour limit to ensure all active tickets stay on board until served.
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'orders'),

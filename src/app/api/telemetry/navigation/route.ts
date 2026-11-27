@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 
 export const runtime = 'nodejs';

@@ -2,16 +2,16 @@
 
 import React from 'react';
 import { Star, Quote, CheckCircle2 } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy, limit } from '@/lib/db';
 import { Review } from '@/lib/types';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 
 export function ReviewList() {
-  const firestore = useFirestore();
+  const firestore = useDb();
 
-  const reviewsQuery = useMemoFirebase(() => {
+  const reviewsQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'reviews'), orderBy('timestamp', 'desc'), limit(9));
   }, [firestore]);

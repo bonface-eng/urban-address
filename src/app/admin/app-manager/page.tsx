@@ -33,8 +33,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { useProfile } from '@/hooks/use-profile';
-import { useFirestore, useCollection, useUser } from '@/firebase';
-import { doc, setDoc, addDoc, collection, deleteDoc, query, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection, useUser } from '@/lib/data';
+import { doc, setDoc, addDoc, collection, deleteDoc, query, orderBy, limit } from '@/lib/db';
 import { uploadAppReleaseFile } from '@/lib/actions';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -43,7 +43,7 @@ import Image from 'next/image';
 export default function AppReleaseManager() {
   const { isSuperAdmin, profile } = useProfile();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isUploadingApk, setIsUploadingApk] = useState(false);

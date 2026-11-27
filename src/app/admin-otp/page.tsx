@@ -1,7 +1,7 @@
 'use client';
 import React,{useEffect,useState} from 'react';
 import {useRouter} from 'next/navigation';
-import {useUser} from '@/firebase';
+import {useUser} from '@/lib/data';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {ShieldCheck,RefreshCcw,Mail} from 'lucide-react';

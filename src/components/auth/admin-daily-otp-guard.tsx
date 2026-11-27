@@ -1,7 +1,7 @@
 'use client';
 import React,{useEffect,useState} from 'react';
 import {usePathname,useRouter} from 'next/navigation';
-import {useUser} from '@/firebase';
+import {useUser} from '@/lib/data';
 import {RefreshCcw} from 'lucide-react';
 export function AdminDailyOtpGuard({children}:{children:React.ReactNode}){
  const {user,loading}=useUser();const router=useRouter();const pathname=usePathname();const [allowed,setAllowed]=useState(false);

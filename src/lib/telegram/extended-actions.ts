@@ -1,4 +1,4 @@
-import { getDbAdmin } from '../firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 
 const clean = (value: unknown, max = 90) => String(value ?? '—').replace(/[<>\r\n]/g, ' ').slice(0, max);
 const money = (value: unknown) => Number(value || 0).toLocaleString('en-KE', { maximumFractionDigits: 2 });

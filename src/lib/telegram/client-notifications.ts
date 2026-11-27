@@ -1,4 +1,4 @@
-import type { User } from 'firebase/auth';
+import type { User } from '@/lib/db';
 
 /** Best-effort notification after a POS sale has committed; never rolls back the sale. */
 export async function notifyCommittedSale(user: User | null, orderId: string) {

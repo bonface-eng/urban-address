@@ -12,8 +12,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { useAuth } from '@/firebase';
-import { signOut } from 'firebase/auth';
+import { useAuth } from '@/lib/data';
+import { signOut } from '@/lib/db';
 import { useRouter } from 'next/navigation';
 import { 
   LogOut, 

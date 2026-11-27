@@ -5,7 +5,7 @@ import { FullPageEditor } from '@/components/admin/full-page-editor';
 import Link from 'next/link';
 
 import React, { useMemo, useState } from 'react';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '@/lib/db';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 import { 
   Users, 
@@ -57,8 +57,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, doc, updateDoc, addDoc } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, orderBy, doc, updateDoc, addDoc } from '@/lib/db';
 import { UserProfile, UserRole, BusinessUnit } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
@@ -74,7 +74,7 @@ const UNITS: { label: string; value: BusinessUnit }[] = [
 ];
 
 export default function StaffDirectory() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [isEditOpen, setIsEditOpen] = useState(false);
@@ -319,8 +319,8 @@ export default function StaffDirectory() {
         <div className="w-full">
            <div className="bg-zinc-900 p-8 text-center border-b border-white/10">
               <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mx-auto mb-4"><UserPlus className="w-7 h-7" /></div>
-              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-white">New Staff Member</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold text-zinc-400 uppercase mt-1">Provision a new station operator account.</DialogDescription>
+              <h3 className="font-headline uppercase tracking-widest text-lg text-white">New Staff Member</h3>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase mt-1">Provision a new station operator account.</p>
            </div>
            <form onSubmit={handleCreateStaff} className="p-4 sm:p-8 space-y-5 sm:space-y-6">
               <div className="space-y-4 ua-compact-page">
@@ -378,8 +378,8 @@ export default function StaffDirectory() {
         <div className="w-full">
            <div className="bg-primary/5 p-8 text-center border-b border-primary/10">
               <div className="w-14 h-14 rounded-2xl bg-white shadow-xl flex items-center justify-center text-primary mx-auto mb-4"><Edit2 className="w-7 h-7" /></div>
-              <DialogTitle className="font-headline uppercase tracking-widest text-lg text-zinc-900">Synchronize Profile</DialogTitle>
-              <DialogDescription className="text-[10px] font-bold text-zinc-400 uppercase mt-1">Update personnel variables and access nodes.</DialogDescription>
+              <h3 className="font-headline uppercase tracking-widest text-lg text-zinc-900">Synchronize Profile</h3>
+              <p className="text-[10px] font-bold text-zinc-400 uppercase mt-1">Update personnel variables and access nodes.</p>
            </div>
            <form onSubmit={handleUpdateRole} className="p-8 space-y-6">
               <div className="space-y-4">

@@ -31,8 +31,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Product, Order, OrderItem, UserProfile } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, addDoc, doc, getDoc, updateDoc, onSnapshot, orderBy, limit, writeBatch, increment } from 'firebase/firestore';
+import { useDb, useUser, useCollection, useMemoSupabase, errorEmitter, FirestorePermissionError } from '@/lib/data';
+import { collection, query, where, addDoc, doc, getDoc, updateDoc, onSnapshot, orderBy, limit, writeBatch, increment } from '@/lib/db';
 import { HardwareService } from '@/lib/hardware-service';
 import { useProfile } from '@/hooks/use-profile';
 import { POSProductCard } from '@/components/pos/pos-product-card';
@@ -57,7 +57,7 @@ import {
 const CATEGORIES = ['Popular', 'Drinks', 'Food', 'Liquor', 'Tobacco', 'Other'];
 
 export default function LoungePOS() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { user } = useUser();
   const { role, isSuperAdmin } = useProfile();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
@@ -115,12 +115,12 @@ export default function LoungePOS() {
 
   const isAuthorized = isSuperAdmin || role === 'ADMIN' || role === 'MANAGER' || role === 'SUPERVISOR' || (role === 'CASHIER');
 
-  const loungeQuery = useMemoFirebase(() => {
+  const loungeQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'inventory'), where('unit', '==', 'LOUNGE'));
   }, [firestore]);
 
-  const ordersBaseQuery = useMemoFirebase(() => {
+  const ordersBaseQuery = useMemoSupabase(() => {
     if (!firestore || !activeCashier?.uid) return null;
     return query(
       collection(firestore, 'users', activeCashier.uid, 'held_bills'),
@@ -129,7 +129,7 @@ export default function LoungePOS() {
   }, [firestore, activeCashier?.uid]);
 
   const { startOfToday } = useBusinessClock();
-  const todayOrdersQuery = useMemoFirebase(() => {
+  const todayOrdersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'orders'),

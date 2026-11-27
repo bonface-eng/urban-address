@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { createHash, randomInt, timingSafeEqual } from 'crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

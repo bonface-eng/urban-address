@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getDbAdmin } from '@/lib/db/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';

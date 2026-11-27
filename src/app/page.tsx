@@ -14,7 +14,7 @@ import { Footer } from '@/components/shared/footer';
 import { LocationMap } from '@/components/shared/location-map';
 import { useCart } from '@/hooks/use-cart';
 import { toast } from '@/hooks/use-toast';
-import { useUser } from '@/firebase';
+import { useUser } from '@/lib/data';
 import { Product } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 

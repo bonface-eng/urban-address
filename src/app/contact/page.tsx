@@ -9,11 +9,11 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Mail, MapPin, Phone, MessageSquare, Send, CheckCircle2, RefreshCcw } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
-import { useFirestore } from '@/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { useDb } from '@/lib/data';
+import { collection, addDoc } from '@/lib/db';
 
 export default function ContactPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSent, setIsSuccess] = useState(false);
   

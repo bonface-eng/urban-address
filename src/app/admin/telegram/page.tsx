@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { PageHeader } from '@/components/shared/page-layout';
-import { useUser } from '@/firebase';
+import { useUser } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';

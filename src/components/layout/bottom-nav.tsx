@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/use-profile';
-import { useDoc, useFirestore, useUser } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useDoc, useDb, useUser } from '@/lib/data';
+import { doc } from '@/lib/db';
 import {
   Sheet,
   SheetContent,
@@ -22,7 +22,7 @@ export function BottomNav() {
   const pathname = usePathname();
   const { user } = useUser();
   const { role, isSuperAdmin, profile } = useProfile();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [isOpen, setIsOpen] = useState(false);
 
   const permissionsRef = useMemo(() => {

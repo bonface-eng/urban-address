@@ -5,14 +5,14 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowRight, Banknote, CheckCircle2, ChevronRight, CreditCard, MapPin, Package, RefreshCcw, ShieldCheck, Store, Truck } from 'lucide-react';
-import { collection, addDoc, query, where } from 'firebase/firestore';
+import { collection, addDoc, query, where } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { cn } from '@/lib/utils';
 import { useCart } from '@/hooks/use-cart';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useUser, useDb, useCollection, useMemoSupabase } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { BusinessBranch } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
@@ -32,7 +32,7 @@ const PAYMENT_OPTIONS: { id: PaymentMethod; label: string; detail: string; logo?
 export default function ClientPaymentPage() {
   const router = useRouter();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile } = useProfile();
   const { items, subtotal, isLoaded, clearCart } = useCart();
   const [method, setMethod] = useState<PaymentMethod>('MPESA');
@@ -45,7 +45,7 @@ export default function ClientPaymentPage() {
   useEffect(() => { if (!paymentPhone && profile?.phoneNumber) setPaymentPhone(profile.phoneNumber); }, [profile?.phoneNumber, paymentPhone]);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const branchesQuery = useMemoFirebase(() => {
+  const branchesQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'branches'), where('status', '==', 'ACTIVE'));
   }, [firestore]);

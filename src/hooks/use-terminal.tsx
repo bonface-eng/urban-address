@@ -1,9 +1,9 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import { useFirestore, useUser, useAuth } from '@/firebase';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, addDoc, onSnapshot } from 'firebase/firestore';
-import { signInWithEmailAndPassword, signInWithCustomToken, signOut, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useDb, useUser, useAuth } from '@/lib/data';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, addDoc, onSnapshot } from '@/lib/db';
+import { signInWithEmailAndPassword, signInWithCustomToken, signOut, GoogleAuthProvider, signInWithPopup } from '@/lib/db';
 import { POSTerminal, RegisterSession, UserProfile, BusinessUnit } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { SYSTEM_CONFIG } from '@/lib/config';
@@ -32,7 +32,7 @@ interface TerminalContextType {
 const TerminalContext = createContext<TerminalContextType | undefined>(undefined);
 
 export function TerminalProvider({ children }: { children: React.ReactNode }) {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const auth = useAuth();
   const { user } = useUser();
   const [activeTerminal, setActiveTerminal] = useState<POSTerminal | null>(null);
@@ -309,7 +309,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
   const swapIdentity = useCallback(async (targetUser: UserProfile): Promise<boolean> => {
     if (!auth?.currentUser || !targetUser?.uid) return false;
 
-    // Never retrieve or reuse a stored Firebase password. Switching Firebase
+    // Never retrieve or reuse a stored password. Switching
     // identities requires the operator to authenticate with their own
     // credentials through loginAndSwitch.
     if (auth.currentUser.uid === targetUser.uid) {

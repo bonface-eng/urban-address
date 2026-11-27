@@ -22,9 +22,9 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useUser, useFirestore, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, orderBy, doc, updateDoc, addDoc } from 'firebase/firestore';
-import { updateProfile } from 'firebase/auth';
+import { useUser, useDb, useCollection, useMemoSupabase, errorEmitter, FirestorePermissionError } from '@/lib/data';
+import { collection, query, where, orderBy, doc, updateDoc, addDoc } from '@/lib/db';
+import { updateProfile } from '@/lib/db';
 import { Order } from '@/lib/types';
 import Link from 'next/link';
 import { useProfile } from '@/hooks/use-profile';
@@ -38,7 +38,7 @@ const LocationPicker = dynamic(() => import('@/components/shared/location-picker
 export default function ClientProfilePage() {
   const { user, loading: authLoading } = useUser();
   const { profile, loading: profileHookLoading, isEmployee, isSuperAdmin, role } = useProfile();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
   
   const [isUpdatingPhoto, setIsUpdatingPhoto] = useState(false);
@@ -92,7 +92,7 @@ export default function ClientProfilePage() {
     }
   };
 
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore || !user?.uid) return null;
     return query(
       collection(firestore, 'orders'),
@@ -101,7 +101,7 @@ export default function ClientProfilePage() {
     );
   }, [firestore, user?.uid]);
 
-  const fleetQuery = useMemoFirebase(() => {
+  const fleetQuery = useMemoSupabase(() => {
     if (!firestore || !user?.uid) return null;
     return query(collection(firestore, 'users', user.uid, 'fleet'));
   }, [firestore, user?.uid]);

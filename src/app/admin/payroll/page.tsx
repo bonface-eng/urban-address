@@ -52,8 +52,8 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy, addDoc, limit, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, where, orderBy, addDoc, limit, doc, updateDoc, deleteDoc } from '@/lib/db';
 import { UserProfile, CarwashJob, Order } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
@@ -74,7 +74,7 @@ import { createPaystackRecipient } from '@/lib/actions';
 const PAYSTACK_TRANSFERS_URL = "https://dashboard.paystack.com/#/transfers";
 
 export default function PayrollManagementPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { isSuperAdmin, profile } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [dateFilter, setDateFilter] = useState<'TODAY' | 'YESTERDAY' | 'WEEK' | 'ALL'>('TODAY');
@@ -95,17 +95,17 @@ export default function PayrollManagementPage() {
   const [advanceReason, setAdvanceReason] = useState('');
   const [advanceUserId, setAdvanceUserId] = useState('');
 
-  const staffQuery = useMemoFirebase(() => {
+  const staffQuery = useMemoSupabase(() => {
     if (!firestore || !isSuperAdmin) return null;
     return query(collection(firestore, 'users'), where('role', '!=', 'CLIENT'));
   }, [firestore, isSuperAdmin]);
 
-  const jobsQuery = useMemoFirebase(() => {
+  const jobsQuery = useMemoSupabase(() => {
     if (!firestore || !isSuperAdmin) return null;
     return collection(firestore, 'carwash_jobs');
   }, [firestore, isSuperAdmin]);
 
-  const advancesQuery = useMemoFirebase(() => {
+  const advancesQuery = useMemoSupabase(() => {
     if (!firestore || !isSuperAdmin) return null;
     return query(collection(firestore, 'salary_advances'), orderBy('timestamp', 'desc'));
   }, [firestore, isSuperAdmin]);
