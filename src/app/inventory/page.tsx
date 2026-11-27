@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Search, 
   Plus, 
@@ -85,7 +85,8 @@ import { cn } from '@/lib/utils';
 import { Product, BusinessUnit, Order } from '@/lib/types';
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { InventoryLoadState } from '@/components/inventory/load-state';
-import { useFirestore } from '@/firebase';
+import { saveInventoryUpdate } from '@/lib/inventory-update-client';
+import { useFirestore, useUser } from '@/firebase';
 import { collection, query, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
@@ -101,6 +102,8 @@ type SortOption = 'name_asc' | 'name_desc' | 'price_desc' | 'price_asc' | 'stock
 
 export default function InventoryCatalogue() {
   const firestore = useFirestore();
+  const { user } = useUser();
+  const saveInFlight = useRef(false);
   const { profile, isSuperAdmin } = useProfile();
   
   const [mounted, setMounted] = useState(false);
@@ -198,22 +201,16 @@ export default function InventoryCatalogue() {
   const refreshInventory = () => setInventoryRetry(value => value + 1);
 
   const handleQuickStockAdjust = async (item: Product, delta: number) => {
-    if (!firestore || !profile) return;
-    const newStock = Math.max(0, (item.stockLevel || 0) + delta);
+    if (!profile || !user || !item.id || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setIsSubmitting(true);
     try {
-      await updateDoc(doc(firestore, 'inventory', item.id!), { stockLevel: newStock, updatedAt: Date.now() });
-      await addDoc(collection(firestore, 'audit_logs'), {
-        action: 'STOCK_ADJUSTMENT',
-        userId: profile.uid,
-        details: `Adjusted stock for ${item.name} (${delta > 0 ? '+' : ''}${delta}): ${item.stockLevel} -> ${newStock}`,
-        timestamp: Date.now(),
-        severity: 'INFO'
-      });
+      const result = await saveInventoryUpdate(user, { action: 'adjust', id: item.id, delta });
       refreshInventory();
-      toast({ title: "Stock Updated", description: `${item.name}: ${newStock} units` });
-    } catch (err) {
-      toast({ variant: "destructive", title: "Stock update failed" });
-    }
+      toast({ title: "Stock Updated", description: `${item.name}: ${result.stockLevel} units` });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Stock update failed", description: error instanceof Error ? error.message : "Refresh inventory before retrying." });
+    } finally { saveInFlight.current = false; setIsSubmitting(false); }
   };
 
   const handleToggleArchive = async (item: Product) => {
@@ -416,7 +413,7 @@ export default function InventoryCatalogue() {
       if (stockStatusFilter === 'ARCHIVED') {
         if (!item.archived || !matchesUnit) return false;
       } else {
-        if (item.archived && stockStatusFilter !== 'ARCHIVED') return false;
+        if (item.archived) return false;
       }
 
       const matchesCategory = selectedCategoryFilter === 'All' || item.category === selectedCategoryFilter;
@@ -527,38 +524,28 @@ export default function InventoryCatalogue() {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!firestore || !profile) return;
-    
-    setIsSKUDialogOpen(false);
-    toast({ title: "Synchronizing Registry", description: `Background update started for ${name}.` });
-    
-    const productData = { 
-      name, 
-      category, 
-      price: Number(price), 
-      costPrice: Number(costPrice) || 0,
-      stockLevel: Number(stockLevel), 
-      minStock: Number(minStock), 
-      barcode: barcode || null, 
-      unit: unit || activeUnitTab, 
-      image: imageUrl || null, 
-      updatedAt: Date.now() 
+    if (!firestore || !profile || saveInFlight.current) return;
+    saveInFlight.current = true;
+    setIsSubmitting(true);
+    const productData = {
+      name, category, price: Number(price), costPrice: Number(costPrice) || 0,
+      stockLevel: Number(stockLevel), minStock: Number(minStock), barcode: barcode || null,
+      unit: unit || activeUnitTab, image: imageUrl || null,
     };
-
     try {
-      if (editingItem) { 
-        await updateDoc(doc(firestore, 'inventory', editingItem.id!), productData); 
-        refreshInventory();
-        toast({ title: "Handshake Complete", description: "Product SKU synchronized successfully." });
-      } else { 
-        await addDoc(collection(firestore, 'inventory'), { ...productData, archived: false, createdAt: Date.now() }); 
-        refreshInventory();
-        toast({ title: "Handshake Complete", description: "New SKU added to master ledger." });
+      if (editingItem) {
+        await saveInventoryUpdate(user, { action: 'edit', id: editingItem.id, expectedStock: editingItem.stockLevel, changes: productData });
+      } else {
+        // Creation retains its existing client authorization; this repair targets existing-item saves.
+        await addDoc(collection(firestore, 'inventory'), { ...productData, archived: false, createdAt: Date.now(), updatedAt: Date.now() });
       }
+      refreshInventory();
+      setIsSKUDialogOpen(false);
       resetForms();
-    } catch (err) { 
-      toast({ variant: "destructive", title: "Background Sync Failed", description: "Registry link interrupted. Please retry manually." }); 
-    }
+      toast({ title: "Item saved", description: "Inventory has been refreshed." });
+    } catch (error) {
+      toast({ variant: "destructive", title: "Item save failed", description: error instanceof Error ? error.message : "Your changes were not confirmed. Refresh inventory before retrying." });
+    } finally { saveInFlight.current = false; setIsSubmitting(false); }
   };
 
   const handleSaveService = async (e: React.FormEvent) => {
@@ -856,13 +843,13 @@ export default function InventoryCatalogue() {
                          <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center justify-end gap-1.5">
                               {item.unit !== 'CARWASH' && (
-                                <button onClick={() => handleQuickStockAdjust(item, -1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Minus className="w-3 h-3" /></button>
+                                <button disabled={isSubmitting} onClick={() => handleQuickStockAdjust(item, -1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Minus className="w-3 h-3" /></button>
                               )}
                               <span className={cn("text-xs md:text-sm font-black min-w-[24px] text-center", isOut ? "text-red-500" : isLow ? "text-amber-500" : "text-zinc-900")}>
                                 {item.unit === 'CARWASH' ? 'INF' : item.stockLevel}
                               </span>
                               {item.unit !== 'CARWASH' && (
-                                <button onClick={() => handleQuickStockAdjust(item, 1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Plus className="w-3 h-3" /></button>
+                                <button disabled={isSubmitting} onClick={() => handleQuickStockAdjust(item, 1)} className="w-6 h-6 rounded-md bg-zinc-100 text-zinc-500 flex items-center justify-center hover:bg-zinc-200"><Plus className="w-3 h-3" /></button>
                               )}
                             </div>
                             {isOut && <Badge className="bg-red-500 text-white border-none text-[6px] font-black uppercase px-1 h-3 animate-pulse">Out of Stock</Badge>}
@@ -872,7 +859,7 @@ export default function InventoryCatalogue() {
                       <TableCell className="text-right pr-8">
                         <div className="flex items-center justify-end gap-1">
                           <Button onClick={() => openDetails(item)} variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-primary"><Info className="w-4 h-4" /></Button>
-                          <Button onClick={() => openEdit(item)} variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Edit2 className="w-4 h-4" /></Button>
+                          <Button data-edit="true" aria-label={`Edit ${item.name}`} onClick={() => openEdit(item)} variant="ghost" size="icon" className="h-8 w-8 text-zinc-400 hover:text-zinc-900"><Edit2 className="w-4 h-4" /></Button>
                           <Button onClick={() => handleToggleArchive(item)} variant="ghost" size="icon" className={cn("h-8 w-8", item.archived ? "text-emerald-500" : "text-zinc-200")}><Archive className="w-4 h-4" /></Button>
                         </div>
                       </TableCell>
@@ -932,7 +919,7 @@ export default function InventoryCatalogue() {
                    <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Cost Price (Purchase)</Label><Input type="number" value={costPrice} onChange={e => setCostPrice(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" /></div>
                  </div>
                  <div className="grid grid-cols-2 gap-4">
-                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Opening Stock</Label><Input type="number" value={stockLevel} onChange={e => setStockLevel(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
+                   <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Opening Stock</Label><Input type="number" data-stock="true" aria-label="Stock level" value={stockLevel} onChange={e => setStockLevel(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
                    <div className="space-y-1.5"><Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Min Threshold</Label><Input type="number" value={minStock} onChange={e => setMinStock(e.target.value)} className="h-12 bg-zinc-50 border-none rounded-xl font-black" required /></div>
                  </div>
               </div>
