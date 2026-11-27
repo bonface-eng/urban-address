@@ -57,6 +57,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Reject-optional must disable optional categories.' }, { status: 400 });
     }
 
+    const nowIso = new Date().toISOString();
     const db = getDbAdmin();
     const consentRef = db.collection('privacyConsent').doc(consentId);
     await db.runTransaction(async transaction => {
@@ -70,8 +71,8 @@ export async function POST(request: NextRequest) {
         },
         action,
         source: 'website_cookie_banner',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        ...(existing.exists ? {} : { createdAt: admin.firestore.FieldValue.serverTimestamp() }),
+        updatedAt: nowIso,
+        ...(existing.exists ? {} : { createdAt: nowIso }),
       }, { merge: true });
     });
 
