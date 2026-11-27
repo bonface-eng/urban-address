@@ -16,13 +16,14 @@ import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { cn } from '@/lib/utils';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
+import { getRoleHomeRoute } from '@/lib/role-routing';
 
 export default function SignUpPage() {
   const { user } = useUser();
   const auth = useAuth();
   const firestore = useDb();
   const router = useRouter();
-  const { isEmployee, loading, isSuperAdmin } = useProfile();
+  const { role, isEmployee, loading, isSuperAdmin, profile } = useProfile();
   const TERMS_VERSION = '2024-08';
 
   const [name, setName] = useState('');
@@ -37,13 +38,16 @@ export default function SignUpPage() {
 
   React.useEffect(() => {
     if (user && !loading) {
-      if (isEmployee || isSuperAdmin) {
-        router.push('/dashboard');
-      } else {
-        router.push('/');
-      }
+      router.push(
+        getRoleHomeRoute({
+          role,
+          email: user.email,
+          isSuperAdmin,
+          assignedUnits: profile?.assignedUnits,
+        })
+      );
     }
-  }, [user, isEmployee, isSuperAdmin, loading, router]);
+  }, [user, role, isEmployee, isSuperAdmin, profile, loading, router]);
 
   const passwordStrength = useMemo(() => {
     if (!password) return 0;
@@ -190,7 +194,7 @@ export default function SignUpPage() {
         title: 'Welcome to Urban Express',
         description: 'Your account is ready and you are signed in.',
       });
-      const destination = resolvedRole && resolvedRole !== 'CLIENT' ? '/dashboard' : '/';
+      const destination = getRoleHomeRoute({ role: resolvedRole, email: normalizedEmail });
       router.replace(destination);
     } catch (error: any) {
       console.error('[SIGNUP] failed:', error);

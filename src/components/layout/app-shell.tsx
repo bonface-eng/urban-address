@@ -13,6 +13,11 @@ import { toast } from '@/hooks/use-toast';
 import { TerminalLock } from '@/components/pos/terminal-lock';
 import { BusinessUnit } from '@/lib/types';
 import { VersionUpdateBriefing } from '@/components/shared/version-update';
+import {
+  clearObsoleteTerminalStorage,
+  getRoleBaselinePaths,
+  getRoleHomeRoute,
+} from '@/lib/role-routing';
 import Snowfall from 'react-snowfall';
 
 const AUTH_ROUTES = ['/login', '/signup', '/forgot-password'];
@@ -74,6 +79,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   }, [isPreviewMode, isProtectedStaffRoute]);
 
   useEffect(() => {
+    clearObsoleteTerminalStorage();
     const storedCollapsed = typeof window !== 'undefined' ? localStorage.getItem('urban_sidebar_collapsed') : null;
     setSidebarCollapsed(storedCollapsed === 'true');
     setMounted(true);
@@ -145,8 +151,15 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       if (!isAuthRoute && !isClientView) router.replace('/login');
       return;
     }
+    const roleHome = getRoleHomeRoute({
+      role,
+      email: user.email,
+      isSuperAdmin,
+      assignedUnits: profile?.assignedUnits,
+    });
+
     if (isAuthRoute) {
-      router.replace(isKitchen ? '/kds' : (isEmployee || isSuperAdmin) ? '/dashboard' : '/');
+      router.replace(roleHome);
       return;
     }
     if (!isEmployee && !isSuperAdmin && !isClientView) {
@@ -154,36 +167,50 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    if (!isSuperAdmin && permMap && role && !isClientView && !isSetupPage) {
-      const baseline = ['/dashboard', '/settings'];
-      const allowedPaths = permMap[role] || [];
-      const isExplicitlyAllowed = allowedPaths.includes(pathname);
+    if (isKitchen && pathname === '/dashboard') {
+      router.replace('/kds');
+      return;
+    }
 
-      if (!baseline.includes(pathname) && !isExplicitlyAllowed) {
+    if (!isSuperAdmin && role && !isClientView && !isSetupPage) {
+      const baseline = getRoleBaselinePaths(role, isSuperAdmin);
+      if (baseline.includes('*')) return;
+
+      const allowedPaths = permMap ? permMap[role] || [] : [];
+      const isExplicitlyAllowed = baseline.includes(pathname) || allowedPaths.includes(pathname);
+
+      if (!isExplicitlyAllowed) {
         const units = profile?.assignedUnits || [];
-        const isAuthorizedToStay = (role === 'CASHIER' || role === 'ATTENDANT' || role === 'STOREKEEPER' || role === 'KITCHEN');
+        const isAuthorizedToStay =
+          role === 'CASHIER' || role === 'ATTENDANT' || role === 'STOREKEEPER' || role === 'KITCHEN';
 
         if (isAuthorizedToStay) {
           const departmentalPages = ['/lounge', '/store', '/carwash/pos', '/carwash', '/attendants', '/kds'];
-          
+
           if (departmentalPages.includes(pathname)) {
             let authorized = false;
             if (units.includes('LOUNGE') && (pathname === '/lounge' || pathname === '/kds')) authorized = true;
             if (role === 'KITCHEN' && pathname === '/kds') authorized = true;
+            if (role === 'STOREKEEPER' && pathname === '/store') authorized = true;
+            if (role === 'ATTENDANT' && ['/carwash', '/attendants'].includes(pathname)) authorized = true;
             if (units.includes('STORE') && pathname === '/store') authorized = true;
-            if (units.includes('CARWASH') && ['/carwash/pos', '/carwash', '/attendants'].includes(pathname)) authorized = true;
+            if (units.includes('CARWASH') && ['/carwash/pos', '/carwash', '/attendants'].includes(pathname)) {
+              authorized = true;
+            }
 
             if (!authorized && units.length > 0) {
-              const redirectMap: any = { 'LOUNGE': '/lounge', 'STORE': '/store', 'CARWASH': '/carwash/pos' };
-              const fallback = isKitchen ? '/kds' : (redirectMap[units[0]] || '/dashboard');
+              const redirectMap: Record<string, string> = {
+                LOUNGE: '/lounge',
+                STORE: '/store',
+                CARWASH: '/carwash/pos',
+              };
+              const fallback = isKitchen ? '/kds' : redirectMap[units[0]] || roleHome;
               router.replace(fallback);
               return;
             }
           }
         }
-        if (!baseline.includes(pathname)) {
-          router.replace(isKitchen ? '/kds' : '/dashboard');
-        }
+        router.replace(roleHome);
       }
     }
   }, [mounted, authLoading, profileLoading, user, role, pathname, router, isAuthRoute, isSuperAdmin, profile, permMap, isEmployee, isClientView, isIncomplete, isSetupPage, isKitchen, isPreviewMode]);
@@ -258,7 +285,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
             </main>
           </div>
           <BottomNav />
-          <VersionUpdateBriefing />
         </div>
       </TerminalLock>
     </TooltipProvider>
