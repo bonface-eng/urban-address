@@ -29,7 +29,6 @@
 - [Data model and Firestore collections](#data-model-and-firestore-collections)
 - [Core business workflows](#core-business-workflows)
 - [Authentication, roles and access control](#authentication-roles-and-access-control)
-- [Daily administrator OTP verification](#daily-administrator-otp-verification)
 - [Branch-aware operations](#branch-aware-operations)
 - [POS hardware and desktop support](#pos-hardware-and-desktop-support)
 - [Integrations and external services](#integrations-and-external-services)
@@ -386,29 +385,9 @@ Authorization is implemented across the application and Firestore Security Rules
 - Restrict destructive actions and sensitive financial changes to authorized roles.
 - Write meaningful audit records for privileged or financially sensitive operations.
 
-## Daily administrator OTP verification
+## Direct administrator access
 
-Customer sign-up grants immediate authenticated access without an email verification gate. Separately, administrator sign-in enforces a daily one-time password (OTP) check after Supabase Authentication succeeds. Eligible administrators are directed to `/admin-otp` until they complete the daily email verification.
-
-| Control | Behavior |
-| --- | --- |
-| Code format | Six numeric digits |
-| Issue frequency | One code issuance per administrator UID per UTC calendar day |
-| Code lifetime | Until 23:59:59.999 UTC on the day it is issued |
-| Incorrect attempts | Five attempts; the daily code is then locked |
-| Reuse | A code can be consumed only once |
-| Storage | Hashed code in `public.admin_daily_otps`; no plaintext OTP is persisted |
-| Delivery | Resend using the `auth` sender (`otp@urbanautoexpress.com`) |
-| Verification state | Supabase `app_metadata` and `public.admin_daily_otps` record the verified UTC date |
-
-### Server endpoints
-
-| Endpoint | Method | Purpose |
-| --- | --- | --- |
-| `/api/admin/otp/request` | `POST` | Check administrator eligibility and issue the daily code when one has not already been sent |
-| `/api/admin/otp/verify` | `POST` | Validate and consume the daily administrator code, then update the verified UTC day |
-
-Both endpoints require a Supabase access token in the `Authorization: Bearer <token>` header. Keep `RESEND_API_KEY` configured strictly as a server-side secret.
+Customer sign-up grants immediate authenticated access without an email verification gate. Similarly, administrator sign-in directs verified administrators straight into the staff portal and executive dashboard (`/dashboard`) immediately upon password authentication. Intermediate daily OTP codes, lockouts and verification screens have been completely removed.
 
 ## Branch-aware operations
 

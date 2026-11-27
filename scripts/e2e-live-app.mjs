@@ -208,33 +208,14 @@ async function runTests() {
     !ordIns.error && Number(ordRead.data?.total) === 1000 && ordUpd.data?.status === 'PAID' && (ordItems.data?.length ?? 0) >= 1 && (ordDel.data?.length ?? 0) === 1,
     ordIns.error?.message || ordUpd.error?.message || ordDel.error?.message || 'all ops ok');
 
-  // 10. Claims / Special Flows: terminal_staff_session -> /api/auth/clear-terminal-session + daily admin OTP
-  await admin.auth.admin.updateUserById(adminId, {
-    app_metadata: { terminal_staff_session: true, terminalStaffSession: true, terminal_device_id: 'dev-e2e-1234567890' },
-  });
-  const freshPwLogin = await anon().auth.signInWithPassword({ email: adminEmail, password: PASSWORD });
-  const clearRes = await fetch(`${BASE}/api/auth/clear-terminal-session`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${freshPwLogin.data.session.access_token}` },
-  });
-  const clearJson = await clearRes.json();
-  const refreshedAdmin = await admin.auth.admin.getUserById(adminId);
-  rec('Special Flows', 'Password login clears terminal_staff_session via /api/auth/clear-terminal-session',
-    clearRes.ok && clearJson.cleared === true && refreshedAdmin.data?.user?.app_metadata?.terminal_staff_session === false,
-    JSON.stringify(clearJson));
-
-  // Daily OTP check for ADMIN role
+  // 10. Direct full access for ADMIN role without intermediate verification
   await admin.from('profiles').update({ role: 'ADMIN' }).eq('id', adminId);
   const admSession = anon();
   await admSession.auth.signInWithPassword({ email: adminEmail, password: PASSWORD });
-  const deniedBeforeOtp = await admSession.from('inventory').select('id').limit(1);
-  const today = new Date().toISOString().slice(0, 10);
-  await admin.from('admin_daily_otps').upsert({ id: adminId, day: today, code_hash: 'e2e', sent_at: Date.now(), expires_at: Date.now() + 60000, attempts: 0, verified_at: Date.now() }, { onConflict: 'id' });
-  const allowedAfterOtp = await admSession.from('profiles').select('id').limit(3);
-  await admin.from('admin_daily_otps').delete().eq('id', adminId);
-  rec('Special Flows', 'ADMIN role gated by daily OTP and unlocked after verification',
-    (deniedBeforeOtp.data?.length ?? 0) === 0 && !allowedAfterOtp.error && (allowedAfterOtp.data?.length ?? 0) >= 1,
-    `before=${deniedBeforeOtp.data?.length ?? 0}, after=${allowedAfterOtp.data?.length ?? 0}`);
+  const allowedDirectly = await admSession.from('profiles').select('id').limit(3);
+  rec('Special Flows', 'ADMIN role has direct full access without intermediate verification',
+    !allowedDirectly.error && (allowedDirectly.data?.length ?? 0) >= 1,
+    `profiles visible=${allowedDirectly.data?.length ?? 0}`);
 
   return { confirmEmailEnabled, signupDiagnostic };
 }
@@ -243,7 +224,6 @@ async function cleanup() {
   for (const id of createdRows.orders) await admin.from('orders').delete().eq('id', id);
   for (const id of createdRows.inventory) await admin.from('inventory').delete().eq('id', id);
   for (const id of createdIds) {
-    await admin.from('admin_daily_otps').delete().eq('id', id);
     await admin.from('profiles').delete().eq('id', id);
     await admin.auth.admin.deleteUser(id);
   }

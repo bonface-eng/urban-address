@@ -89,13 +89,13 @@ async function main() {
   rec('client blocked from inventory by RLS (0 rows, no grant error)', !inv.error && (inv.data?.length ?? 0) === 0, inv.error?.message || `rows visible=${inv.data?.length}`);
   const adm = await c2.from('admins').select('email').limit(5);
   rec('client blocked from admins whitelist by RLS', !adm.error && (adm.data?.length ?? 0) === 0, adm.error?.message || `rows visible=${adm.data?.length}`);
-  const otps = await c2.from('admin_daily_otps').select('id').limit(1);
-  rec('client blocked from server-only table (admin_daily_otps)', (otps.data?.length ?? 0) === 0, otps.error?.message || 'no rows / denied');
+  const otps = await c2.from('staff_pins').select('uid').limit(1);
+  rec('client blocked from server-only table (staff_pins)', (otps.data?.length ?? 0) === 0, otps.error?.message || 'no rows / denied');
   const escalate = await c2.from('profiles').update({ role: 'ADMIN' }).eq('id', clientId).select();
   const after = await admin.from('profiles').select('role').eq('id', clientId).maybeSingle();
   rec('client cannot self-promote to ADMIN', after.data?.role === 'CLIENT', escalate.error?.message || `role still ${after.data?.role}`);
 
-  // ---------- 6. ADMIN ACCESS + daily OTP gate
+  // ---------- 6. ADMIN ACCESS (direct, no intermediate code step)
   const au = await admin.auth.admin.createUser({ email: adminEmail, password: PASSWORD, email_confirm: true, user_metadata: { full_name: 'E2E Admin' } });
   if (au.error) { rec('create test admin user', false, au.error.message); }
   else {
@@ -132,16 +132,11 @@ async function main() {
     const idl = await c3.from('inventory').delete().eq('id', iid).select();
     rec('inventory DELETE', !idl.error && (idl.data?.length ?? 0) === 1, idl.error?.message);
 
-    // ADMIN role needs daily OTP
+    // ADMIN role gets full access directly
     await admin.from('profiles').update({ role: 'ADMIN' }).eq('id', adminId);
     const c4 = anon(); await c4.auth.signInWithPassword({ email: adminEmail, password: PASSWORD });
-    const noOtp = await c4.from('inventory').select('id').limit(1);
-    rec('ADMIN without daily OTP is denied staff data', !noOtp.error && (noOtp.data?.length ?? 0) === 0, noOtp.error?.message || 'no rows (is_staff false)');
-    const day = new Date().toISOString().slice(0, 10);
-    await admin.from('admin_daily_otps').upsert({ id: adminId, day, code_hash: 'e2e', sent_at: Date.now(), expires_at: Date.now() + 60000, attempts: 0, verified_at: Date.now() }, { onConflict: 'id' });
-    const withOtp = await c4.from('profiles').select('id').limit(5);
-    rec('ADMIN with verified daily OTP gets staff access', !withOtp.error && (withOtp.data?.length ?? 0) >= 1, withOtp.error?.message || `profiles visible=${withOtp.data?.length}`);
-    await admin.from('admin_daily_otps').delete().eq('id', adminId);
+    const directAdmin = await c4.from('profiles').select('id').limit(5);
+    rec('ADMIN gets direct full access without intermediate code step', !directAdmin.error && (directAdmin.data?.length ?? 0) >= 1, directAdmin.error?.message || `profiles visible=${directAdmin.data?.length}`);
   }
 
   // ---------- 8. LOGOUT
@@ -169,7 +164,6 @@ async function cleanup() {
   for (const id of createdRows.orders) await admin.from('orders').delete().eq('id', id);
   for (const id of createdRows.inventory) await admin.from('inventory').delete().eq('id', id);
   for (const id of createdIds) {
-    await admin.from('admin_daily_otps').delete().eq('id', id);
     await admin.from('profiles').delete().eq('id', id);
     const d = await admin.auth.admin.deleteUser(id);
     console.log('deleted test user', id.slice(0, 8) + '…', d.error ? 'ERR ' + d.error.message : 'ok');
