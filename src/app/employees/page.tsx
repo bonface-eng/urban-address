@@ -308,7 +308,8 @@ export default function StaffDirectory() {
   const openEdit = (user: UserProfile) => {
     setSelectedUser(user);
     setDisplayName(user.displayName || '');
-    setRole(user.role || 'CLIENT');
+    const initialRole = (user.role ? String(user.role).toUpperCase() : 'CLIENT') as UserRole;
+    setRole(initialRole);
     setBranchId(user.activeBranchId || user.branchIds?.[0] || 'ALL');
     setPin('');
     setAssignedUnits(user.assignedUnits || []);
@@ -702,13 +703,13 @@ export default function StaffDirectory() {
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Primary Role</Label>
                   <Select value={role} onValueChange={(v: any) => setRole(v)} required>
-                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase">
+                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase cursor-pointer">
                       <SelectValue placeholder="Select Role" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl">
-                      {(isSuperAdmin ? ALL_STAFF_ROLES : ROLES).map((r) => (
-                        <SelectItem key={r} value={r} className="text-[10px] font-black uppercase">
-                          {r}
+                    <SelectContent className="rounded-xl border border-zinc-200 bg-white shadow-2xl">
+                      {(isSuperAdmin ? [...ALL_STAFF_ROLES, 'CLIENT' as UserRole] : [...ROLES, 'CLIENT' as UserRole]).map((r) => (
+                        <SelectItem key={r} value={r} className="text-[10px] font-black uppercase cursor-pointer">
+                          {r.replace('_', ' ')}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -717,15 +718,15 @@ export default function StaffDirectory() {
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Assigned Branch</Label>
                   <Select value={branchId} onValueChange={setBranchId}>
-                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold">
+                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold cursor-pointer">
                       <SelectValue placeholder="All Branches" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl border-none shadow-2xl">
-                      <SelectItem value="ALL" className="text-[10px] font-black uppercase">
+                    <SelectContent className="rounded-xl border border-zinc-200 bg-white shadow-2xl">
+                      <SelectItem value="ALL" className="text-[10px] font-black uppercase cursor-pointer">
                         All / Default Branch
                       </SelectItem>
                       {(branches || []).map((b) => (
-                        <SelectItem key={b.id} value={b.id} className="text-[10px] font-black uppercase">
+                        <SelectItem key={b.id} value={b.id} className="text-[10px] font-black uppercase cursor-pointer">
                           {b.name}
                         </SelectItem>
                       ))}
@@ -853,13 +854,13 @@ export default function StaffDirectory() {
                     disabled={selectedUser?.email === 'gackstoneb@gmail.com'}
                     required
                   >
-                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase">
-                      <SelectValue />
+                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase cursor-pointer">
+                      <SelectValue placeholder="Select Role" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl">
+                    <SelectContent className="rounded-xl border border-zinc-200 bg-white shadow-2xl">
                       {(isSuperAdmin ? [...ALL_STAFF_ROLES, 'CLIENT' as UserRole] : [...ROLES, 'CLIENT' as UserRole]).map((r) => (
-                        <SelectItem key={r} value={r} className="text-[10px] font-black uppercase">
-                          {r}
+                        <SelectItem key={r} value={r} className="text-[10px] font-black uppercase cursor-pointer">
+                          {r.replace('_', ' ')}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -868,15 +869,15 @@ export default function StaffDirectory() {
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">Assigned Branch</Label>
                   <Select value={branchId} onValueChange={setBranchId}>
-                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold">
+                    <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold cursor-pointer">
                       <SelectValue placeholder="All Branches" />
                     </SelectTrigger>
-                    <SelectContent className="rounded-xl">
-                      <SelectItem value="ALL" className="text-[10px] font-black uppercase">
+                    <SelectContent className="rounded-xl border border-zinc-200 bg-white shadow-2xl">
+                      <SelectItem value="ALL" className="text-[10px] font-black uppercase cursor-pointer">
                         All / Default Branch
                       </SelectItem>
                       {(branches || []).map((b) => (
-                        <SelectItem key={b.id} value={b.id} className="text-[10px] font-black uppercase">
+                        <SelectItem key={b.id} value={b.id} className="text-[10px] font-black uppercase cursor-pointer">
                           {b.name}
                         </SelectItem>
                       ))}
