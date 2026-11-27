@@ -2,7 +2,6 @@
 
 import { useEffect } from 'react';
 import { errorEmitter } from '@/firebase/error-emitter';
-import { FirestorePermissionError } from '@/firebase/errors';
 import { toast } from '@/hooks/use-toast';
 
 /**
@@ -13,7 +12,14 @@ import { toast } from '@/hooks/use-toast';
 export function FirebaseErrorListener() {
   useEffect(() => {
     const handlePermissionError = (error: any) => {
-      console.error('[FIREBASE SYNC ERROR]', error);
+      const rawPath = error?.context?.path;
+      // Only expose an allowlisted collection name, never a document ID/email or request data.
+      const collectionName = typeof rawPath === 'string' ? rawPath.split('/').filter(Boolean)[0] : '';
+      const known = ['users', 'admins', 'system', 'inventory', 'orders', 'carwash_jobs', 'audit_logs', 'suppliers', 'petty_cash', 'reconciliations', 'salary_advances', 'pos_terminals', 'register_sessions', 'notifications', 'settings', 'vehicles', 'held_bills'];
+      const source = known.includes(collectionName) ? collectionName : 'protected-data';
+      const operation = ['get', 'list', 'create', 'update', 'delete', 'write'].includes(error?.context?.operation) ? error.context.operation : 'access';
+      const reference = `ACCESS_${source.toUpperCase()}_${operation.toUpperCase()}`;
+      console.error('[FIREBASE ACCESS DENIED]', reference);
       
       const isHoldAction = error?.context?.path?.includes('held_bills');
       
@@ -22,7 +28,7 @@ export function FirebaseErrorListener() {
         title: isHoldAction ? "Sync Interrupted" : "Access Restricted",
         description: isHoldAction 
           ? "The station node failed to synchronize the held bill. Please check your network or station authorization."
-          : "Your account does not have sufficient permissions to view or modify this specific data node."
+          : `Database access was denied for ${source} (${operation}). Ref: ${reference}. Your account role has not been changed.`
       });
     };
 

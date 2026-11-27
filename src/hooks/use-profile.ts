@@ -39,7 +39,11 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const adminDocRef = useMemo(() => {
     if (!firestore || !user?.email) return null;
-    return doc(firestore, 'admins', user.email.toLowerCase().trim());
+    const email = user.email.toLowerCase().trim();
+    // Root accounts already have the same eligibility independently of this registry.
+    // Avoid a protected lookup on every page for an answer we already know.
+    if (ROOT_ADMIN_EMAILS.includes(email)) return null;
+    return doc(firestore, 'admins', email);
   }, [firestore, user?.email]);
 
   const { data: firestoreProfile, loading: profileLoading } = useDoc<UserProfile>(userDocRef);
