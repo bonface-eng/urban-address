@@ -1,4 +1,6 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
+import { PosReadNotice } from '@/components/pos/read-notice';
 
 import React, { useMemo, useState } from 'react';
 import { 
@@ -61,16 +63,8 @@ export default function BusinessReports() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  const ordersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(
-      collection(firestore, 'orders'), 
-      orderBy('timestamp', 'desc'),
-      limit(2000)
-    );
-  }, [firestore]);
-
-  const { data: allOrders, loading } = useCollection<Order>(ordersQuery);
+  const primaryRead = useManagementRead<Order>('reports');
+  const { data: allOrders, loading } = primaryRead;
 
   const filteredOrders = useMemo(() => {
     if (!allOrders) return [];
@@ -195,8 +189,12 @@ export default function BusinessReports() {
     }
   };
 
+  if (primaryRead.error) return <div className="p-6"><PosReadNotice label="Management records" error={primaryRead.error} onRetry={primaryRead.refresh} /></div>;
+
   return (
     <div className="space-y-6 pb-20 max-w-[1600px] mx-auto px-2 pt-2">
+      <PosReadNotice label="Report records" error={primaryRead.error} onRetry={primaryRead.refresh} />
+      <button type="button" onClick={primaryRead.refresh} className="px-4 py-2 border rounded-lg text-sm">Refresh records</button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-black font-headline text-zinc-900 uppercase tracking-tight leading-none">Intelligence Reports</h1>

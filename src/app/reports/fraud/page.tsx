@@ -1,4 +1,6 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
+import { PosReadNotice } from '@/components/pos/read-notice';
 
 import React, { useMemo, useState, useEffect } from 'react';
 import { 
@@ -38,12 +40,8 @@ export default function FraudSecurityDashboard() {
     setMounted(true);
   }, []);
 
-  const auditQuery = useMemo(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'audit_logs'), orderBy('timestamp', 'desc'), limit(100));
-  }, [firestore]);
-
-  const { data: logs, loading } = useCollection<AuditLog>(auditQuery);
+  const primaryRead = useManagementRead<AuditLog>('audit');
+  const { data: logs, loading } = primaryRead;
 
   const criticalAlerts = logs?.filter(l => l.severity === 'CRITICAL').length || 0;
 
@@ -69,8 +67,12 @@ export default function FraudSecurityDashboard() {
     }
   };
 
+  if (primaryRead.error) return <div className="p-6"><PosReadNotice label="Management records" error={primaryRead.error} onRetry={primaryRead.refresh} /></div>;
+
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
+      <PosReadNotice label="Report records" error={primaryRead.error} onRetry={primaryRead.refresh} />
+      <button type="button" onClick={primaryRead.refresh} className="px-4 py-2 border rounded-lg text-sm">Refresh records</button>
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-2">

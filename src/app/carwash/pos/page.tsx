@@ -1,6 +1,8 @@
 
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
 
+import { submitCheckout } from '@/lib/checkout-client';
 import { useStaffInventory } from '@/hooks/use-staff-inventory';
 import { usePosReads } from '@/hooks/use-pos-reads';
 import { PosReadNotice } from '@/components/pos/read-notice';
@@ -75,6 +77,7 @@ const QUICK_COLORS = [
 
 export default function CarwashPOS() {
   const firestore = useFirestore();
+  const { user } = useUser();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
   
   // Persistent State Logic
@@ -161,20 +164,13 @@ export default function CarwashPOS() {
     return () => clearTimeout(timer);
   }, [firestore, plateNumber, jobType]);
 
-  const attendantsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'users'), where('role', '==', 'ATTENDANT'));
-  }, [firestore]);
-
-  const recentJobsQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'), limit(150));
-  }, [firestore]);
-
-  const inventoryRead = useStaffInventory(0);
+  const [catalogueRevision,setCatalogueRevision] = useState(0);
+  const inventoryRead = useStaffInventory(catalogueRevision);
   const services = useMemo(() => inventoryRead.data?.filter(item => item.unit === 'CARWASH' && !item.archived) || null, [inventoryRead.data]);
-  const { data: attendants } = useCollection<UserProfile>(attendantsQuery);
-  const { data: recentJobs } = useCollection<CarwashJob>(recentJobsQuery);
+  const attendantsRead = useManagementRead<UserProfile>('attendants');
+  const { data: attendants } = attendantsRead;
+  const recentJobsRead = useManagementRead<CarwashJob>('jobs');
+  const { data: recentJobs } = recentJobsRead;
   const tabRead = usePosReads<Order>('own-tabs', 'CARWASH', !!activeCashier?.uid);
   const rawPendingOrders = tabRead.data;
 
@@ -289,51 +285,27 @@ export default function CarwashPOS() {
   };
 
   const handleFinalizeSale = async (method: 'CASH' | 'MOBILE', metadata?: any) => {
-    if (!firestore || !activeCashier || cart.length === 0) return;
+    if (!user || !activeCashier || cart.length === 0 || isProcessing) return;
     setIsProcessing(true);
-    const totalValue = cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-    const totalCommission = cart.reduce((sum, item) => sum + ((item.price * item.quantity * (item.commission || 30)) / 100), 0);
-    const attendantName = attendants?.find(a => a.uid === attendantId)?.displayName || 'Unassigned';
-
-    const orderData: any = {
-      type: 'CARWASH' as const, jobType, status: 'PAID' as const, total: totalValue, paymentMethod: method,
-      paymentRef: metadata?.reference || null, cashierId: activeCashier.uid, cashierName: activeCashier.displayName,
-      timestamp: Date.now(), inventorySynced: true, items: cart.map(i => ({ ...i, status: 'COMMITTED' as const })), plateNumber: plateNumber.toUpperCase().trim(),
-      vehicleMake: jobType === 'VEHICLE' ? vehicleMake : 'CARPET', vehicleModel: jobType === 'VEHICLE' ? vehicleModel : 'SERVICE',
-      vehicleColor, carpetDimensions: jobType === 'CARPET' ? carpetDimensions : null, attendantId: attendantId || 'Unassigned',
-      attendantName, customerId: selectedCustomer?.uid || null
-    };
-
-    const batch = writeBatch(firestore);
-    const orderRef = doc(collection(firestore, 'orders'));
-    batch.set(orderRef, orderData);
-
-    // Deduct stock for physical inventory attached to wash
-    for (const item of cart) {
-      if (item.productId) {
-        const productRef = doc(firestore, 'inventory', item.productId);
-        batch.update(productRef, {
-          stockLevel: increment(-item.quantity),
-          updatedAt: Date.now()
-        });
-      }
-    }
-
-    batch.set(doc(collection(firestore, 'carwash_jobs')), { orderId: orderRef.id, jobType, plateNumber: orderData.plateNumber, vehicleMake: orderData.vehicleMake, vehicleModel: orderData.vehicleModel, vehicleColor: orderData.vehicleColor, carpetDimensions: orderData.carpetDimensions, service: cart.length === 1 ? cart[0].name : `${cart.length} Services`, price: totalValue, commission: totalCommission, status: 'QUEUED', attendantId: attendantId || 'Unassigned', attendantName, timestamp: Date.now() });
-    if (jobType === 'VEHICLE' && orderData.plateNumber) batch.set(doc(firestore, 'vehicles', orderData.plateNumber), { plateNumber: orderData.plateNumber, make: orderData.vehicleMake, model: orderData.vehicleModel, color: orderData.vehicleColor, lastSeen: Date.now() }, { merge: true });
-    if (editingOrderId) batch.delete(doc(firestore, 'users', activeCashier.uid, 'held_bills', editingOrderId));
-
-    batch.commit().then(async () => {
-      const finalReceipt = { ...orderData, id: orderRef.id };
-      await HardwareService.printReceipt(finalReceipt);
-      setReceiptData(finalReceipt);
+    try {
+      const receipt = await submitCheckout(user, {
+        unit:'CARWASH', items:cart.map(item => ({ productId:item.productId,quantity:item.quantity })),
+        total:cart.reduce((sum,item) => sum+item.price*item.quantity,0),method,
+        reference:metadata?.reference || '',manual:metadata?.isManual === true,
+        cashReceived:method === 'CASH' ? metadata?.cashReceived : null,heldId:editingOrderId || '',jobType,plateNumber,vehicleMake,vehicleModel,vehicleColor,carpetDimensions,attendantId,
+      });
+      setCatalogueRevision(value=>value+1);
+      tabRead.refresh();
+      recentJobsRead.refresh();
+      setReceiptData(receipt);
       setCheckoutStep('SUCCESS');
-      setIsProcessing(false);
-      toast({ title: "Transaction Authorized" });
-    }).catch(async (err) => {
-      setIsProcessing(false);
-      errorEmitter.emit('permission-error', new FirestorePermissionError({ path: orderRef.path, operation: 'create', requestResourceData: orderData }));
-    });
+      toast({ title:"Transaction recorded" });
+      // Printing failures must never be reported as a failed sale or cause another charge.
+      try { await HardwareService.printReceipt(receipt); }
+      catch { toast({ title:"Sale saved — printing failed",description:"Use the saved receipt to reprint. Do not finalize this sale again." }); }
+    } catch (error) {
+      toast({ variant:"destructive",title:"Checkout not confirmed",description:error instanceof Error ? error.message : "Keep the cart unchanged and check Sales History before retrying." });
+    } finally { setIsProcessing(false); }
   };
 
   const handleNewTransaction = () => {
@@ -399,6 +371,8 @@ export default function CarwashPOS() {
     <div className="h-[calc(100vh-9rem)] flex flex-col md:flex-row gap-6 overflow-hidden relative">
       <div className="flex-1 flex flex-col gap-6 overflow-hidden">
         <header className="space-y-4 bg-white p-6 rounded-[2.5rem] border border-zinc-100 shadow-sm shrink-0">
+          <PosReadNotice label="attendants" error={attendantsRead.error} onRetry={attendantsRead.refresh} />
+          <PosReadNotice label="jobs" error={recentJobsRead.error} onRetry={recentJobsRead.refresh} />
           <PosReadNotice label="Inventory" error={inventoryRead.error?.code || null} onRetry={() => window.location.reload()} />
           <PosReadNotice label="Held tabs" error={tabRead.error} onRetry={tabRead.refresh} />
 

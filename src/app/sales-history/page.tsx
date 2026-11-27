@@ -1,4 +1,6 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
+import { PosReadNotice } from '@/components/pos/read-notice';
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
@@ -125,12 +127,8 @@ export default function SalesHistoryPage() {
     }
   }, [activeTab, filterUnit, datePreset, mounted]);
 
-  const ordersQuery = useMemoFirebase(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'), limit(1000));
-  }, [firestore]);
-
-  const { data: orders, loading } = useCollection<Order>(ordersQuery);
+  const primaryRead = useManagementRead<Order>(isSuperAdmin || ['ADMIN','MANAGER','SUPERVISOR'].includes(role || '') ? 'history' : 'own-orders');
+  const { data: orders, loading } = primaryRead;
 
   const filteredOrders = useMemo(() => {
     if (!orders) return [];
@@ -141,7 +139,7 @@ export default function SalesHistoryPage() {
     if (!isSuperAdmin && (role === 'CASHIER' || role === 'STOREKEEPER' || role === 'ATTENDANT')) {
       const units = profile?.assignedUnits || [];
       if (units.length > 0) {
-        baseList = baseList.filter(o => units.includes(o.type));
+        baseList = baseList.filter(o => units.some(unit => unit === o.type));
       }
     }
 
@@ -261,8 +259,12 @@ export default function SalesHistoryPage() {
 
   if (!mounted) return null;
 
+  if (primaryRead.error) return <div className="p-6"><PosReadNotice label="Management records" error={primaryRead.error} onRetry={primaryRead.refresh} /></div>;
+
   return (
     <div className="space-y-6 pb-20 max-w-[1600px] mx-auto pt-4 px-2">
+      <PosReadNotice label="Report records" error={primaryRead.error} onRetry={primaryRead.refresh} />
+      <button type="button" onClick={primaryRead.refresh} className="px-4 py-2 border rounded-lg text-sm">Refresh records</button>
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
         <div>
           <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Sales History</h1>

@@ -1,4 +1,6 @@
 'use client';
+import { useManagementRead } from '@/hooks/use-management-read';
+import { PosReadNotice } from '@/components/pos/read-notice';
 
 import React, { useMemo, useState } from 'react';
 import { 
@@ -88,12 +90,8 @@ export default function StaffDirectory() {
   const [mpesaNumber, setMpesaNumber] = useState('');
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
 
-  const usersQuery = useMemo(() => {
-    if (!firestore) return null;
-    return query(collection(firestore, 'users'), orderBy('createdAt', 'desc'));
-  }, [firestore]);
-
-  const { data: allUsers, loading } = useCollection<UserProfile>(usersQuery);
+  const primaryRead = useManagementRead<UserProfile>('directory');
+  const { data: allUsers, loading } = primaryRead;
 
   const staffList = useMemo(() => {
     if (!allUsers) return [];
@@ -196,8 +194,12 @@ export default function StaffDirectory() {
     setBaseSalary(''); setMpesaNumber(''); setSelectedUser(null);
   };
 
+  if (primaryRead.error) return <div className="p-6"><PosReadNotice label="Management records" error={primaryRead.error} onRetry={primaryRead.refresh} /></div>;
+
   return (
     <div className="space-y-6 pb-12 max-w-[1600px] mx-auto">
+      <PosReadNotice label="Staff directory" error={primaryRead.error} onRetry={primaryRead.refresh} />
+      <button type="button" onClick={primaryRead.refresh} className="px-4 py-2 border rounded-lg text-sm">Refresh records</button>
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-2 pt-4">
         <div>
           <h1 className="text-3xl font-black font-headline text-zinc-900 uppercase tracking-tighter leading-none">Personnel</h1>
