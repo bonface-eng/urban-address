@@ -499,14 +499,19 @@ export async function adminCreateUser(data: {
     if (!data.password || data.password.length < 8) {
       return { success: false, message: 'Temporary password must be at least 8 characters.' };
     }
-    if (!VALID_STAFF_ROLES.includes(upperRole as any)) {
-      return { success: false, message: `Select a valid staff role (${VALID_STAFF_ROLES.join(', ')}).` };
+    if (!VALID_STAFF_ROLES.includes(upperRole as any) && upperRole !== 'CLIENT') {
+      return { success: false, message: `Select a valid role (${VALID_STAFF_ROLES.join(', ')}).` };
+    }
+    if (upperRole === 'SUPER_ADMIN' && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can create a Super Administrator account.' };
     }
     if (rawPin && !/^\d{4}$/.test(rawPin)) {
       return { success: false, message: 'Optional terminal PIN must be exactly 4 digits.' };
     }
 
     const supaAdmin = getSupabaseAdminClient();
+    const isSuper = upperRole === 'SUPER_ADMIN';
+
     const { data: created, error: createErr } = await supaAdmin.auth.admin.createUser({
       email: normalizedEmail,
       password: data.password,
@@ -517,6 +522,7 @@ export async function adminCreateUser(data: {
       },
       app_metadata: {
         role: upperRole,
+        super_admin: isSuper,
       },
     });
 
@@ -541,16 +547,20 @@ export async function adminCreateUser(data: {
         email: normalizedEmail,
         display_name: displayName,
         role: upperRole,
-        account_type: 'STAFF',
-        is_super_admin: false,
+        account_type: upperRole === 'CLIENT' ? 'CLIENT' : 'STAFF',
+        is_super_admin: isSuper,
+        status: 'active',
         disabled: false,
         has_pin: Boolean(rawPin),
         assigned_units: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
+        station_authorizations: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
         branch_ids: branchIds,
+        branch_id: activeBranchId,
         active_branch_id: activeBranchId,
         base_salary: Number(data.baseSalary) || 0,
         mpesa_number: data.mpesaNumber || null,
         email_verified: true,
+        updated_by: caller.email,
         created_at_ms: now,
         updated_at_ms: now,
       },
@@ -562,10 +572,13 @@ export async function adminCreateUser(data: {
       return { success: false, message: `Profile setup failed: ${upsertErr.message}` };
     }
 
-    if (upperRole === 'ADMIN') {
+    if (upperRole === 'ADMIN' || upperRole === 'SUPER_ADMIN') {
       await supaAdmin
         .from('admins')
-        .upsert({ email: normalizedEmail, firebase_id: normalizedEmail, is_root: false, added_by: caller.email }, { onConflict: 'email' });
+        .upsert(
+          { email: normalizedEmail, firebase_id: normalizedEmail, is_root: isSuper, added_by: caller.email },
+          { onConflict: 'email' }
+        );
     }
 
     if (rawPin) {
@@ -575,6 +588,16 @@ export async function adminCreateUser(data: {
         { onConflict: 'uid' }
       );
     }
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_CREATED',
+        userId: caller.uid,
+        details: `Created new ${upperRole} account for ${displayName} (${normalizedEmail})`,
+        timestamp: now,
+        severity: 'INFO',
+      });
+    } catch {}
 
     return { success: true, uid };
   } catch (error: any) {
@@ -608,16 +631,33 @@ export async function adminUpdateStaff(data: {
     const supaAdmin = getSupabaseAdminClient();
     const { data: existingProfile } = await supaAdmin
       .from('profiles')
-      .select('id, uid, email, is_super_admin, has_pin')
+      .select('id, uid, email, role, is_super_admin, has_pin, status')
       .or(`id.eq.${data.uid},uid.eq.${data.uid}`)
       .maybeSingle();
 
     const supaId = existingProfile?.id || data.uid;
     const targetEmail = String(existingProfile?.email || '').toLowerCase();
+    const targetIsSuperAdmin = existingProfile?.is_super_admin === true || existingProfile?.role === 'SUPER_ADMIN' || targetEmail === 'gackstoneb@gmail.com';
 
-    if (targetEmail === 'gackstoneb@gmail.com' && upperRole !== 'ADMIN') {
-      return { success: false, message: 'The primary Super Admin account role cannot be downgraded.' };
+    // Self-role protection
+    if (caller.uid === supaId && upperRole !== existingProfile?.role) {
+      return { success: false, message: 'You cannot change your own administrator role.' };
     }
+
+    // Protection for Super Admin targets
+    if (targetIsSuperAdmin && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can modify a Super Administrator profile.' };
+    }
+    if (targetEmail === 'gackstoneb@gmail.com' && upperRole !== 'SUPER_ADMIN') {
+      return { success: false, message: 'The primary Super Administrator account role cannot be changed.' };
+    }
+
+    // Role assignment hierarchy
+    if (upperRole === 'SUPER_ADMIN' && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can promote an account to Super Administrator.' };
+    }
+
+    const isTargetSuper = upperRole === 'SUPER_ADMIN';
 
     await supaAdmin.auth.admin.updateUserById(supaId, {
       user_metadata: {
@@ -626,6 +666,7 @@ export async function adminUpdateStaff(data: {
       },
       app_metadata: {
         role: upperRole,
+        super_admin: isTargetSuper,
       },
     });
 
@@ -639,12 +680,16 @@ export async function adminUpdateStaff(data: {
     const patch: Record<string, any> = {
       display_name: data.displayName.trim(),
       role: upperRole,
+      is_super_admin: isTargetSuper,
       account_type: upperRole === 'CLIENT' ? 'CLIENT' : 'STAFF',
       assigned_units: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
+      station_authorizations: Array.isArray(data.assignedUnits) ? data.assignedUnits : [],
       branch_ids: branchIds,
+      branch_id: activeBranchId,
       active_branch_id: activeBranchId,
       base_salary: Number(data.baseSalary) || 0,
       mpesa_number: data.mpesaNumber || null,
+      updated_by: caller.email,
       updated_at_ms: Date.now(),
     };
     if (rawPin) patch.has_pin = true;
@@ -653,10 +698,13 @@ export async function adminUpdateStaff(data: {
     if (updateErr) return { success: false, message: updateErr.message };
 
     if (targetEmail) {
-      if (upperRole === 'ADMIN') {
+      if (upperRole === 'ADMIN' || upperRole === 'SUPER_ADMIN') {
         await supaAdmin
           .from('admins')
-          .upsert({ email: targetEmail, firebase_id: targetEmail, is_root: false, added_by: caller.email }, { onConflict: 'email' });
+          .upsert(
+            { email: targetEmail, firebase_id: targetEmail, is_root: isTargetSuper, added_by: caller.email },
+            { onConflict: 'email' }
+          );
       } else if (!ROOT_ADMIN_EMAILS.includes(targetEmail)) {
         await supaAdmin.from('admins').delete().ilike('email', targetEmail);
       }
@@ -675,40 +723,15 @@ export async function adminUpdateStaff(data: {
         .eq('uid', supaId);
     }
 
-    return { success: true };
-  } catch (error: any) {
-    return { success: false, message: mapAdminAuthError(error) };
-  }
-}
-
-export async function adminSetStaffActiveStatus(uid: string, disabled: boolean, idToken?: string) {
-  try {
-    const caller = await verifyAdminCaller(idToken);
-    if (caller.uid === uid && disabled) {
-      return { success: false, message: 'You cannot deactivate your own administrator account.' };
-    }
-    const supaAdmin = getSupabaseAdminClient();
-    const { data: existingProfile } = await supaAdmin
-      .from('profiles')
-      .select('id, email')
-      .or(`id.eq.${uid},uid.eq.${uid}`)
-      .maybeSingle();
-
-    const supaId = existingProfile?.id || uid;
-    if (String(existingProfile?.email || '').toLowerCase() === 'gackstoneb@gmail.com' && disabled) {
-      return { success: false, message: 'The primary Super Admin account cannot be deactivated.' };
-    }
-
-    const { error: authErr } = await supaAdmin.auth.admin.updateUserById(supaId, {
-      ban_duration: disabled ? '876000h' : 'none',
-    });
-    if (authErr) return { success: false, message: authErr.message };
-
-    const { error: profErr } = await supaAdmin
-      .from('profiles')
-      .update({ disabled, updated_at_ms: Date.now() })
-      .eq('id', supaId);
-    if (profErr) return { success: false, message: profErr.message };
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_UPDATED',
+        userId: caller.uid,
+        details: `Updated user ${targetEmail} (Role: ${upperRole}, Branch: ${activeBranchId || 'Global'})`,
+        timestamp: Date.now(),
+        severity: 'INFO',
+      });
+    } catch {}
 
     return { success: true };
   } catch (error: any) {
@@ -716,25 +739,241 @@ export async function adminSetStaffActiveStatus(uid: string, disabled: boolean, 
   }
 }
 
-export async function adminDeleteUser(uid: string, idToken?: string) {
+/**
+ * Suspend a user account (deactivates login via Supabase Auth ban & profiles status)
+ */
+export async function adminSuspendUser(uid: string, reason?: string, idToken?: string) {
   try {
     const caller = await verifyAdminCaller(idToken);
-    if (caller.uid === uid) {
-      return { success: false, message: 'You cannot delete your own active administrator account.' };
-    }
     const supaAdmin = getSupabaseAdminClient();
     const { data: existingProfile } = await supaAdmin
       .from('profiles')
-      .select('id, email')
+      .select('id, uid, email, role, is_super_admin, status')
       .or(`id.eq.${uid},uid.eq.${uid}`)
       .maybeSingle();
 
     const supaId = existingProfile?.id || uid;
     const targetEmail = String(existingProfile?.email || '').toLowerCase();
+
+    if (caller.uid === supaId) {
+      return { success: false, message: 'You cannot suspend your own account.' };
+    }
+    if (targetEmail === 'gackstoneb@gmail.com') {
+      return { success: false, message: 'The primary Super Administrator account cannot be suspended.' };
+    }
+    if ((existingProfile?.role === 'SUPER_ADMIN' || existingProfile?.is_super_admin) && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can suspend a Super Administrator.' };
+    }
+
+    // Ensure at least one active admin remains in the system
+    if (existingProfile?.role === 'ADMIN' || existingProfile?.role === 'SUPER_ADMIN') {
+      const { count } = await supaAdmin
+        .from('profiles')
+        .select('*', { count: 'exact', head: true })
+        .in('role', ['ADMIN', 'SUPER_ADMIN'])
+        .neq('id', supaId)
+        .eq('status', 'active');
+
+      if (!count || count <= 0) {
+        return { success: false, message: 'Operation refused: The system must retain at least one active administrator.' };
+      }
+    }
+
+    // Ban user in Supabase Auth
+    const { error: authErr } = await supaAdmin.auth.admin.updateUserById(supaId, {
+      ban_duration: '876000h',
+    });
+    if (authErr) return { success: false, message: authErr.message };
+
+    const suspendReason = reason?.trim() || 'Suspended by administrator';
+    const now = new Date().toISOString();
+
+    const { error: profErr } = await supaAdmin
+      .from('profiles')
+      .update({
+        status: 'suspended',
+        disabled: true,
+        suspended_at: now,
+        suspended_by: caller.email,
+        suspended_reason: suspendReason,
+        updated_by: caller.email,
+        updated_at_ms: Date.now(),
+      })
+      .eq('id', supaId);
+
+    if (profErr) return { success: false, message: profErr.message };
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_SUSPENDED',
+        userId: caller.uid,
+        details: `Suspended account for ${targetEmail}. Reason: ${suspendReason}`,
+        timestamp: Date.now(),
+        severity: 'WARNING',
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+/**
+ * Reactivate a suspended user account
+ */
+export async function adminReactivateUser(uid: string, idToken?: string) {
+  try {
+    const caller = await verifyAdminCaller(idToken);
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id, uid, email, role, is_super_admin, status')
+      .or(`id.eq.${uid},uid.eq.${uid}`)
+      .maybeSingle();
+
+    const supaId = existingProfile?.id || uid;
+    const targetEmail = String(existingProfile?.email || '').toLowerCase();
+
+    if ((existingProfile?.role === 'SUPER_ADMIN' || existingProfile?.is_super_admin) && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can reactivate a Super Administrator.' };
+    }
+
+    // Unban in Supabase Auth
+    const { error: authErr } = await supaAdmin.auth.admin.updateUserById(supaId, {
+      ban_duration: 'none',
+    });
+    if (authErr) return { success: false, message: authErr.message };
+
+    const { error: profErr } = await supaAdmin
+      .from('profiles')
+      .update({
+        status: 'active',
+        disabled: false,
+        suspended_at: null,
+        suspended_by: null,
+        suspended_reason: null,
+        updated_by: caller.email,
+        updated_at_ms: Date.now(),
+      })
+      .eq('id', supaId);
+
+    if (profErr) return { success: false, message: profErr.message };
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_REACTIVATED',
+        userId: caller.uid,
+        details: `Reactivated account for ${targetEmail}`,
+        timestamp: Date.now(),
+        severity: 'INFO',
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+/**
+ * Backwards compatible status updater
+ */
+export async function adminSetStaffActiveStatus(uid: string, disabled: boolean, idToken?: string) {
+  if (disabled) {
+    return adminSuspendUser(uid, 'Deactivated by administrator', idToken);
+  }
+  return adminReactivateUser(uid, idToken);
+}
+
+/**
+ * Delete user account: performs smart soft-delete if business records exist, otherwise hard-deletes.
+ */
+export async function adminDeleteUser(
+  uid: string,
+  optionsOrToken?: string | { confirmEmail?: string; idToken?: string } | null,
+  legacyToken?: string
+): Promise<{ success: boolean; message?: string; mode?: string }> {
+  try {
+    const options: { confirmEmail?: string; idToken?: string } =
+      optionsOrToken != null && typeof optionsOrToken === 'object' ? optionsOrToken : {};
+    const idToken: string | undefined =
+      typeof optionsOrToken === 'string' ? optionsOrToken : (options.idToken ?? legacyToken);
+    const caller = await verifyAdminCaller(idToken);
+
+    const supaAdmin = getSupabaseAdminClient();
+    const { data: existingProfile } = await supaAdmin
+      .from('profiles')
+      .select('id, uid, email, role, display_name, is_super_admin')
+      .or(`id.eq.${uid},uid.eq.${uid}`)
+      .maybeSingle();
+
+    const supaId = existingProfile?.id || uid;
+    const targetEmail = String(existingProfile?.email || '').toLowerCase();
+
+    if (caller.uid === supaId) {
+      return { success: false, message: 'You cannot delete your own active administrator account.' };
+    }
     if (targetEmail === 'gackstoneb@gmail.com' || targetEmail === 'bonfacewana3072@gmail.com') {
       return { success: false, message: 'Protected primary administrator accounts cannot be deleted.' };
     }
+    if ((existingProfile?.role === 'SUPER_ADMIN' || existingProfile?.is_super_admin) && !caller.isSuperAdmin) {
+      return { success: false, message: 'Only Super Administrators can delete a Super Administrator.' };
+    }
 
+    if (options.confirmEmail && options.confirmEmail.trim().toLowerCase() !== targetEmail) {
+      return { success: false, message: 'Confirmation email does not match the target user email.' };
+    }
+
+    // Check for transactional references in orders, carwash_jobs, register_sessions, reconciliations
+    const [{ count: orderCount }, { count: jobCount }, { count: sessionCount }, { count: reconCount }] = await Promise.all([
+      supaAdmin.from('orders').select('*', { count: 'exact', head: true }).or(`cashier_id.eq.${supaId},user_id.eq.${supaId}`),
+      supaAdmin.from('carwash_jobs').select('*', { count: 'exact', head: true }).eq('attendant_id', supaId),
+      supaAdmin.from('register_sessions').select('*', { count: 'exact', head: true }).eq('cashier_id', supaId),
+      supaAdmin.from('reconciliations').select('*', { count: 'exact', head: true }).eq('cashier_id', supaId),
+    ]);
+
+    const totalBusinessRecords = (orderCount || 0) + (jobCount || 0) + (sessionCount || 0) + (reconCount || 0);
+
+    // If historical business records exist, perform SOFT-DELETE to preserve auditability and referential integrity
+    if (totalBusinessRecords > 0) {
+      const now = new Date().toISOString();
+      await supaAdmin.auth.admin.updateUserById(supaId, { ban_duration: '876000h' });
+      await supaAdmin.from('staff_pins').delete().eq('uid', supaId);
+      await supaAdmin.from('terminal_device_staff').delete().eq('uid', supaId);
+      if (targetEmail && !ROOT_ADMIN_EMAILS.includes(targetEmail)) {
+        await supaAdmin.from('admins').delete().ilike('email', targetEmail);
+      }
+
+      const { error: softErr } = await supaAdmin.from('profiles').update({
+        status: 'deleted',
+        disabled: true,
+        deleted_at: now,
+        display_name: `${existingProfile?.display_name || 'Staff'} [ARCHIVED]`,
+        updated_by: caller.email,
+        updated_at_ms: Date.now(),
+      }).eq('id', supaId);
+
+      if (softErr) return { success: false, message: softErr.message };
+
+      try {
+        await getDbAdmin().collection('audit_logs').add({
+          action: 'USER_SOFT_DELETED',
+          userId: caller.uid,
+          details: `Soft-deleted user ${targetEmail} (${totalBusinessRecords} historical records preserved)`,
+          timestamp: Date.now(),
+          severity: 'WARNING',
+        });
+      } catch {}
+
+      return {
+        success: true,
+        mode: 'soft-deleted',
+        message: `Account archived and soft-deleted. ${totalBusinessRecords} historical transaction records preserved.`,
+      };
+    }
+
+    // No historical records -> Hard delete
     await supaAdmin.from('staff_pins').delete().eq('uid', supaId);
     await supaAdmin.from('terminal_device_staff').delete().eq('uid', supaId);
     if (targetEmail && !ROOT_ADMIN_EMAILS.includes(targetEmail)) {
@@ -745,7 +984,18 @@ export async function adminDeleteUser(uid: string, idToken?: string) {
     if (delErr && !delErr.message.toLowerCase().includes('not found')) {
       return { success: false, message: delErr.message };
     }
-    return { success: true };
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_HARD_DELETED',
+        userId: caller.uid,
+        details: `Permanently deleted user account ${targetEmail}`,
+        timestamp: Date.now(),
+        severity: 'WARNING',
+      });
+    } catch {}
+
+    return { success: true, mode: 'hard-deleted', message: 'User account permanently deleted.' };
   } catch (error: any) {
     return { success: false, message: mapAdminAuthError(error) };
   }
@@ -753,17 +1003,22 @@ export async function adminDeleteUser(uid: string, idToken?: string) {
 
 export async function adminResetUserPassword(uid: string, pass: string, idToken?: string) {
   try {
-    await verifyAdminCaller(idToken);
+    const caller = await verifyAdminCaller(idToken);
     if (!pass || pass.length < 8) {
       return { success: false, message: 'New password must be at least 8 characters.' };
     }
     const supaAdmin = getSupabaseAdminClient();
     const { data: existingProfile } = await supaAdmin
       .from('profiles')
-      .select('id')
+      .select('id, email, is_super_admin')
       .or(`id.eq.${uid},uid.eq.${uid}`)
       .maybeSingle();
     const supaId = existingProfile?.id || uid;
+    const targetEmail = String(existingProfile?.email || '').toLowerCase();
+
+    if (targetEmail === 'gackstoneb@gmail.com' && !caller.isSuperAdmin && caller.uid !== supaId) {
+      return { success: false, message: 'Only Super Administrators can reset the primary Super Administrator password.' };
+    }
 
     const { error } = await supaAdmin.auth.admin.updateUserById(supaId, {
       password: pass,
@@ -772,6 +1027,89 @@ export async function adminResetUserPassword(uid: string, pass: string, idToken?
     if (error) return { success: false, message: mapAdminAuthError(error) };
 
     await supaAdmin.from('profiles').update({ updated_at_ms: Date.now() }).eq('id', supaId);
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'USER_PASSWORD_RESET',
+        userId: caller.uid,
+        details: `Reset password for user ${targetEmail}`,
+        timestamp: Date.now(),
+        severity: 'WARNING',
+      });
+    } catch {}
+
+    return { success: true };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+/**
+ * Access Matrix & Permissions Management Server Actions
+ */
+export async function adminGetRolesAndPermissions(idToken?: string) {
+  try {
+    await verifyAdminCaller(idToken);
+    const supaAdmin = getSupabaseAdminClient();
+
+    const [{ data: roles, error: rolesErr }, { data: permissions, error: permsErr }, { data: rolePermissions, error: rpErr }] = await Promise.all([
+      supaAdmin.from('roles').select('*').order('created_at', { ascending: true }),
+      supaAdmin.from('permissions').select('*').order('category', { ascending: true }).order('name', { ascending: true }),
+      supaAdmin.from('role_permissions').select('*'),
+    ]);
+
+    if (rolesErr || permsErr || rpErr) {
+      return { success: false, message: rolesErr?.message || permsErr?.message || rpErr?.message };
+    }
+
+    return {
+      success: true,
+      roles: roles || [],
+      permissions: permissions || [],
+      rolePermissions: rolePermissions || [],
+    };
+  } catch (error: any) {
+    return { success: false, message: mapAdminAuthError(error) };
+  }
+}
+
+export async function adminUpdateRolePermission(
+  data: { roleId: string; permissionId: string; accessLevel: string; idToken?: string }
+) {
+  try {
+    const caller = await verifyAdminCaller(data.idToken);
+    const supaAdmin = getSupabaseAdminClient();
+    const upperRoleId = String(data.roleId).trim().toUpperCase();
+    const permId = String(data.permissionId).trim();
+    const accessLevel = String(data.accessLevel).trim().toLowerCase();
+
+    if (upperRoleId === 'SUPER_ADMIN') {
+      return { success: false, message: 'Super Administrator privileges cannot be restricted.' };
+    }
+
+    const { error } = await supaAdmin.from('role_permissions').upsert(
+      {
+        role_id: upperRoleId,
+        permission_id: permId,
+        access_level: accessLevel,
+        updated_at: new Date().toISOString(),
+        updated_by: caller.email,
+      },
+      { onConflict: 'role_id,permission_id' }
+    );
+
+    if (error) return { success: false, message: error.message };
+
+    try {
+      await getDbAdmin().collection('audit_logs').add({
+        action: 'ROLE_PERMISSION_UPDATED',
+        userId: caller.uid,
+        details: `Updated permission ${permId} for role ${upperRoleId} to ${accessLevel}`,
+        timestamp: Date.now(),
+        severity: 'INFO',
+      });
+    } catch {}
+
     return { success: true };
   } catch (error: any) {
     return { success: false, message: mapAdminAuthError(error) };

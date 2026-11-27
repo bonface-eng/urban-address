@@ -115,7 +115,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 
-const ROLES: UserRole[] = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'CASHIER', 'STOREKEEPER', 'ATTENDANT', 'KITCHEN'];
+const ROLES = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'CASHIER', 'STOREKEEPER', 'ATTENDANT', 'KITCHEN'] as const;
 const UNITS: { label: string; value: BusinessUnit }[] = [
   { label: 'Lounge & Bar', value: 'LOUNGE' },
   { label: 'Auto Accessories', value: 'STORE' },

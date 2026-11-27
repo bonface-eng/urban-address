@@ -1,4 +1,4 @@
-export type UserRole = 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'CASHIER' | 'STOREKEEPER' | 'ATTENDANT' | 'KITCHEN' | 'CLIENT';
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'MANAGER' | 'SUPERVISOR' | 'CASHIER' | 'STOREKEEPER' | 'ATTENDANT' | 'KITCHEN' | 'CLIENT';
 export type BusinessUnit = 'LOUNGE' | 'STORE' | 'CARWASH';
 
 export interface BusinessBranch {
@@ -48,6 +48,11 @@ export interface UserProfile {
   mustChangePassword?: boolean;
   isSuperAdmin?: boolean;
   disabled?: boolean;
+  status?: 'active' | 'suspended' | 'deleted';
+  suspendedAt?: string;
+  suspendedBy?: string;
+  suspendedReason?: string;
+  deletedAt?: string;
   hasPin?: boolean;
   accountType?: 'STAFF' | 'CLIENT';
   pin?: string; // 4-digit security code

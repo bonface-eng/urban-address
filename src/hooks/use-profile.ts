@@ -64,13 +64,14 @@ export function ProfileProvider({ children }: { children: React.ReactNode }) {
 
   const isDisabled = Boolean(firestoreProfile?.disabled);
 
-  // Master Admin Bypass: True if root email OR in /admins collection OR profile role is ADMIN / isSuperAdmin
+  // Master Admin Bypass: True if root email OR in /admins collection OR profile role is ADMIN / SUPER_ADMIN / isSuperAdmin
   const isSuperAdmin = useMemo(() =>
     !isDisabled && (
       envStatus?.role === 'ADMIN' ||
       !!adminWhitelist ||
       firestoreProfile?.isSuperAdmin === true ||
-      firestoreProfile?.role === 'ADMIN'
+      firestoreProfile?.role === 'ADMIN' ||
+      firestoreProfile?.role === 'SUPER_ADMIN'
     ),
   [isDisabled, envStatus, adminWhitelist, firestoreProfile]);
 

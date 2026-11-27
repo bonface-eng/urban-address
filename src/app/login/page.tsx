@@ -70,6 +70,16 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  React.useEffect(() => {
+    if (searchParams.get('error') === 'suspended') {
+      toast({
+        variant: 'destructive',
+        title: 'Account Suspended',
+        description: 'This account has been suspended. Please contact an administrator.',
+      });
+    }
+  }, [searchParams]);
+
   const continueAfterLogin = async (signedInUser: any, profile?: Partial<UserProfile> | null) => {
     try {
       await signedInUser.reload?.();
@@ -169,10 +179,10 @@ export default function LoginPage() {
           const snap = await getDoc(userRef);
           if (snap && typeof snap.exists === 'function' && snap.exists()) {
             const fetched = snap.data() as UserProfile;
-            if (fetched.disabled === true) {
+            if (fetched.disabled === true || fetched.status === 'suspended') {
               const { signOut } = await import('@/lib/db');
               await signOut(auth);
-              const disabledErr = new Error('Account disabled') as Error & { code?: string };
+              const disabledErr = new Error('This account has been suspended. Please contact an administrator.') as Error & { code?: string };
               disabledErr.code = 'auth/user-disabled';
               throw disabledErr;
             }
@@ -192,6 +202,9 @@ export default function LoginPage() {
           }
         } catch (profileErr) {
           console.warn('[LOGIN_PROFILE_LOOKUP_WARNING]', profileErr);
+          if ((profileErr as any)?.code === 'auth/user-disabled') {
+            throw profileErr;
+          }
         }
       }
 
@@ -201,16 +214,21 @@ export default function LoginPage() {
       console.error('[LOGIN] signInWithPassword failed:', error);
       void notifyTelegramFailedSignIn(email);
       const code = error?.code || '';
-      const description =
-        code === 'auth/too-many-requests'
+      const rawMsg = String(error?.message || '').toLowerCase();
+      const isSuspended =
+        code === 'auth/user-disabled' ||
+        rawMsg.includes('banned') ||
+        rawMsg.includes('suspended') ||
+        rawMsg.includes('disabled');
+      const description = isSuspended
+        ? 'This account has been suspended. Please contact an administrator.'
+        : code === 'auth/too-many-requests'
           ? 'Too many unsuccessful sign-in attempts. Please wait a few minutes or reset your password.'
           : code === 'auth/network-request-failed'
             ? 'Network error. Please check your internet connection and try again.'
-            : code === 'auth/user-disabled'
-              ? 'This account has been disabled. Please contact an administrator.'
-              : code === 'auth/unauthorized-domain' || code === 'auth/operation-not-allowed'
-                ? 'Email sign-in is not configured for this domain. Please contact an administrator.'
-                : 'Invalid email or password.';
+            : code === 'auth/unauthorized-domain' || code === 'auth/operation-not-allowed'
+              ? 'Email sign-in is not configured for this domain. Please contact an administrator.'
+              : 'Invalid email or password.';
       toast({ variant: "destructive", title: "Login Failed", description });
     } finally {
       setIsSubmitting(false);
