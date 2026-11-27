@@ -33,4 +33,10 @@ describe('role scoped management snapshots',()=>{
  it('does not return arbitrary audit payloads or secret request fields',async()=>{
   profile={role:'ADMIN'};docs=[{action:'UPDATE',details:'Changed stock',requestResourceData:{password:'secret'},secret:'private'}];const result=await run('audit');expect(result.records[0]).toMatchObject({action:'UPDATE',details:'Changed stock'});expect(JSON.stringify(result)).not.toMatch(/requestResourceData|password|private/);
  });
+ it('keeps historical Firestore Timestamp sale dates usable by dashboard date filters',async()=>{
+  profile={role:'ADMIN'};const legacy=Date.UTC(2026,10,26,9);
+  docs=[{type:'LOUNGE',status:'PAID',timestamp:{toMillis:()=>legacy},total:300}];
+  const result=await run('history');expect(result.records[0]).toMatchObject({timestamp:legacy,status:'PAID',total:300});
+ });
+
 });
