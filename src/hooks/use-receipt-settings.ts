@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useFirestore } from '@/firebase';
-import { doc, onSnapshot, setDoc, addDoc, collection } from 'firebase/firestore';
+import { useDb } from '@/lib/data';
+import { doc, onSnapshot, setDoc, addDoc, collection } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 
@@ -51,7 +51,7 @@ export const DEFAULT_RECEIPT_SETTINGS: ReceiptSettings = {
 };
 
 export function useReceiptSettings() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile } = useProfile();
   const [settings, setSettings] = useState<ReceiptSettings>(DEFAULT_RECEIPT_SETTINGS);
   const [loading, setLoading] = useState(true);

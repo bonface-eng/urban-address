@@ -33,8 +33,8 @@ import {
 import { Order } from '@/lib/types';
 import { MAKE_LOGOS } from '@/lib/vehicle-data';
 import { cn } from '@/lib/utils';
-import { useFirestore } from '@/firebase';
-import { doc, updateDoc, writeBatch, collection, setDoc } from 'firebase/firestore';
+import { useDb } from '@/lib/data';
+import { doc, updateDoc, writeBatch, collection, setDoc } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { HardwareService } from '@/lib/hardware-service';
 import { generateReceiptTxt } from '@/lib/receipt-utils';
@@ -110,7 +110,7 @@ export function RecallCarwashDialog({
   activeCashierId,
   activeCashierName
 }: RecallCarwashDialogProps) {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [searchTerm, setSearchTerm] = useState('');
   const [showReconcileForId, setShowReconcileForId] = useState<string | null>(null);
   const [showCancelForId, setShowCancelForId] = useState<string | null>(null);

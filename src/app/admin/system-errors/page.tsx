@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { collection, limit, orderBy, query, updateDoc, doc } from 'firebase/firestore';
+import { collection, limit, orderBy, query, updateDoc, doc } from '@/lib/db';
 import { AlertTriangle, CheckCircle2, Clock3, ShieldCheck } from 'lucide-react';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { PageHeader } from '@/components/shared/page-layout';
 import { Card, CardContent } from '@/components/ui/card';
@@ -15,11 +15,11 @@ import { cn } from '@/lib/utils';
 type Incident = { id: string; incidentId: string; category: string; message: string; route: string; status: 'OPEN' | 'ACKNOWLEDGED' | 'RESOLVED'; createdAt: number };
 
 export default function SystemErrorsPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { isSuperAdmin } = useProfile();
   const [filter, setFilter] = useState<'ALL' | Incident['status']>('ALL');
   const [busyId, setBusyId] = useState<string | null>(null);
-  const incidentsQuery = useMemoFirebase(() => firestore && isSuperAdmin ? query(collection(firestore, 'system_incidents'), orderBy('createdAt', 'desc'), limit(100)) : null, [firestore, isSuperAdmin]);
+  const incidentsQuery = useMemoSupabase(() => firestore && isSuperAdmin ? query(collection(firestore, 'system_incidents'), orderBy('createdAt', 'desc'), limit(100)) : null, [firestore, isSuperAdmin]);
   const { data, loading, error } = useCollection<Incident>(incidentsQuery);
   const incidents = useMemo(() => (data || []).filter(item => filter === 'ALL' || item.status === filter), [data, filter]);
   const openCount = (data || []).filter(item => item.status === 'OPEN').length;

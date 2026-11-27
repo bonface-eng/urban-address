@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       db.collection('email_replies').orderBy('receivedAt', 'desc').limit(100).get(),
       db.collection('email_campaigns').orderBy('createdAt', 'desc').limit(50).get(),
     ]);
-    const serialize = (doc: FirebaseFirestore.QueryDocumentSnapshot) => ({ id: doc.id, ...doc.data() });
+    const serialize = (doc: any) => ({ id: doc.id, ...doc.data() });
     const messages = messagesSnap.docs.map(serialize).sort((a: any,b: any) => Number(b.sentAt || 0)-Number(a.sentAt || 0));
     const replies = repliesSnap.docs.map(serialize).sort((a: any,b: any) => Number(b.receivedAt || 0)-Number(a.receivedAt || 0));
     const campaigns = campaignsSnap.docs.map(serialize).sort((a: any,b: any) => Number(b.createdAt || 0)-Number(a.createdAt || 0));

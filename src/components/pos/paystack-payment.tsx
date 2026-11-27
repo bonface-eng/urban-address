@@ -4,8 +4,8 @@ import React, { useMemo, useState } from 'react';
 import { usePaystackPayment } from 'react-paystack';
 import { Button } from '@/components/ui/button';
 import { CreditCard, CreditCard as CardIcon, CheckCircle2, Loader2, Smartphone } from 'lucide-react';
-import { useUser, useFirestore, useDoc } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useUser, useDb, useDoc } from '@/lib/data';
+import { doc } from '@/lib/db';
 import { useCardReader } from '@/hooks/use-card-reader';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -18,7 +18,7 @@ interface PaystackPaymentProps {
 
 export function PaystackPayment({ amount, onSuccess, onClose }: PaystackPaymentProps) {
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [swipedCard, setSwipedCard] = useState<any>(null);
   
   // Gated reference: system/config requires auth. Gate with user to avoid Permission Error for guests.

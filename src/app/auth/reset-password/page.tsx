@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth } from '@/firebase';
-import { confirmPasswordReset, verifyPasswordResetCode } from 'firebase/auth';
+import { useAuth } from '@/lib/data';
+import { confirmPasswordReset, verifyPasswordResetCode, getSupabaseBrowserClient } from '@/lib/db';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 import { Lock, Eye, EyeOff, RefreshCcw, CheckCircle2, AlertTriangle, ShieldCheck, ArrowLeft } from 'lucide-react';
@@ -14,11 +14,11 @@ import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const auth = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  
+
   const [oobCode, setOobCode] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
   const [password, setPassword] = useState('');
@@ -31,23 +31,61 @@ export default function ResetPasswordPage() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    const code = searchParams.get('oobCode');
-    setOobCode(code);
+    let active = true;
+    const codeParam = searchParams.get('oobCode') || searchParams.get('token_hash');
+    const pkceCode = searchParams.get('code');
+    setOobCode(codeParam || pkceCode);
 
-    if (auth && code) {
-      verifyPasswordResetCode(auth, code)
-        .then((userEmail) => {
+    const verify = async () => {
+      try {
+        const supabase = getSupabaseBrowserClient();
+
+        // Case 1: Custom/Resend token_hash (?oobCode=... or ?token_hash=...)
+        if (codeParam) {
+          const userEmail = await verifyPasswordResetCode(auth, codeParam);
+          if (!active) return;
           setEmail(userEmail);
           setIsValidCode(true);
           setIsVerifying(false);
-        })
-        .catch((err) => {
+          return;
+        }
+
+        // Case 2: Direct PKCE code (?code=...) without going through /auth/callback
+        if (pkceCode) {
+          const { data, error } = await supabase.auth.exchangeCodeForSession(pkceCode);
+          if (!error && data?.session?.user?.email) {
+            if (!active) return;
+            setEmail(data.session.user.email);
+            setIsValidCode(true);
+            setIsVerifying(false);
+            return;
+          }
+        }
+
+        // Case 3: /auth/callback already exchanged the code/token_hash and established a session
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData?.session?.user?.email) {
+          if (!active) return;
+          setEmail(sessionData.session.user.email);
+          setIsValidCode(true);
           setIsVerifying(false);
+          return;
+        }
+
+        if (active) {
           setIsValidCode(false);
-        });
-    } else {
-      setIsVerifying(false);
-    }
+          setIsVerifying(false);
+        }
+      } catch {
+        if (active) {
+          setIsValidCode(false);
+          setIsVerifying(false);
+        }
+      }
+    };
+
+    void verify();
+    return () => { active = false; };
   }, [auth, searchParams]);
 
   const passwordStrength = useMemo(() => {
@@ -61,40 +99,40 @@ export default function ResetPasswordPage() {
   }, [password]);
 
   const strengthColor = useMemo(() => {
-    if (passwordStrength <= 25) return "bg-red-500";
-    if (passwordStrength <= 50) return "bg-amber-500";
-    if (passwordStrength <= 75) return "bg-blue-500";
-    return "bg-green-500";
+    if (passwordStrength <= 25) return 'bg-red-500';
+    if (passwordStrength <= 50) return 'bg-amber-500';
+    if (passwordStrength <= 75) return 'bg-blue-500';
+    return 'bg-green-500';
   }, [passwordStrength]);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth || !oobCode || isSubmitting) return;
+    if (!isValidCode || isSubmitting) return;
 
     if (password.length < 8 || passwordStrength < 50) {
-      toast({ variant: "destructive", title: "Password Too Weak", description: "Use at least 8 characters and add an uppercase letter, number or symbol." });
+      toast({ variant: 'destructive', title: 'Password Too Weak', description: 'Use at least 8 characters and add an uppercase letter, number or symbol.' });
       return;
     }
 
     if (password !== confirmPassword) {
-      toast({ variant: "destructive", title: "Passwords Mismatch", description: "Please ensure both passwords match." });
+      toast({ variant: 'destructive', title: 'Passwords Mismatch', description: 'Please ensure both passwords match.' });
       return;
     }
 
     setIsSubmitting(true);
     try {
-      await confirmPasswordReset(auth, oobCode, password);
+      await confirmPasswordReset(auth, oobCode || 'session', password);
       setIsSuccess(true);
-      toast({ title: "Password Updated", description: "Your new password has been saved." });
-      
+      toast({ title: 'Password Updated', description: 'Your new password has been saved.' });
+
       setTimeout(() => {
         router.push('/login');
       }, 3000);
     } catch (error: any) {
       toast({
-        variant: "destructive",
-        title: "Update Failed",
-        description: "The link may have expired. Please try requesting a new reset email.",
+        variant: 'destructive',
+        title: 'Update Failed',
+        description: error?.message || 'The link may have expired. Please try requesting a new reset email.',
       });
     } finally {
       setIsSubmitting(false);
@@ -112,22 +150,22 @@ export default function ResetPasswordPage() {
     );
   }
 
-  if (!oobCode || !isValidCode) {
+  if (!isValidCode) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-zinc-50 p-6 text-center">
         <div className="max-w-md w-full rounded-[3rem] border-none shadow-2xl p-12 space-y-8 bg-white">
-           <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-500 mx-auto">
-              <AlertTriangle className="w-10 h-10" />
-           </div>
-           <div className="space-y-2">
-              <h2 className="text-2xl font-black uppercase font-headline">Invalid Link</h2>
-              <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
-                This reset link is no longer valid or has already been used.
-              </p>
-           </div>
-           <Button asChild className="w-full h-14 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">
-              <Link href="/forgot-password">Request a New Link</Link>
-           </Button>
+          <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center text-red-500 mx-auto">
+            <AlertTriangle className="w-10 h-10" />
+          </div>
+          <div className="space-y-2">
+            <h2 className="text-2xl font-black uppercase font-headline">Invalid Link</h2>
+            <p className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest leading-relaxed">
+              This reset link is no longer valid or has already been used.
+            </p>
+          </div>
+          <Button asChild className="w-full h-14 bg-zinc-900 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest">
+            <Link href="/forgot-password">Request a New Link</Link>
+          </Button>
         </div>
       </div>
     );
@@ -135,9 +173,8 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen w-full flex overflow-hidden bg-white relative font-sans">
-      {/* Back Button - Relocated to Top Left for maximum visibility */}
-      <Link 
-        href="/" 
+      <Link
+        href="/"
         className="absolute top-8 left-8 z-[100] flex items-center gap-3 py-2.5 px-6 bg-white/80 lg:bg-black/20 backdrop-blur-xl rounded-full border border-zinc-200 lg:border-white/10 text-[10px] font-black uppercase tracking-[0.3em] text-zinc-900 lg:text-white hover:bg-primary/20 hover:border-primary/40 transition-all shadow-xl active:scale-95 group"
       >
         <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
@@ -148,13 +185,13 @@ export default function ResetPasswordPage() {
         <Image src={placeholderImages.auth.url} alt="Urban Excellence" fill className="object-cover brightness-50" priority />
         <div className="absolute inset-0 bg-gradient-to-r from-black/40 to-transparent" />
         <div className="absolute bottom-12 left-12 z-20 text-white space-y-2">
-           <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Set New Password</h1>
-           <p className="text-[10px] font-bold uppercase tracking-[0.4em] opacity-60">Security Update for {email}</p>
+          <h1 className="text-4xl font-black font-headline uppercase tracking-tighter">Set New Password</h1>
+          <p className="text-[10px] font-bold uppercase tracking-[0.4em] opacity-60">Security Update for {email}</p>
         </div>
       </div>
-      
+
       <div className="flex-1 flex flex-col items-center justify-center p-8 relative bg-white">
-        <div className="w-full max-sm space-y-10">
+        <div className="w-full max-w-sm space-y-10">
           <div className="text-center">
             <img src="/assets/logo.png" alt="Urban Express" className="h-16 w-auto mx-auto mb-8" />
             <h2 className="text-[11px] font-black uppercase tracking-[0.4em] text-zinc-900">New Password</h2>
@@ -163,13 +200,13 @@ export default function ResetPasswordPage() {
 
           {isSuccess ? (
             <div className="space-y-8 text-center animate-in zoom-in-95 duration-500">
-               <div className="w-20 h-20 rounded-[2.5rem] bg-green-50 flex items-center justify-center text-green-500 mx-auto">
-                  <CheckCircle2 className="w-10 h-10" />
-               </div>
-               <div className="space-y-2">
-                  <h3 className="text-2xl font-black uppercase text-zinc-900">Success</h3>
-                  <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Your password has been changed. Redirecting to sign in...</p>
-               </div>
+              <div className="w-20 h-20 rounded-[2.5rem] bg-green-50 flex items-center justify-center text-green-500 mx-auto">
+                <CheckCircle2 className="w-10 h-10" />
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-2xl font-black uppercase text-zinc-900">Success</h3>
+                <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Your password has been changed. Redirecting to sign in...</p>
+              </div>
             </div>
           ) : (
             <form className="space-y-6" onSubmit={handleReset}>
@@ -178,22 +215,22 @@ export default function ResetPasswordPage() {
                   <Label className="text-[10px] font-black uppercase text-zinc-400 px-1">New Password</Label>
                   <div className="relative">
                     <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
-                    <Input 
-                      type={showPassword ? "text" : "password"} 
-                      value={password} 
-                      onChange={e => setPassword(e.target.value)} 
-                      placeholder="Enter new password" 
-                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10" 
-                      required 
+                    <Input
+                      type={showPassword ? 'text' : 'password'}
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      placeholder="Enter new password"
+                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10"
+                      required
                     />
                     <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-300">
-                       {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
                   {password && (
                     <div className="space-y-1.5 px-1 animate-in fade-in">
                       <div className="h-1 w-full bg-zinc-100 rounded-full overflow-hidden">
-                        <div className={cn("h-full transition-all duration-500", strengthColor)} style={{ width: `${passwordStrength}%` }} />
+                        <div className={cn('h-full transition-all duration-500', strengthColor)} style={{ width: `${passwordStrength}%` }} />
                       </div>
                       <p className="text-[8px] font-black uppercase text-zinc-400 tracking-widest text-right">Password Strength</p>
                     </div>
@@ -204,15 +241,15 @@ export default function ResetPasswordPage() {
                   <Label className="text-[10px] font-black uppercase text-zinc-400 px-1">Confirm Password</Label>
                   <div className="relative">
                     <ShieldCheck className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
-                    <Input 
-                      type={showConfirmPassword ? "text" : "password"} 
-                      value={confirmPassword} 
-                      onChange={e => setConfirmPassword(e.target.value)} 
-                      placeholder="Repeat password" 
-                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 pr-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10" 
-                      required 
+                    <Input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      value={confirmPassword}
+                      onChange={e => setConfirmPassword(e.target.value)}
+                      placeholder="Repeat password"
+                      className="h-14 bg-zinc-50 border-none rounded-2xl pl-12 pr-12 text-sm font-bold shadow-inner focus:ring-2 focus:ring-primary/10"
+                      required
                     />
-                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? "Hide confirmation password" : "Show confirmation password"} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-900">
+                    <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)} aria-label={showConfirmPassword ? 'Hide confirmation password' : 'Show confirmation password'} className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-900">
                       {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   </div>
@@ -224,7 +261,7 @@ export default function ResetPasswordPage() {
               </Button>
             </form>
           )}
-          
+
           <div className="pt-12">
             <p className="text-center text-[8px] font-bold text-zinc-200 uppercase tracking-widest">
               © 2024 Urban Express
@@ -233,5 +270,13 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-white"><RefreshCcw className="w-8 h-8 animate-spin text-primary" /></div>}>
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

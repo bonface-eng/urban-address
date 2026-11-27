@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '@/lib/db';
 import { 
   Car, 
   Search, 
@@ -32,8 +32,8 @@ import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { Product, CarwashJob, UserProfile, Order, OrderItem } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
-import { useFirestore, useUser, useCollection, useMemoFirebase, errorEmitter, FirestorePermissionError } from '@/firebase';
-import { collection, query, where, addDoc, doc, updateDoc, orderBy, limit, getDoc, increment, writeBatch, setDoc } from 'firebase/firestore';
+import { useDb, useUser, useCollection, useMemoSupabase, errorEmitter, FirestorePermissionError } from '@/lib/data';
+import { collection, query, where, addDoc, doc, updateDoc, orderBy, limit, getDoc, increment, writeBatch, setDoc } from '@/lib/db';
 import { HardwareService } from '@/lib/hardware-service';
 import { POSProductCard } from '@/components/pos/pos-product-card';
 import { POSCartItem } from '@/components/pos/pos-cart-item';
@@ -74,7 +74,7 @@ const QUICK_COLORS = [
 ];
 
 export default function CarwashPOS() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { user } = useUser();
   const { activeTerminal, activeCashier, activeRegisterSession } = useTerminal();
   
@@ -162,22 +162,22 @@ export default function CarwashPOS() {
     return () => clearTimeout(timer);
   }, [firestore, plateNumber, jobType]);
 
-  const servicesQuery = useMemoFirebase(() => {
+  const servicesQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'inventory'), where('unit', '==', 'CARWASH'));
   }, [firestore]);
 
-  const attendantsQuery = useMemoFirebase(() => {
+  const attendantsQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'users'), where('role', '==', 'ATTENDANT'));
   }, [firestore]);
 
-  const recentJobsQuery = useMemoFirebase(() => {
+  const recentJobsQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(collection(firestore, 'carwash_jobs'), orderBy('timestamp', 'desc'), limit(150));
   }, [firestore]);
 
-  const ordersBaseQuery = useMemoFirebase(() => {
+  const ordersBaseQuery = useMemoSupabase(() => {
     if (!firestore || !activeCashier?.uid) return null;
     return query(
       collection(firestore, 'users', activeCashier.uid, 'held_bills'),

@@ -4,11 +4,11 @@ import { PageHeader } from '@/components/shared/page-layout';
 
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { collection, addDoc, doc, onSnapshot, query, updateDoc, where, limit } from 'firebase/firestore';
+import { collection, addDoc, doc, onSnapshot, query, updateDoc, where, limit } from '@/lib/db';
 import { ArrowLeft, Headphones, Mic, MicOff, Radio, ShieldAlert, Volume2, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useFirestore, useUser } from '@/firebase';
+import { useDb, useUser } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { POSTerminal } from '@/lib/types';
 
@@ -28,7 +28,7 @@ type Session = {
 };
 
 export default function AdminLiveAudioPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { user } = useUser();
   const { profile, role, isSuperAdmin, loading: profileLoading } = useProfile();
   const [terminals, setTerminals] = useState<POSTerminal[]>([]);

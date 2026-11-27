@@ -1,21 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import crypto from 'crypto';
 import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 
 export const runtime = 'nodejs';
 
 function initAdmin() {
-  if (admin.apps.length > 0) return admin.apps[0];
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (serviceAccountKey) {
-    const serviceAccount = JSON.parse(serviceAccountKey);
-    if (serviceAccount.private_key) {
-      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-    }
-    return admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
-  }
-  return admin.initializeApp();
+  return admin.getAdminApp();
 }
 
 export async function POST(req: NextRequest) {

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { createHash } from 'node:crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { createClient } from '@supabase/supabase-js';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { sendTransactionalEmail } from '@/lib/resend';
 import { passwordResetEmail } from '@/lib/email/templates';
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -72,17 +74,27 @@ export async function POST(request: NextRequest) {
       const user = await admin.auth().getUserByEmail(email);
       if (user.email && !user.disabled) {
         const origin = appOrigin(request);
-        const firebaseLink = await admin.auth().generatePasswordResetLink(user.email, {
-          url: `${origin}/auth/reset-password`,
-          handleCodeInApp: false,
-        });
-        const code = new URL(firebaseLink).searchParams.get('oobCode');
-        if (!code) throw new Error('Firebase did not return a password reset code.');
+        if (process.env.RESEND_API_KEY) {
+          const resetLink = await admin.auth().generatePasswordResetLink(user.email, {
+            url: `${origin}/auth/reset-password`,
+            handleCodeInApp: false,
+          });
+          const code = new URL(resetLink).searchParams.get('oobCode');
+          if (!code) throw new Error('No password reset code was returned.');
 
-        const resetUrl = new URL('/auth/reset-password', origin);
-        resetUrl.searchParams.set('oobCode', code);
-        const emailContent = passwordResetEmail({ email: user.email, resetUrl: resetUrl.toString() });
-        await sendTransactionalEmail({ sender: 'auth', to: user.email, ...emailContent });
+          const resetUrl = new URL('/auth/reset-password', origin);
+          resetUrl.searchParams.set('oobCode', code);
+          const emailContent = passwordResetEmail({ email: user.email, resetUrl: resetUrl.toString() });
+          await sendTransactionalEmail({ sender: 'auth', to: user.email, ...emailContent });
+        } else {
+          // Fallback to Supabase Auth's native reset email when Resend is not configured.
+          const pubClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          });
+          await pubClient.auth.resetPasswordForEmail(user.email, {
+            redirectTo: `${origin}/auth/callback?next=/auth/reset-password`,
+          });
+        }
       }
     } catch (error) {
       const code = (error as { code?: string })?.code;

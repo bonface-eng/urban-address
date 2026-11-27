@@ -1,6 +1,6 @@
 import { NextRequest,NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getAdminApp,getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp,getDbAdmin } from '@/lib/db/admin';
 import { createOtp,hashOtp,utcDayEnd,utcDayKey,recordOtpRequestSignal } from '@/lib/otp-security';
 import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 import { sendTransactionalEmail } from '@/lib/resend';

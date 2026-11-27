@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getDbAdmin } from '@/lib/firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { markOrderPaid } from '@/lib/payment-server';
 export const runtime = 'nodejs';
 

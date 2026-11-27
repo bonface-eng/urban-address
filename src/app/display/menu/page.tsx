@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { useFirestore } from '@/firebase';
+import { doc, onSnapshot } from '@/lib/db';
+import { useDb } from '@/lib/data';
 import { Monitor, Utensils, WifiOff, Star, X, Maximize2 } from 'lucide-react';
 
 type MenuItem = { productId: string; name: string; category: string; price: number; image?: string; featured: boolean; available: boolean };
@@ -19,7 +19,7 @@ function Price({ value, light = false }: { value: number; light?: boolean }) {
 }
 
 export default function DigitalMenuDisplayPage() {
-  const db = useFirestore();
+  const db = useDb();
   const [menu, setMenu] = useState<MenuDoc | null>(null);
   const [connected, setConnected] = useState(true);
   const [slide, setSlide] = useState(0);

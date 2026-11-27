@@ -2,8 +2,8 @@
 
 import { S3Client, PutObjectCommand, HeadBucketCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { SYSTEM_CONFIG } from './config';
-import * as admin from 'firebase-admin';
-import { getAdminApp, getDbAdmin } from './firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 
 const ROOT_ADMIN_EMAILS = [
   'urbanautoexpressnakuru@gmail.com',
@@ -32,7 +32,7 @@ async function fileToBuffer(file: File): Promise<Buffer> {
 }
 
 /**
- * Verifies a Firebase ID token and ensures the caller holds an ADMIN/MANAGER role
+ * Verifies a Supabase access token and ensures the caller holds an ADMIN/MANAGER role
  * or is in the root-admin / admins whitelist.
  */
 async function requireAdminCaller(idToken?: string | null) {
@@ -474,7 +474,7 @@ export async function checkAdminStatus() {
 }
 
 export async function checkAiStatus() {
-  const geminiKey = process.env.GOOGLE_GENAI_API_KEY || process.env.GEMINI_API_KEY;
+  const geminiKey = process.env.GOOGLE_GENAI_API_KEY;
   return {
     hasKey: !!geminiKey,
     provider: 'Google Gemini',

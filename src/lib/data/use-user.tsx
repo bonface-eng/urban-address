@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import { onAuthStateChanged, User } from 'firebase/auth';
-import { useAuth } from '../provider';
+import { onAuthStateChanged, type User } from '@/lib/db';
+import { useAuth } from './provider';
 
 /**
- * Hook to track Firebase Auth state.
- * Stabilizes return values to prevent infinite re-render loops in consumers.
+ * Tracks the Supabase Auth session via supabase.auth.onAuthStateChange.
+ * Return value is memoised to avoid re-render loops in consumers.
  */
 export function useUser() {
   const auth = useAuth();
@@ -17,17 +17,14 @@ export function useUser() {
 
   useEffect(() => {
     if (!auth) {
-      setState(prev => prev.loading ? { ...prev, loading: false } : prev);
+      setState((prev) => (prev.loading ? { ...prev, loading: false } : prev));
       return;
     }
-
     const unsubscribe = onAuthStateChanged(auth, (u) => {
       setState({ user: u, loading: false });
     });
-    
     return () => unsubscribe();
   }, [auth]);
 
-  // Memoize return object to maintain reference stability
   return useMemo(() => state, [state.user, state.loading]);
 }

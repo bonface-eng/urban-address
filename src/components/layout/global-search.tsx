@@ -5,8 +5,8 @@ import { Search, Command, ShoppingBag, Coffee, Car, ArrowRight, X } from 'lucide
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, limit } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, limit } from '@/lib/db';
 import { useProfile } from '@/hooks/use-profile';
 import { useRouter } from 'next/navigation';
 import { Product, CarwashJob } from '@/lib/types';
@@ -17,7 +17,7 @@ export function GlobalSearch() {
   const [searchTerm, setSearchTerm] = useState('');
   const router = useRouter();
   const { role, profile } = useProfile();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   useEffect(() => {
     const down = (e: KeyboardEvent) => {

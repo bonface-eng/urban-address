@@ -24,8 +24,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useProfile } from '@/hooks/use-profile';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, orderBy, limit, where, addDoc, doc, setDoc, deleteDoc, getDocs, writeBatch } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase, useUser } from '@/lib/data';
+import { collection, query, orderBy, limit, where, addDoc, doc, setDoc, deleteDoc, getDocs, writeBatch } from '@/lib/db';
 import { Order, Product } from '@/lib/types';
 import { jarvisConsult, BIOutput } from '@/ai/flows/business-intelligence-flow';
 import { cn } from '@/lib/utils';
@@ -42,7 +42,7 @@ const QUICK_PROMPTS = [
 export default function UrbanAI() {
   const { isSuperAdmin, profile } = useProfile();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [queryText, setQueryText] = useState('');
   const [isConsulting, setIsProcessing] = useState(false);
   const [aiStatus, setAiStatus] = useState<{ hasKey: boolean; status: string; message: string }>({ hasKey: false, status: 'CHECKING', message: 'Verifying link...' });
@@ -56,17 +56,17 @@ export default function UrbanAI() {
   }, []);
 
   // Context Queries
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore || !isSuperAdmin) return null;
     return query(collection(firestore, 'orders'), where('status', '==', 'PAID'), where('timestamp', '>=', startOfToday));
   }, [firestore, startOfToday, isSuperAdmin]);
 
-  const inventoryQuery = useMemoFirebase(() => {
+  const inventoryQuery = useMemoSupabase(() => {
     if (!firestore || !isSuperAdmin) return null;
     return collection(firestore, 'inventory');
   }, [firestore, isSuperAdmin]);
 
-  const historyQuery = useMemoFirebase(() => {
+  const historyQuery = useMemoSupabase(() => {
     if (!firestore || !user || !isSuperAdmin) return null;
     return query(collection(firestore, 'users', user.uid, 'ai_chats'), orderBy('timestamp', 'desc'), limit(50));
   }, [firestore, user?.uid, isSuperAdmin]);

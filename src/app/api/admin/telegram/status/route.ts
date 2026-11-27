@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
 
   const mpesaRequired = ['MPESA_CONSUMER_KEY','MPESA_CONSUMER_SECRET','MPESA_SHORTCODE','MPESA_PASSKEY'];
   const mpesaMissing = mpesaRequired.filter(key => !process.env[key]?.trim());
-  if (!process.env.MPESA_CALLBACK_URL?.trim() && !process.env.APP_BASE_URL?.trim() && !process.env.NEXT_PUBLIC_APP_URL?.trim() && !process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()) mpesaMissing.push('MPESA_CALLBACK_URL or APP_BASE_URL');
+  if (!process.env.MPESA_CALLBACK_URL?.trim() && !process.env.NEXT_PUBLIC_APP_URL?.trim() && !process.env.VERCEL_PROJECT_PRODUCTION_URL?.trim()) mpesaMissing.push('MPESA_CALLBACK_URL or NEXT_PUBLIC_APP_URL');
   const mpesa = {
     configured: mpesaMissing.length === 0,
     environment: process.env.MPESA_ENV === 'production' ? 'production' : process.env.MPESA_ENV === 'sandbox' ? 'sandbox' : 'sandbox (default)',

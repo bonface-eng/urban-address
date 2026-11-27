@@ -4,7 +4,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { listImagesFromR2, uploadImageToR2 } from '@/lib/actions';
 import { buildEmailConfirmationMessage } from '@/lib/email/confirmation';
-import { useUser } from '@/firebase';
+import { useUser } from '@/lib/data';
 import { useProfile } from '@/hooks/use-profile';
 import { EmailActivity } from '@/components/admin/email-activity';
 import { PageHeader } from '@/components/shared/page-layout';

@@ -1,8 +1,8 @@
 'use client';
 
 import React from 'react';
-import { useUser, useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, where, orderBy } from 'firebase/firestore';
+import { useUser, useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, where, orderBy } from '@/lib/db';
 import { Order } from '@/lib/types';
 import { ChevronRight, Package, Calendar, ArrowRight, Receipt, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import Link from 'next/link';
@@ -13,9 +13,9 @@ import { cn } from '@/lib/utils';
 
 export default function ClientOrdersPage() {
   const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore || !user) return null;
     return query(
       collection(firestore, 'orders'),

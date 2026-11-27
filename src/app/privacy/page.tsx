@@ -25,7 +25,7 @@ export default function PrivacyPage() {
     { 
       title: "4. Digital Security", 
       icon: Gavel,
-      content: "Our 'Business OS' utilizes industry-standard encryption and Firebase security protocols. Every staff action is logged to an immutable audit trail, and we enforce a zero-trust model for all financial and personnel records." 
+      content: "Our 'Business OS' utilizes industry-standard encryption and Supabase security protocols (Postgres row-level security). Every staff action is logged to an immutable audit trail, and we enforce a zero-trust model for all financial and personnel records." 
     },
     {
       title: "5. Cookie Preferences",

@@ -3,7 +3,7 @@
 import { PageHeader } from '@/components/shared/page-layout';
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { getAuth } from 'firebase/auth';
+import { getAuth } from '@/lib/db';
 import { 
   Search, 
   Plus, 
@@ -79,8 +79,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 import { Product, BusinessUnit, Order } from '@/lib/types';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy, addDoc, where, doc, updateDoc, deleteDoc, getDocs, limit, writeBatch } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
 import { ImageUpload } from '@/components/shared/image-upload';
@@ -94,7 +94,7 @@ type StockStatusFilter = 'ALL' | 'IN_STOCK' | 'LOW' | 'OUT' | 'ARCHIVED';
 type SortOption = 'name_asc' | 'name_desc' | 'price_desc' | 'price_asc' | 'stock_asc' | 'stock_desc' | 'value_desc';
 
 export default function InventoryCatalogue() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin } = useProfile();
   
   const [mounted, setMounted] = useState(false);
@@ -207,7 +207,7 @@ export default function InventoryCatalogue() {
     }
   }, [activeUnitTab, stockStatusFilter, mounted]);
 
-  const inventoryQuery = useMemoFirebase(() => {
+  const inventoryQuery = useMemoSupabase(() => {
     if (!firestore || !profile) return null;
     return query(collection(firestore, 'inventory'), orderBy('name', 'asc'));
   }, [firestore, profile?.uid]);
@@ -216,7 +216,7 @@ export default function InventoryCatalogue() {
 
   // Product sales analytics are subscribed only while a product detail sheet is open.
   // This keeps the totals live and avoids a one-time getDocs snapshot.
-  const productOrdersQuery = useMemoFirebase(() => {
+  const productOrdersQuery = useMemoSupabase(() => {
     if (!firestore || activeWorkflow !== 'details' || !editingItem?.id) return null;
     return query(
       collection(firestore, 'orders'),

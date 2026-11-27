@@ -98,8 +98,8 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { useFirestore, useDoc, useCollection, useMemoFirebase, useUser } from '@/firebase';
-import { doc, setDoc, collection, query, orderBy, limit, addDoc, deleteDoc, updateDoc, where, getDocs, writeBatch } from 'firebase/firestore';
+import { useDb, useDoc, useCollection, useMemoSupabase, useUser } from '@/lib/data';
+import { doc, setDoc, collection, query, orderBy, limit, addDoc, deleteDoc, updateDoc, where, getDocs, writeBatch } from '@/lib/db';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
@@ -170,7 +170,7 @@ const ACCESS_PAGES: Array<{ label: string; href: string; icon: React.ElementType
 export default function AdminPanel() {
   const { isSuperAdmin, profile } = useProfile();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isBroadcasting, setIsBroadcasting] = useState(false);
   const [isSettingUpBranches, setIsSettingUpBranches] = useState(false);
@@ -231,13 +231,13 @@ export default function AdminPanel() {
   }, [firestore, user, isSuperAdmin]);
   const { data: branches } = useCollection<BusinessBranch>(branchesRef);
 
-  const staffQuery = useMemoFirebase(() => {
+  const staffQuery = useMemoSupabase(() => {
     if (!firestore || !user || !isSuperAdmin) return null;
     return query(collection(firestore, 'users'), orderBy('createdAt', 'desc'));
   }, [firestore, user, isSuperAdmin]);
   const { data: allStaff } = useCollection<UserProfile>(staffQuery);
 
-  const broadcastHistoryQuery = useMemoFirebase(() => {
+  const broadcastHistoryQuery = useMemoSupabase(() => {
     if (!firestore || !user || !isSuperAdmin) return null;
     return query(
       collection(firestore, 'audit_logs'),

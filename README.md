@@ -487,9 +487,9 @@ Browser permissions (such as location, microphone or notifications) must be requ
 
 | Service / package | Intended use | Configuration note |
 | --- | --- | --- |
-| Firebase Authentication | User sign-in and identity | Configure the Firebase web app and authorized domains |
-| Cloud Firestore | Application data and realtime listeners | Deploy rules and indexes alongside schema changes |
-| Firebase Admin SDK | Trusted server-side Firebase operations | Use a server-only service account or supported workload credentials |
+| Supabase Auth | User sign-in, session refresh, and identity | Configure Supabase URL, publishable anon key, and redirect URLs |
+| Supabase PostgreSQL & Realtime | Application data, RLS policies, and realtime subscriptions | Apply SQL migrations in `supabase/migrations/` |
+| Supabase Service Role | Trusted server-side operations and admin APIs | Use `SUPABASE_SERVICE_ROLE_KEY` on the server only |
 | Cloudflare R2 | Object/file storage | Use S3-compatible endpoint and credentials; never expose secret keys in client bundles |
 | Paystack | Payment authorization | Configure public and secret credentials according to the payment flow |
 | Genkit / Google GenAI | AI workflow infrastructure | Enable only the flows actually required and configure server-side credentials |
@@ -504,9 +504,15 @@ External service availability, quotas, callback URLs and account-level setup are
 
 - Node.js compatible with the repository's Next.js 15 toolchain.
 - npm.
-- Access to the Firebase project used by the environment.
+- Access to the Supabase project used by the environment.
 - Required environment variables for the features you intend to run.
-- Optional credentials for R2, Paystack, Genkit and Telegram integrations.
+- Optional credentials for R2, Paystack, Resend, Genkit and Telegram integrations.
+
+### Bootstrap first super-admin
+
+```bash
+node scripts/bootstrap-admin.mjs
+```
 
 ### Install dependencies
 
@@ -546,16 +552,17 @@ The exact variables depend on the enabled features and deployment environment. K
 
 Typical configuration areas include:
 
-| Configuration area | Examples of values (names are illustrative; verify the code before setting) |
+| Configuration area | Required / expected variables |
 | --- | --- |
-| Firebase client | `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID` |
-| Firebase Admin | Server-only service-account/workload credentials |
+| Supabase client | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| Supabase server & DB | `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, `DATABASE_URL_MIGRATIONS` |
 | Cloudflare R2 | Account endpoint, bucket, access key ID and secret access key |
 | Paystack | Public key for client integration and secret key for trusted server operations |
+| Resend | `RESEND_API_KEY` for transactional emails and password reset delivery |
 | Genkit | Google AI / Genkit credentials and model configuration |
 | Telegram | Bot token and webhook configuration |
 
-Do not copy the illustrative names above blindly: inspect the Firebase initialization and integration modules in the checked-out revision to confirm the exact environment variable names expected by the application.
+See `.env.example` for the complete list of environment variables expected by the application.
 
 ## Quality checks and testing
 

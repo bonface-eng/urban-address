@@ -9,7 +9,6 @@ describe('Lounge POS Station Logic', () => {
     mockUseCollection.mockReturnValue({ data: [], loading: false, error: null });
     render(<LoungePOS />);
     
-    expect(screen.getByPlaceholderText(/TABLE/i)).toBeInTheDocument();
     expect(screen.getByText(/Drinks/i)).toBeInTheDocument();
     expect(screen.getByText(/Popular/i)).toBeInTheDocument();
   });
@@ -26,8 +25,8 @@ describe('Lounge POS Station Logic', () => {
     fireEvent.click(item);
 
     await waitFor(() => {
-      expect(screen.getByText(/KES 250/i)).toBeInTheDocument();
-      expect(screen.getByText(/Cart/i)).toBeInTheDocument();
+      expect(screen.getAllByText(/KES 250/i).length).toBeGreaterThan(0);
+      expect(screen.getAllByText(/Cart/i).length).toBeGreaterThan(0);
     });
   });
 

@@ -24,14 +24,14 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, orderBy, limit } from '@/lib/db';
 import { AuditLog } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { analyzeAuditLogs, AuditOutput } from '@/ai/flows/audit-fraud-flow';
 
 export default function FraudSecurityDashboard() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [mounted, setMounted] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [aiReport, setAiReport] = useState<AuditOutput | null>(null);

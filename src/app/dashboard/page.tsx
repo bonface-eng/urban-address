@@ -65,8 +65,8 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit, where } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy, limit, where } from '@/lib/db';
 import { Order, Product, POSTerminal } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { useRouter } from 'next/navigation';
@@ -100,7 +100,7 @@ type DatePreset = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL_
 export default function DashboardPage() {
   const { role, profile, isSuperAdmin, isEmployee, loading: profileLoading } = useProfile();
   const router = useRouter();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [mounted, setMounted] = useState(false);
   const [isShiftReportOpen, setIsShiftReportOpen] = useState(false);
   const [shiftReportType, setShiftReportType] = useState<'X' | 'Z'>('X');
@@ -139,23 +139,23 @@ export default function DashboardPage() {
   }, [dateFilter, startOfToday]);
 
   // Security Gate: Only initiate global queries once the role is resolved as staff/admin
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore || !mounted || profileLoading || !isEmployee) return null;
     return query(collection(firestore, 'orders'), orderBy('timestamp', 'desc'));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
-  const inventoryQuery = useMemoFirebase(() => {
+  const inventoryQuery = useMemoSupabase(() => {
     if (!firestore || !mounted || profileLoading || !isEmployee) return null;
     return query(collection(firestore, 'inventory'));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
-  const terminalsQuery = useMemoFirebase(() => {
+  const terminalsQuery = useMemoSupabase(() => {
     if (!firestore || !mounted || profileLoading || !isEmployee) return null;
     return query(collection(firestore, 'pos_terminals'));
   }, [firestore, mounted, profileLoading, isEmployee]);
 
   // Held Bills Query: Private scratchpad for individual cashier pending bills
-  const heldBillsQuery = useMemoFirebase(() => {
+  const heldBillsQuery = useMemoSupabase(() => {
     if (!firestore || !mounted || profileLoading || !profile?.uid || isAdmin) return null;
     return collection(firestore, 'users', profile.uid, 'held_bills');
   }, [firestore, mounted, profileLoading, profile?.uid, isAdmin]);

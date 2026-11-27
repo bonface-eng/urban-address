@@ -20,15 +20,15 @@ import {
   SheetTitle, 
   SheetTrigger
 } from '@/components/ui/sheet';
-import { useUser, useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, orderBy, limit, doc, updateDoc, writeBatch } from 'firebase/firestore';
+import { useUser, useDb, useCollection } from '@/lib/data';
+import { collection, query, where, orderBy, limit, doc, updateDoc, writeBatch } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 
 export function Notifications() {
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [isOpen, setIsOpen] = React.useState(false);
 
   const prevNotifIds = useRef<Set<string>>(new Set());

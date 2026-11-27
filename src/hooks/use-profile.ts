@@ -1,8 +1,8 @@
 'use client';
 
 import React, { createContext, useContext, useMemo, useState, useEffect } from 'react';
-import { doc } from 'firebase/firestore';
-import { useFirestore, useUser, useDoc } from '@/firebase';
+import { doc } from '@/lib/db';
+import { useDb, useUser, useDoc } from '@/lib/data';
 import { UserProfile, UserRole } from '@/lib/types';
 
 interface ProfileContextType {
@@ -24,7 +24,7 @@ const ProfileContext = createContext<ProfileContextType | undefined>(undefined);
  */
 export function ProfileProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {

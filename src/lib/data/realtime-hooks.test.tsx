@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { onSnapshotMock } = vi.hoisted(() => ({ onSnapshotMock: vi.fn() }));
-vi.mock('firebase/firestore', () => ({ onSnapshot: onSnapshotMock }));
+vi.mock('@/lib/db', () => ({ onSnapshot: onSnapshotMock }));
 
 import { useCollection } from './use-collection';
 import { useDoc } from './use-doc';
@@ -11,7 +11,8 @@ type Listener = { next: (snapshot: any) => void; error: (error: any) => void; un
 let listeners: Listener[] = [];
 
 const collectionSnapshot = (value: number) => ({
-  docs: [{ id: 'row-1', data: () => ({ value }) }]
+  docs: [{ id: 'row-1', data: () => ({ value }) }],
+  docChanges: () => [{ type: 'modified' }]
 });
 const documentSnapshot = (value: number) => ({
   id: 'doc-1',
@@ -29,7 +30,7 @@ beforeEach(() => {
   });
 });
 
-describe('Firestore realtime hook recovery', () => {
+describe('Realtime hook recovery', () => {
   it('clears old rows on query change and restores identical rows from the new source', async () => {
     const { result, rerender } = renderHook(({ source }) => useCollection(source), {
       initialProps: { source: {} as any }

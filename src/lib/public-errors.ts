@@ -3,7 +3,7 @@
  * belong in server-side logs, never in customer/staff notifications.
  */
 const INTERNAL_TRACE_PATTERN =
-  /firebase|firestore|auth\/[a-z-]+|permission-denied|\bgrpc\b|\bhttp\s*\d{3}\b|googleapis\.com|firebaseapp\.com|firebaseio\.com|\/databases\/|studio-\d+-[a-z0-9-]+|project[_ -]?id|collection\(|document\(/i;
+  /auth\/[a-z-]+|permission-denied|\bgrpc\b|\bhttp\s*\d{3}\b|supabase\.co|postgresql:\/\/|\/databases\/|project[_ -]?id|collection\(|document\(/i;
 
 const STACK_TRACE_PATTERN = /\n\s*at\s+[^\n]+/g;
 

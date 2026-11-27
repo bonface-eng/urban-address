@@ -3,9 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProfile } from '@/hooks/use-profile';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, updateDoc, addDoc, collection } from 'firebase/firestore';
-import { updateProfile } from 'firebase/auth';
+import { useUser, useDb } from '@/lib/data';
+import { doc, updateDoc, addDoc, collection } from '@/lib/db';
+import { updateProfile } from '@/lib/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,7 +31,7 @@ const AVATAR_PACK = [
 export default function SetupProfilePage() {
   const { profile, loading: profileLoading } = useProfile();
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
 
   const [firstName, setFirstName] = useState('');

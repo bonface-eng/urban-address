@@ -4,9 +4,9 @@ import React, { useState, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import { useUser, useAuth, useFirestore } from '@/firebase';
-import { signInWithPopup, GoogleAuthProvider, createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { useUser, useAuth, useDb } from '@/lib/data';
+import { signInWithPopup, GoogleAuthProvider, adaptSupabaseUser, getSupabaseBrowserClient } from '@/lib/db';
+import { doc, getDoc, setDoc } from '@/lib/db';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
@@ -20,7 +20,7 @@ import { notifyTelegramClientEvent } from '@/lib/telegram/client-events';
 export default function SignUpPage() {
   const { user } = useUser();
   const auth = useAuth();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
   const { isEmployee, loading, isSuperAdmin } = useProfile();
   const TERMS_VERSION = '2024-08';
@@ -66,7 +66,7 @@ export default function SignUpPage() {
 
   const handleManualSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!auth || !firestore || !email || !password || isSubmitting) return;
+    if (!email || !password || isSubmitting) return;
 
     if (password.length < 8 || passwordStrength < 50) {
       toast({ variant: "destructive", title: "Password Too Weak", description: "Use at least 8 characters and add an uppercase letter, number or symbol." });
@@ -85,64 +85,100 @@ export default function SignUpPage() {
 
     setIsSubmitting(true);
     try {
-      // Create Firebase Account
       const normalizedEmail = email.toLowerCase().trim();
-      const cred = await createUserWithEmailAndPassword(auth, normalizedEmail, password);
-      await updateProfile(cred.user, { displayName: name.trim() });
-      
-      await setDoc(doc(firestore, 'users', cred.user.uid), {
-        uid: cred.user.uid,
+      const fullName = name.trim();
+      const supabase = getSupabaseBrowserClient();
+
+      // 1. Create the Supabase Auth user. The handle_new_user trigger creates the
+      //    matching public.profiles row (role CLIENT) from this metadata.
+      const { data, error } = await supabase.auth.signUp({
         email: normalizedEmail,
-        displayName: name.trim(),
-        role: 'CLIENT',
-        createdAt: Date.now(),
-        accountType: 'CLIENT',
-        loyaltyPoints: 0,
-        totalSpent: 0,
-        termsAcceptedAt: Date.now(),
-        termsVersion: TERMS_VERSION,
-        marketingOptIn,
-        marketingConsent: marketingOptIn,
-        ...(marketingOptIn ? { marketingConsentUpdatedAt: Date.now(), marketingConsentSource: 'signup' } : {})
+        password,
+        options: {
+          data: { full_name: fullName, display_name: fullName },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
       });
 
-      void notifyTelegramClientEvent(cred.user, { type: 'SIGNUP', name: name.trim() });
+      if (error) {
+        console.error('[SIGNUP] supabase.auth.signUp failed:', { message: error.message, status: (error as any).status, code: (error as any).code, name: error.name });
+        throw error;
+      }
+
+      // Supabase returns an obfuscated user with no identities when the email is already registered.
+      if (data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0) {
+        const dup = new Error('User already registered') as Error & { code?: string };
+        dup.code = 'user_already_exists';
+        throw dup;
+      }
+
+      // 2. "Confirm email" is ON in the Supabase dashboard: no session until the link is clicked.
+      if (!data.session) {
+        toast({
+          title: 'Check your email',
+          description: 'We sent a confirmation link to ' + normalizedEmail + '. Open it to activate your account, then sign in.',
+        });
+        router.replace('/login');
+        return;
+      }
+
+      // 3. Session is active: store consent details on the profile created by the trigger.
+      const adapted = adaptSupabaseUser(data.user, data.session, supabase)!;
+      const now = Date.now();
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          terms_accepted_at: now,
+          terms_version: TERMS_VERSION,
+          marketing_opt_in: marketingOptIn,
+        })
+        .eq('id', data.user!.id);
+      if (profileError) {
+        // Non-fatal: the account and profile already exist.
+        console.warn('[SIGNUP] profile consent update failed:', profileError.message);
+      }
+
+      void notifyTelegramClientEvent(adapted, { type: 'SIGNUP', name: fullName });
       try {
-        const idToken = await cred.user.getIdToken();
+        const idToken = await adapted.getIdToken();
         const verificationResponse = await fetch('/api/auth/send-verification', {
           method: 'POST',
           headers: { Authorization: `Bearer ${idToken}` },
         });
         if (!verificationResponse.ok) throw new Error('Verification email could not be sent.');
         toast({
-          title: "Account Created",
-          description: "A six-digit verification code has been sent to your email address.",
+          title: 'Account Created',
+          description: 'A six-digit verification code has been sent to your email address.',
         });
         router.replace('/auth/verify-email');
       } catch {
         toast({
-          title: "Account Created",
-          description: "Your account is ready. Open the verification page to request a code.",
+          title: 'Account Created',
+          description: 'Your account is ready. Open the verification page to request a code.',
         });
         router.replace('/auth/verify-email');
       }
     } catch (error: any) {
-      const code = error?.code || '';
+      console.error('[SIGNUP] failed:', error);
+      const raw = String(error?.message || '');
+      const lower = raw.toLowerCase();
+      const code = String(error?.code || '');
       const friendlyMessage =
-        code === 'auth/email-already-in-use'
+        code === 'user_already_exists' || lower.includes('already registered') || lower.includes('already been registered')
           ? 'An account with this email already exists. Please sign in instead.'
-          : code === 'auth/invalid-email'
-            ? 'Please enter a valid email address.'
-            : code === 'auth/weak-password'
-              ? 'Please choose a stronger password (at least 8 characters).'
-              : code === 'auth/operation-not-allowed' || code === 'auth/unauthorized-domain'
-                ? 'Registration is not enabled for this domain yet. Please contact support.'
-                : code === 'auth/network-request-failed'
+          : code === 'weak_password' || lower.includes('password should')
+            ? raw
+            : code === 'over_email_send_rate_limit' || lower.includes('rate limit')
+              ? 'Too many attempts or confirmation emails sent. Please wait a few minutes and try again.'
+              : code === 'signup_disabled' || lower.includes('signups not allowed')
+                ? 'Sign-ups are currently disabled. Please contact support.'
+                : lower.includes('failed to fetch') || lower.includes('network')
                   ? 'Network error. Please check your internet connection and try again.'
-                  : error?.message || 'Could not complete registration. Please try again.';
+                  : raw || 'Could not complete registration. Please try again.';
+      // The real Supabase message is shown (and logged above) so failures can be diagnosed.
       toast({
-        variant: "destructive",
-        title: "Registration Failed",
+        variant: 'destructive',
+        title: 'Registration Failed',
         description: friendlyMessage,
       });
     } finally {

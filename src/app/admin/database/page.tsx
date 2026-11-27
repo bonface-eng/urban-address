@@ -41,8 +41,8 @@ import {
   Tooltip,
   ResponsiveContainer
 } from 'recharts';
-import { useFirestore, useCollection, useMemoFirebase } from '@/firebase';
-import { collection, query, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase } from '@/lib/data';
+import { collection, query, orderBy, limit } from '@/lib/db';
 import { Label } from '@/components/ui/label';
 import { 
   Select, 
@@ -68,7 +68,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 const HISTORICAL_SPLIT_TIMESTAMP = 1788522120000;
 
 export default function DatabaseMetricsPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { isSuperAdmin, profile } = useProfile();
   const [mounted, setMounted] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
@@ -124,11 +124,11 @@ export default function DatabaseMetricsPage() {
     return HISTORICAL_SPLIT_TIMESTAMP;
   };
 
-  const auditQuery = useMemoFirebase(() => firestore && isSuperAdmin ? query(collection(firestore, 'audit_logs'), orderBy('timestamp', 'desc'), limit(50)) : null, [firestore, isSuperAdmin]);
-  const ordersQuery = useMemoFirebase(() => firestore && isSuperAdmin ? collection(firestore, 'orders') : null, [firestore, isSuperAdmin]);
-  const inventoryQuery = useMemoFirebase(() => firestore && isSuperAdmin ? collection(firestore, 'inventory') : null, [firestore, isSuperAdmin]);
-  const usersQuery = useMemoFirebase(() => firestore && isSuperAdmin ? collection(firestore, 'users') : null, [firestore, isSuperAdmin]);
-  const backupsQuery = useMemoFirebase(() => firestore && isSuperAdmin ? query(collection(firestore, 'inventory_backups'), orderBy('timestamp', 'desc'), limit(5)) : null, [firestore, isSuperAdmin]);
+  const auditQuery = useMemoSupabase(() => firestore && isSuperAdmin ? query(collection(firestore, 'audit_logs'), orderBy('timestamp', 'desc'), limit(50)) : null, [firestore, isSuperAdmin]);
+  const ordersQuery = useMemoSupabase(() => firestore && isSuperAdmin ? collection(firestore, 'orders') : null, [firestore, isSuperAdmin]);
+  const inventoryQuery = useMemoSupabase(() => firestore && isSuperAdmin ? collection(firestore, 'inventory') : null, [firestore, isSuperAdmin]);
+  const usersQuery = useMemoSupabase(() => firestore && isSuperAdmin ? collection(firestore, 'users') : null, [firestore, isSuperAdmin]);
+  const backupsQuery = useMemoSupabase(() => firestore && isSuperAdmin ? query(collection(firestore, 'inventory_backups'), orderBy('timestamp', 'desc'), limit(5)) : null, [firestore, isSuperAdmin]);
 
   const { data: logs, loading: logsLoading, error: logsError } = useCollection<AuditLog>(auditQuery);
   const { data: orders, loading: ordersLoading, error: ordersError } = useCollection<any>(ordersQuery);

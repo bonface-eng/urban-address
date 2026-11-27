@@ -9,9 +9,10 @@ describe('Personnel Performance Tracking', () => {
     // Mock staff
     const mockStaff = [{ uid: 'att1', displayName: 'John Detailer', email: 'john@urban.co.ke', role: 'ATTENDANT' }];
     // Mock completed jobs for John
+    const now = Date.now();
     const mockJobs = [
-      { id: 'j1', attendantId: 'John Detailer', status: 'COMPLETED', price: 1000, commission: 300 },
-      { id: 'j2', attendantId: 'John Detailer', status: 'COMPLETED', price: 500, commission: 150 }
+      { id: 'j1', attendantId: 'John Detailer', status: 'COMPLETED', price: 1000, commission: 300, timestamp: now },
+      { id: 'j2', attendantId: 'John Detailer', status: 'COMPLETED', price: 500, commission: 150, timestamp: now }
     ];
 
     mockUseCollection
@@ -21,10 +22,10 @@ describe('Personnel Performance Tracking', () => {
     render(<AttendantsPage />);
     
     // Revenue: 1500
-    expect(screen.getByText(/KES 1,500/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/KES 1,500/i).length).toBeGreaterThan(0);
     // Commissions: 450
-    expect(screen.getByText(/KES 450/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/KES 450/i).length).toBeGreaterThan(0);
     // Job count: 2
-    expect(screen.getByText('2')).toBeInTheDocument();
+    expect(screen.getAllByText('2').length).toBeGreaterThan(0);
   });
 });

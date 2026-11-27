@@ -25,14 +25,14 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, limit, doc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, orderBy, limit, doc, updateDoc, deleteDoc } from '@/lib/db';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
 
 export default function AdminSupportInbox() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');

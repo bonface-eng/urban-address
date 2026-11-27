@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { notifyTelegramOperations } from '@/lib/telegram/notifications';
 
 export const runtime = 'nodejs';
@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
       if (!userSnap.exists) return jsonError('Staff profile not found.', 404);
       const profile = userSnap.data() || {};
       // Remove legacy credentials from the public staff profile once the owner
-      // has proven control of this Firebase account.
+      // has proven control of this Supabase account.
       await db.collection('users').doc(targetUid).update({
         pin: admin.firestore.FieldValue.delete(),
         masterKey: admin.firestore.FieldValue.delete(),
@@ -161,6 +161,7 @@ export async function POST(request: NextRequest) {
       const customToken = await admin.auth().createCustomToken(targetUid, {
         terminalDeviceId: deviceId,
         terminalStaffSession: true,
+        actorUid,
       });
       const targetProfile = targetProfileSnap.data() || {};
       const staffName = String(targetProfile.displayName || targetProfile.email || targetUid).slice(0, 120);

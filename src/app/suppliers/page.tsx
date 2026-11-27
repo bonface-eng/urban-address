@@ -54,8 +54,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, orderBy, addDoc, doc, deleteDoc, updateDoc } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, orderBy, addDoc, doc, deleteDoc, updateDoc } from '@/lib/db';
 import { Supplier } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { useProfile } from '@/hooks/use-profile';
@@ -65,7 +65,7 @@ import { exportAsReceiptText } from '@/lib/csv-export';
 const CATEGORIES = ['Parts', 'Beverages', 'Food', 'Cleaning Supplies', 'Oils', 'Electronics', 'Other'];
 
 export default function SuppliersPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);

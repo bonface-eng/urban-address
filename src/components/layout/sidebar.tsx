@@ -6,8 +6,8 @@ import { usePathname } from 'next/navigation';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useProfile } from '@/hooks/use-profile';
-import { useDoc, useFirestore, useUser } from '@/firebase';
-import { doc } from 'firebase/firestore';
+import { useDoc, useDb, useUser } from '@/lib/data';
+import { doc } from '@/lib/db';
 import { getVisibleNavGroups } from './navigation-config';
 
 interface SidebarProps {
@@ -19,7 +19,7 @@ export function Sidebar({ isCollapsed, onToggle }: SidebarProps) {
   const pathname = usePathname();
   const { user } = useUser();
   const { role, isSuperAdmin, profile } = useProfile();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   const permissionsRef = useMemo(() => {
     if (!firestore || !user) return null;

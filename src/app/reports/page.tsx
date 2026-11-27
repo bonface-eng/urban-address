@@ -40,8 +40,8 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection, useMemoFirebase, useUser } from '@/firebase';
-import { collection, query, where, orderBy, limit } from 'firebase/firestore';
+import { useDb, useCollection, useMemoSupabase, useUser } from '@/lib/data';
+import { collection, query, where, orderBy, limit } from '@/lib/db';
 import { Order } from '@/lib/types';
 import { toast } from '@/hooks/use-toast';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
@@ -49,7 +49,7 @@ import { ReceiptPreview } from '@/components/pos/receipt-preview';
 type DatePreset = 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'LAST_30_DAYS' | 'ALL_TIME' | 'CUSTOM';
 
 export default function BusinessReports() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { user } = useUser();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
@@ -66,7 +66,7 @@ export default function BusinessReports() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 12;
 
-  const ordersQuery = useMemoFirebase(() => {
+  const ordersQuery = useMemoSupabase(() => {
     if (!firestore) return null;
     return query(
       collection(firestore, 'orders'), 

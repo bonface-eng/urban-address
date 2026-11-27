@@ -6,7 +6,7 @@ export type SecurityRuleContext = {
   requestResourceData?: any;
 };
 
-/** Keeps detailed context for internal diagnostics, but not in Error.message. */
+/** Raised when Row Level Security rejects a query. Detailed context stays out of Error.message. */
 export class FirestorePermissionError extends Error {
   context: SecurityRuleContext;
 

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
+import * as admin from '@/lib/db/admin';
 import crypto from 'crypto';
-import { getAdminApp, getDbAdmin } from '@/lib/firebase-admin';
+import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
 import { bot } from '@/lib/telegram/bot';
 import { Markup } from 'telegraf';
 import { logger } from '@/lib/logger';
@@ -36,7 +36,10 @@ async function sendToManagement(message: string, eventId: string, branchId?: str
   const targets = [...access.entries()]
     .filter(([, value]) => value.role === 'OWNER' || (!!branchId && (value.branchIds.length === 0 || value.branchIds.includes(branchId))))
     .map(([id]) => id);
-  if (!targets.length) throw new Error('No Telegram management recipients are configured.');
+  if (!targets.length || !process.env.TELEGRAM_BOT_TOKEN) {
+    logger.warn('Telegram event skipped: bot token or management recipients not configured.', { eventId });
+    return;
+  }
   const marker = db.collection('telegram_event_deliveries').doc(eventId);
   const claimed = await db.runTransaction(async tx => {
     const snap = await tx.get(marker);

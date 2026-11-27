@@ -8,12 +8,32 @@ vi.mock('@/hooks/use-toast', () => ({
   toast: (options: unknown) => mockToast(options),
 }));
 
+vi.mock('@/components/ui/select', () => {
+  const SelectContext = React.createContext<{ onValueChange?: (val: string) => void; value?: string }>({});
+  return {
+    Select: ({ value, onValueChange, children }: any) => (
+      <SelectContext.Provider value={{ value, onValueChange }}>{children}</SelectContext.Provider>
+    ),
+    SelectTrigger: ({ children, ...props }: any) => (
+      <button type="button" role="combobox" aria-expanded="true" {...props}>{children}</button>
+    ),
+    SelectValue: ({ placeholder }: any) => {
+      const ctx = React.useContext(SelectContext);
+      return <span>{ctx.value || placeholder}</span>;
+    },
+    SelectContent: ({ children }: any) => <div role="listbox">{children}</div>,
+    SelectItem: ({ value, children }: any) => {
+      const ctx = React.useContext(SelectContext);
+      return (
+        <button type="button" role="option" onClick={() => ctx.onValueChange?.(value)}>
+          {children}
+        </button>
+      );
+    },
+  };
+});
+
 function chooseReason(label: string) {
-  fireEvent.pointerDown(screen.getByRole('combobox'), {
-    button: 0,
-    ctrlKey: false,
-    pointerType: 'mouse',
-  });
   return screen.findByRole('option', { name: label }).then(option => fireEvent.click(option));
 }
 

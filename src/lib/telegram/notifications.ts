@@ -1,5 +1,5 @@
 import { bot } from './bot';
-import { getDbAdmin } from '../firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { logger } from '../logger';
 
 type TelegramRole = 'OWNER' | 'MANAGER' | 'STAFF';

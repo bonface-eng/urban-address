@@ -3,10 +3,10 @@
 import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useAuth, useFirestore } from '@/firebase';
-import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { useAuth, useDb } from '@/lib/data';
+import { signInWithEmailAndPassword, GoogleAuthProvider, signInWithPopup } from '@/lib/db';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { doc, getDoc, addDoc, collection, setDoc } from 'firebase/firestore';
+import { doc, getDoc, addDoc, collection, setDoc } from '@/lib/db';
 import Image from 'next/image';
 import placeholderImages from '@/app/lib/placeholder-images.json';
 import { Mail, Lock, Eye, EyeOff, RefreshCcw, ShieldCheck, ArrowLeft } from 'lucide-react';
@@ -27,10 +27,14 @@ export default function LoginPage() {
   const auth = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   // Only allow same-origin customer destinations; never accept external redirect URLs.
   const getPostLoginDestination = (role?: string, email?: string | null) => {
+    const nextParam = searchParams.get('next');
+    if (nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//') && !nextParam.includes(String.fromCharCode(92))) {
+      return nextParam;
+    }
     const requested = searchParams.get('redirect');
     if (requested && requested.startsWith('/client/') && !requested.startsWith('//') && !requested.includes(String.fromCharCode(92))) {
       return requested;
@@ -205,10 +209,14 @@ export default function LoginPage() {
       void notifyTelegramClientEvent(cred.user, { type: 'SIGNIN', method: 'EMAIL' });
       await continueAfterLogin(cred.user, profileData.role);
     } catch (error: any) {
+      console.error('[LOGIN] signInWithPassword failed:', error);
       void notifyTelegramFailedSignIn(email);
       const code = error?.code || '';
+      const rawMessage = String(error?.message || '');
       const description =
-        code === 'auth/too-many-requests'
+        /email not confirmed/i.test(rawMessage)
+          ? 'Your email address is not confirmed yet. Open the confirmation link we emailed you, then sign in.'
+          : code === 'auth/too-many-requests'
           ? 'Too many unsuccessful sign-in attempts. Please wait a few minutes or reset your password.'
           : code === 'auth/network-request-failed'
             ? 'Network error. Please check your internet connection and try again.'

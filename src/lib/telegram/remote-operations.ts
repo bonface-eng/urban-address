@@ -1,5 +1,5 @@
 import { Markup, Telegraf } from 'telegraf';
-import { getDbAdmin } from '../firebase-admin';
+import { getDbAdmin } from '@/lib/db/admin';
 import { logger } from '../logger';
 
 type Access = { role: 'OWNER' | 'MANAGER' | 'STAFF'; branchIds?: string[]; name?: string };

@@ -1,7 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Inter, Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import { FirebaseClientProvider } from "@/firebase";
+import { SupabaseClientProvider } from '@/lib/data';
 import { Toaster } from "@/components/ui/toaster";
 import { AppShell } from "@/components/layout/app-shell";
 import { ProfileProvider } from "@/hooks/use-profile";
@@ -138,7 +138,7 @@ export default function RootLayout({
             __html: JSON.stringify(businessStructuredData).replace(/</g, "\\u003c"),
           }}
         />
-        <FirebaseClientProvider>
+        <SupabaseClientProvider>
           <ProfileProvider>
             <TerminalProvider>
               <CartProvider>
@@ -152,7 +152,7 @@ export default function RootLayout({
               </CartProvider>
             </TerminalProvider>
           </ProfileProvider>
-        </FirebaseClientProvider>
+        </SupabaseClientProvider>
       </body>
     </html>
   );

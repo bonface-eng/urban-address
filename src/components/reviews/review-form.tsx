@@ -5,15 +5,15 @@ import { Star, Send, Loader2, MessageSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { useUser, useFirestore } from '@/firebase';
-import { collection, addDoc } from 'firebase/firestore';
+import { useUser, useDb } from '@/lib/data';
+import { collection, addDoc } from '@/lib/db';
 import { toast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useRouter } from 'next/navigation';
 
 export function ReviewForm() {
   const { user } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const router = useRouter();
   
   // Starts with 0 rating so user has to mark them manually

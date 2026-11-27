@@ -9,7 +9,9 @@ describe('shared staff terminal journey', () => {
   const welcome = read('src/components/pos/terminal-welcome.tsx');
   const terminal = read('src/hooks/use-terminal.tsx');
   const pinApi = read('src/app/api/terminal/pin/route.ts');
-  const rules = read('firestore.rules');
+  const functionsSql = read('supabase/migrations/20260101000002_functions_and_triggers.sql');
+  const rlsSql = read('supabase/migrations/20260101000003_rls_policies.sql');
+  const schemaSql = read('supabase/migrations/20260101000001_schema.sql');
 
   it('offers a home link on the idle welcome screen', () => {
     expect(welcome).toContain('<Link href="/" aria-label="Back to home"');
@@ -40,8 +42,8 @@ describe('shared staff terminal journey', () => {
     expect(terminal).not.toContain('uax_last_unlocked_at');
   });
 
-  it('allows multiple staff accounts to enroll with their own Firebase credentials', () => {
-    expect(lock).toContain('initializeApp(firebaseConfig');
+  it('allows multiple staff accounts to enroll with their own credentials', () => {
+    expect(lock).toContain('initializeApp(undefined');
     expect(lock).toContain('signInWithEmailAndPassword(secondaryAuth');
     expect(lock).toContain("action: 'register'");
     expect(lock).toContain("action: 'set-pin'");
@@ -49,7 +51,7 @@ describe('shared staff terminal journey', () => {
     expect(lock).toContain('Use password for full access');
   });
 
-  it('uses a server-verified PIN to switch the active Firebase identity', () => {
+  it('uses a server-verified PIN to switch the active Supabase identity', () => {
     expect(terminal).toContain("action: 'verify-pin'");
     expect(terminal).toContain('signInWithCustomToken(auth, payload.customToken)');
     expect(pinApi).toContain('scryptSync');
@@ -81,11 +83,13 @@ describe('shared staff terminal journey', () => {
     expect(pinApi).toContain("masterKey: admin.firestore.FieldValue.delete()");
   });
 
-  it('keeps terminal PIN hashes inaccessible to client Firestore SDKs', () => {
-    expect(rules).toContain('function isFullAuth()');
-    expect(rules).toContain("request.auth.token.get('terminalStaffSession', false) != true");
-    expect(rules).toContain('match /terminal_devices/{deviceId}');
-    expect(rules).toContain('allow read, write: if false;');
+  it('keeps terminal PIN hashes inaccessible to client Supabase SDKs', () => {
+    expect(functionsSql).toContain('CREATE OR REPLACE FUNCTION public.is_full_auth()');
+    expect(functionsSql).toContain('terminal_staff_session');
+    expect(schemaSql).toContain('CREATE TABLE IF NOT EXISTS public.terminal_devices');
+    expect(rlsSql).toContain('ENABLE ROW LEVEL SECURITY');
+    expect(rlsSql).toContain('Server-only tables have 0 client policies');
+    expect(rlsSql).not.toContain('ON public.terminal_device_staff');
   });
 
   it('normalizes the configured Telegram secret consistently with webhook registration', () => {
@@ -123,13 +127,13 @@ describe('shared staff terminal journey', () => {
     expect(remote).not.toContain("status: 'REFUNDED'");
   });
 
-  it('enforces remote station locks in the POS client, PIN API and Firestore rules', () => {
+  it('enforces remote station locks in the POS client, PIN API and Postgres RLS/triggers', () => {
     const remote = read('src/lib/telegram/remote-operations.ts');
     expect(remote).toContain('locked: disabled');
     expect(terminal).toContain('terminal.disabled === true || terminal.locked === true');
     expect(pinApi).toContain('stationState.data()?.locked === true');
-    expect(rules).toContain("['disabled', 'locked', 'forceLockAt', 'forceLockReason']");
-    expect(rules).toContain('request.resource.data.stockLevel < resource.data.stockLevel');
+    expect(rlsSql).toContain("ON public.pos_terminals");
+    expect(functionsSql).toContain('NEW.stock_level > OLD.stock_level AND NOT public.is_super_admin()');
     expect(read('src/app/inventory/page.tsx')).toContain('Stock adjustment requires approval');
   });
 

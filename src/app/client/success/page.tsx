@@ -14,8 +14,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
-import { useUser, useFirestore } from '@/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { useUser, useDb } from '@/lib/data';
+import { doc, getDoc } from '@/lib/db';
 
 export default function ClientSuccessPage() {
   const router = useRouter();
@@ -23,7 +23,7 @@ export default function ClientSuccessPage() {
   const [orderData, setOrderData] = useState<any>(null);
   const [orderLoading, setOrderLoading] = useState(true);
   const { user, loading: authLoading } = useUser();
-  const firestore = useFirestore();
+  const firestore = useDb();
   const orderId = searchParams.get('orderId');
 
   useEffect(() => {

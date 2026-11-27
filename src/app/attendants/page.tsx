@@ -64,8 +64,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from '@/lib/utils';
-import { useFirestore, useCollection } from '@/firebase';
-import { collection, query, where, doc, addDoc, updateDoc } from 'firebase/firestore';
+import { useDb, useCollection } from '@/lib/data';
+import { collection, query, where, doc, addDoc, updateDoc } from '@/lib/db';
 import { UserProfile, CarwashJob } from '@/lib/types';
 import { useProfile } from '@/hooks/use-profile';
 import { toast } from '@/hooks/use-toast';
@@ -75,7 +75,7 @@ import { HardwareService } from '@/lib/hardware-service';
 import { ReceiptPreview } from '@/components/pos/receipt-preview';
 
 export default function AttendantsPage() {
-  const firestore = useFirestore();
+  const firestore = useDb();
   const { profile, isSuperAdmin } = useProfile();
   const [searchTerm, setSearchTerm] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);

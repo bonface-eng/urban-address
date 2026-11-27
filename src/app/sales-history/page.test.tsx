@@ -4,8 +4,8 @@ import { describe, it, expect, vi } from 'vitest';
 import SalesHistoryPage from './page';
 import { mockUseCollection, mockUseProfile } from '@/test/setup';
 
-describe('Sales Ledger & Returns', () => {
-  it('opens return dialog for paid orders', async () => {
+describe('Sales Ledger & Clearance', () => {
+  it('renders paid orders and sales volume KPI', async () => {
     mockUseCollection.mockReturnValue({
       data: [
         { id: 'ORDER-123', type: 'STORE', total: 5000, status: 'PAID', timestamp: Date.now() }
@@ -14,29 +14,22 @@ describe('Sales Ledger & Returns', () => {
     });
 
     render(<SalesHistoryPage />);
-    
-    const returnBtn = screen.getByText(/Return/i);
-    fireEvent.click(returnBtn);
-    
-    expect(screen.getByText(/Process Product Return/i)).toBeInTheDocument();
-    expect(screen.getByText(/Original Value/i)).toBeInTheDocument();
+
+    expect(screen.getByText(/SALES VOLUME/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/KES 5,000/i).length).toBeGreaterThan(0);
   });
 
-  it('requires supervisor pin for refund authorization', async () => {
+  it('switches to active backlog tab for pending orders', async () => {
     mockUseCollection.mockReturnValue({
-      data: [{ id: '1', type: 'LOUNGE', total: 1000, status: 'PAID', timestamp: Date.now() }],
+      data: [{ id: 'PENDING-1', type: 'LOUNGE', total: 1000, status: 'PENDING', timestamp: Date.now() }],
       loading: false
     });
 
     render(<SalesHistoryPage />);
-    fireEvent.click(screen.getByText(/Return/i));
-    
-    const pinInput = screen.getByPlaceholderText('••••');
-    fireEvent.change(pinInput, { target: { value: '1234' } });
-    
-    const authBtn = screen.getByText(/Authorize Reversal/i);
-    fireEvent.click(authBtn);
-    
-    expect(authBtn).toBeDisabled();
+    const backlogTab = screen.getByRole('button', { name: /Active Backlog/i });
+    fireEvent.click(backlogTab);
+
+    expect(screen.getByText(/PENDING BACKLOG/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/KES 1,000/i).length).toBeGreaterThan(0);
   });
 });

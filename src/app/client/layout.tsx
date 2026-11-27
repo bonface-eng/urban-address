@@ -7,8 +7,8 @@ import { useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { SYSTEM_CONFIG } from '@/lib/config';
-import { useUser, useAuth, useFirestore, useDoc } from '@/firebase';
-import { signOut } from 'firebase/auth';
+import { useUser, useAuth, useDb, useDoc } from '@/lib/data';
+import { signOut } from '@/lib/db';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +22,7 @@ import { CartDrawer } from '@/components/cart/cart-drawer';
 import { Notifications } from '@/components/layout/notifications';
 import { useCart } from '@/hooks/use-cart';
 import { useProfile } from '@/hooks/use-profile';
-import { doc } from 'firebase/firestore';
+import { doc } from '@/lib/db';
 import Snowfall from 'react-snowfall';
 
 function ClientLayoutContent({ children }: { children: React.ReactNode }) {
@@ -33,7 +33,7 @@ function ClientLayoutContent({ children }: { children: React.ReactNode }) {
   const { isEmployee, isSuperAdmin, role } = useProfile();
   const { totalItems } = useCart();
   const auth = useAuth();
-  const firestore = useFirestore();
+  const firestore = useDb();
 
   // Check if we are in "Preview Mode" (rendered inside the mobile mockup)
   const isPreviewMode = searchParams?.get('uax_preview') === 'true';

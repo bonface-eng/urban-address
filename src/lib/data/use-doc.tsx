@@ -1,21 +1,18 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
-import { 
-  DocumentReference, 
-  onSnapshot, 
-  DocumentSnapshot, 
-  DocumentData,
-  FirestoreError 
-} from 'firebase/firestore';
-import { errorEmitter } from '../error-emitter';
-import { FirestorePermissionError } from '../errors';
+import {
+  onSnapshot,
+  type DocumentReference,
+  type DocumentSnapshot,
+  type DocumentData,
+  type FirestoreError,
+} from '@/lib/db';
+import { errorEmitter } from './error-emitter';
+import { FirestorePermissionError } from './errors';
 import { toPublicServiceError } from '@/lib/public-errors';
 
-/**
- * Hook to listen to a single Firestore document.
- * Handles permission errors gracefully without triggering hard crashes.
- */
+/** Live single-row hook backed by Supabase Realtime. */
 export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -25,7 +22,6 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) 
   useEffect(() => {
     let active = true;
 
-    // Reset comparison state whenever the document source changes.
     prevDataRef.current = '';
     setError(null);
     setData(null);
@@ -36,34 +32,35 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) 
     }
 
     setLoading(true);
-    
+
     let unsubscribe: () => void;
     try {
       unsubscribe = onSnapshot(
         docRef,
         (snapshot: DocumentSnapshot<T>) => {
           if (!active) return;
-          
-          const newData = snapshot.exists() ? { ...snapshot.data(), id: snapshot.id } as T : null;
+
+          const newData = snapshot.exists()
+            ? ({ ...snapshot.data(), id: snapshot.id } as T)
+            : null;
           const dataString = JSON.stringify(newData);
-          
+
           if (dataString !== prevDataRef.current) {
             prevDataRef.current = dataString;
             setData(newData);
           }
-          
+
           setLoading(false);
           setError(null);
         },
         (err) => {
           if (!active) return;
-          
+
           if (err.code === 'permission-denied') {
-            const permissionError = new FirestorePermissionError({
-              path: docRef.path || 'document',
-              operation: 'get',
-            });
-            errorEmitter.emit('permission-error', permissionError);
+            errorEmitter.emit(
+              'permission-error',
+              new FirestorePermissionError({ path: docRef.path || 'document', operation: 'get' })
+            );
           }
 
           prevDataRef.current = '';
@@ -73,7 +70,7 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) 
         }
       );
     } catch (e: any) {
-      console.error('Failed to establish document snapshot listener:', e);
+      console.error('Failed to establish realtime listener:', e);
       if (active) {
         prevDataRef.current = '';
         setLoading(false);
@@ -87,7 +84,7 @@ export function useDoc<T = DocumentData>(docRef: DocumentReference<any> | null) 
       active = false;
       if (unsubscribe) unsubscribe();
     };
-  }, [docRef?.path]); 
+  }, [docRef?.path]);
 
   return { data, loading, error };
 }

@@ -1,6 +1,6 @@
 import { NextRequest,NextResponse } from 'next/server';
-import * as admin from 'firebase-admin';
-import { getAdminApp,getDbAdmin } from '@/lib/firebase-admin';
+import * as admin from '@/lib/db/admin';
+import { getAdminApp,getDbAdmin } from '@/lib/db/admin';
 import { hashOtp,utcDayKey } from '@/lib/otp-security';
 export const runtime='nodejs';export const dynamic='force-dynamic';
 export async function POST(request:NextRequest){
