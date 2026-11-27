@@ -48,7 +48,6 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
   const { data: globalConfig } = useDoc<any>(configRef);
 
   const isAdminOtpRoute = pathname === '/admin-otp';
-  const isEmailVerificationRoute = pathname === '/auth/verify-email';
   const isAuthRoute = AUTH_ROUTES.includes(pathname) || pathname.startsWith('/auth/') || isAdminOtpRoute;
   const isClientView = pathname === '/' || 
                        pathname.startsWith('/client') || 
@@ -171,7 +170,7 @@ function AppShellContent({ children }: { children: React.ReactNode }) {
       return;
     }
     if (isAuthRoute) {
-      if (isAdminOtpRoute || isEmailVerificationRoute) return;
+      if (isAdminOtpRoute) return;
       router.replace(isKitchen ? '/kds' : (isEmployee || isSuperAdmin) ? '/dashboard' : '/');
       return;
     }

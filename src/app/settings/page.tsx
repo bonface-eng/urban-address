@@ -277,7 +277,7 @@ export default function ProfilePage() {
             </div>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Role</span><span className="font-medium text-zinc-900">{role || 'Not assigned'}</span></div>
-              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Account</span><span className="font-medium text-zinc-900">{user?.emailVerified ? 'Email verified' : 'Email not verified'}</span></div>
+              <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Account</span><span className="font-medium text-zinc-900">Active</span></div>
               <div className="flex items-center justify-between gap-3"><span className="text-zinc-500">Profile status</span><span className="font-medium text-zinc-900">{profile?.phoneNumber && profile?.address ? 'Details added' : 'Needs details'}</span></div>
             </div>
           </Card>
