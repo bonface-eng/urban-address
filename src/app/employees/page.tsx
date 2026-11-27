@@ -49,9 +49,12 @@ import {
   adminUpdateStaff,
   adminResetUserPassword,
   adminSetStaffActiveStatus,
+  adminSuspendUser,
+  adminReactivateUser,
   adminDeleteUser,
 } from '@/lib/actions';
 
+const ALL_STAFF_ROLES: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'MANAGER', 'SUPERVISOR', 'CASHIER', 'STOREKEEPER', 'ATTENDANT', 'KITCHEN'];
 const ROLES: UserRole[] = ['ADMIN', 'MANAGER', 'SUPERVISOR', 'CASHIER', 'STOREKEEPER', 'ATTENDANT', 'KITCHEN'];
 const UNITS: { label: string; value: BusinessUnit }[] = [
   { label: 'Lounge & Bar', value: 'LOUNGE' },
@@ -67,6 +70,11 @@ export default function StaffDirectory() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [activeTab, setActiveTab] = useState('staff');
+  const [roleFilter, setRoleFilter] = useState<string>('ALL');
+  const [statusFilter, setStatusFilter] = useState<string>('ALL');
+  const [suspendReason, setSuspendReason] = useState<string>('');
+  const [deleteConfirmEmail, setDeleteConfirmEmail] = useState<string>('');
+  const [isConfirmDeleteOpen, setIsConfirmDeleteOpen] = useState<boolean>(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -110,12 +118,21 @@ export default function StaffDirectory() {
 
   const filteredUsers = useMemo(() => {
     const baseList = activeTab === 'staff' ? staffList : clientList;
-    return baseList.filter(
-      (s) =>
+    return baseList.filter((s) => {
+      const matchesSearch =
+        !searchTerm ||
         s.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        s.email?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
-  }, [staffList, clientList, searchTerm, activeTab]);
+        s.email?.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesRole =
+        roleFilter === 'ALL' ||
+        (roleFilter === 'SUPER_ADMIN' ? (s.isSuperAdmin || s.role === 'SUPER_ADMIN') : s.role === roleFilter);
+      const isSuspended = s.status === 'suspended' || s.disabled === true;
+      const matchesStatus =
+        statusFilter === 'ALL' ||
+        (statusFilter === 'SUSPENDED' ? isSuspended : !isSuspended);
+      return matchesSearch && matchesRole && matchesStatus;
+    });
+  }, [staffList, clientList, searchTerm, activeTab, roleFilter, statusFilter]);
 
   const totalPages = Math.ceil(filteredUsers.length / itemsPerPage);
   const paginatedUsers = useMemo(() => {
@@ -234,19 +251,28 @@ export default function StaffDirectory() {
 
   const handleToggleDeactivate = async () => {
     if (!selectedUser || isSubmitting) return;
-    const nextDisabled = !selectedUser.disabled;
+    const isCurrentlySuspended = selectedUser.status === 'suspended' || selectedUser.disabled === true;
     setIsSubmitting(true);
     try {
       const idToken = await getAuth().currentUser?.getIdToken();
-      const res = await adminSetStaffActiveStatus(selectedUser.uid, nextDisabled, idToken);
-      if (!res.success) throw new Error(res.message);
-      setSelectedUser({ ...selectedUser, disabled: nextDisabled });
-      toast({
-        title: nextDisabled ? 'Staff Deactivated' : 'Staff Reactivated',
-        description: nextDisabled
-          ? `${selectedUser.displayName} can no longer sign in.`
-          : `${selectedUser.displayName} can sign in again.`,
-      });
+      if (isCurrentlySuspended) {
+        const res = await adminReactivateUser(selectedUser.uid, idToken);
+        if (!res.success) throw new Error(res.message);
+        setSelectedUser({ ...selectedUser, disabled: false, status: 'active' });
+        toast({
+          title: 'Account Reactivated',
+          description: `${selectedUser.displayName} can now sign in normally.`,
+        });
+      } else {
+        const res = await adminSuspendUser(selectedUser.uid, suspendReason || 'Suspended by administrator', idToken);
+        if (!res.success) throw new Error(res.message);
+        setSelectedUser({ ...selectedUser, disabled: true, status: 'suspended' });
+        toast({
+          title: 'Account Suspended',
+          description: `${selectedUser.displayName} is now barred from signing in.`,
+        });
+      }
+      setSuspendReason('');
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Status Change Failed', description: err.message });
     } finally {
@@ -256,14 +282,22 @@ export default function StaffDirectory() {
 
   const handleDeleteStaff = async () => {
     if (!selectedUser || isSubmitting) return;
+    if (deleteConfirmEmail.trim().toLowerCase() !== selectedUser.email.toLowerCase()) {
+      toast({ variant: 'destructive', title: 'Confirmation Mismatch', description: 'Type the exact email address to confirm deletion.' });
+      return;
+    }
     setIsSubmitting(true);
     try {
       const idToken = await getAuth().currentUser?.getIdToken();
-      const res = await adminDeleteUser(selectedUser.uid, idToken);
+      const res = await adminDeleteUser(selectedUser.uid, { confirmEmail: deleteConfirmEmail.trim().toLowerCase(), idToken });
       if (!res.success) throw new Error(res.message);
       setIsEditOpen(false);
+      setIsConfirmDeleteOpen(false);
       resetForm();
-      toast({ title: 'Staff Account Deleted', description: `${selectedUser.displayName} was permanently removed.` });
+      toast({ 
+        title: res.mode === 'soft-deleted' ? 'Account Archived (Soft-Deleted)' : 'Account Permanently Deleted', 
+        description: res.message || `${selectedUser.displayName} was successfully removed.` 
+      });
     } catch (err: any) {
       toast({ variant: 'destructive', title: 'Delete Failed', description: err.message });
     } finally {
@@ -281,6 +315,9 @@ export default function StaffDirectory() {
     setBaseSalary(user.baseSalary?.toString() || '0');
     setMpesaNumber(user.mpesaNumber || '');
     setNewPasswordReset('');
+    setSuspendReason(user.suspendedReason || '');
+    setDeleteConfirmEmail('');
+    setIsConfirmDeleteOpen(false);
     setIsEditOpen(true);
   };
 
@@ -295,6 +332,9 @@ export default function StaffDirectory() {
     setBaseSalary('');
     setMpesaNumber('');
     setNewPasswordReset('');
+    setSuspendReason('');
+    setDeleteConfirmEmail('');
+    setIsConfirmDeleteOpen(false);
     setSelectedUser(null);
   };
 
@@ -309,49 +349,73 @@ export default function StaffDirectory() {
               No matching records found.
             </div>
           ) : (
-            list.map((user) => (
-              <article key={user.uid} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <div className="flex min-w-0 items-start gap-3">
-                  <Avatar className="h-11 w-11 shrink-0 rounded-xl">
-                    <AvatarImage src={user.photoURL || undefined} />
-                    <AvatarFallback className="bg-primary/5 text-primary text-xs font-black">
-                      {user.displayName?.[0]}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm font-black uppercase text-zinc-900">{user.displayName}</p>
-                    <p className="mt-1 break-all text-[11px] font-medium text-zinc-500">{user.email}</p>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="text-[9px] font-bold uppercase">
-                        {user.isSuperAdmin ? 'SUPER ADMIN' : user.role || 'CLIENT'}
-                      </Badge>
-                      {user.disabled && (
-                        <Badge variant="destructive" className="text-[9px] font-bold uppercase">
-                          Deactivated
-                        </Badge>
-                      )}
-                      {user.hasPin && (
-                        <Badge variant="secondary" className="text-[9px] font-bold uppercase">
-                          PIN Set
-                        </Badge>
-                      )}
-                      <span className="text-[11px] font-semibold text-zinc-600">
-                        KES {(user.baseSalary || 0).toLocaleString()}
-                      </span>
+            list.map((user) => {
+              const isSuspended = user.status === 'suspended' || user.disabled === true;
+              const isSuper = user.isSuperAdmin || user.role === 'SUPER_ADMIN' || user.email === 'gackstoneb@gmail.com';
+              const isAdmin = isSuper || user.role === 'ADMIN' || user.email === 'bonfacewana3072@gmail.com';
+              return (
+                <article key={user.uid} className="rounded-xl border border-zinc-200 bg-white p-4 shadow-sm">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <Avatar className="h-11 w-11 shrink-0 rounded-xl">
+                      <AvatarImage src={user.photoURL || undefined} />
+                      <AvatarFallback className="bg-primary/5 text-primary text-xs font-black">
+                        {user.displayName?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="break-words text-sm font-black uppercase text-zinc-900">{user.displayName}</p>
+                        {user.email === 'gackstoneb@gmail.com' && (
+                          <span className="text-[9px] bg-purple-100 text-purple-900 font-extrabold px-1.5 py-0.5 rounded">ROOT</span>
+                        )}
+                      </div>
+                      <p className="mt-1 break-all text-[11px] font-medium text-zinc-500">{user.email}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {isSuper ? (
+                          <Badge className="bg-purple-100 text-purple-900 border-purple-300 text-[9px] font-black uppercase">
+                            SUPER ADMIN
+                          </Badge>
+                        ) : isAdmin ? (
+                          <Badge className="bg-blue-100 text-blue-900 border-blue-300 text-[9px] font-black uppercase">
+                            ADMIN
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-[9px] font-bold uppercase">
+                            {user.role || 'CLIENT'}
+                          </Badge>
+                        )}
+                        {isSuspended ? (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[8px] font-black uppercase">
+                            SUSPENDED
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 text-[8px] font-black uppercase">
+                            ACTIVE
+                          </Badge>
+                        )}
+                        {user.hasPin && (
+                          <Badge variant="secondary" className="text-[9px] font-bold uppercase">
+                            PIN Set
+                          </Badge>
+                        )}
+                        <span className="text-[11px] font-semibold text-zinc-600">
+                          KES {(user.baseSalary || 0).toLocaleString()}
+                        </span>
+                      </div>
                     </div>
+                    <Button
+                      aria-label={`Edit ${user.displayName}`}
+                      onClick={() => openEdit(user)}
+                      variant="outline"
+                      size="icon"
+                      className="h-11 w-11 shrink-0 rounded-lg"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
                   </div>
-                  <Button
-                    aria-label={`Edit ${user.displayName}`}
-                    onClick={() => openEdit(user)}
-                    variant="outline"
-                    size="icon"
-                    className="h-11 w-11 shrink-0 rounded-lg"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </article>
-            ))
+                </article>
+              );
+            })
           )}
         </div>
         <div className="hidden overflow-x-auto md:block">
@@ -359,59 +423,86 @@ export default function StaffDirectory() {
             <TableHeader className="bg-zinc-50/50">
               <TableRow>
                 <TableHead className="pl-8 h-16 text-[10px] uppercase font-black text-zinc-400">Identity</TableHead>
-                <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-center">Role & Status</TableHead>
+                <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-center">Role</TableHead>
+                <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-center">Status</TableHead>
                 <TableHead className="h-16 text-[10px] uppercase font-black text-zinc-400 text-right">Salary</TableHead>
                 <TableHead className="pr-8 h-16 text-[10px] uppercase font-black text-zinc-400 text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {list.map((user) => (
-                <TableRow key={user.uid} className="border-zinc-50 hover:bg-zinc-50/50 transition-colors">
-                  <TableCell className="pl-8 py-4">
-                    <div className="flex items-center gap-4">
-                      <Avatar className="h-10 w-10 rounded-xl">
-                        <AvatarImage src={user.photoURL || undefined} />
-                        <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-black">
-                          {user.displayName?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black uppercase text-zinc-900">{user.displayName}</p>
-                        <p className="text-[9px] font-bold text-zinc-400 uppercase">{user.email}</p>
+              {list.map((user) => {
+                const isSuspended = user.status === 'suspended' || user.disabled === true;
+                const isSuper = user.isSuperAdmin || user.role === 'SUPER_ADMIN' || user.email === 'gackstoneb@gmail.com';
+                const isAdmin = isSuper || user.role === 'ADMIN' || user.email === 'bonfacewana3072@gmail.com';
+                return (
+                  <TableRow key={user.uid} className="border-zinc-50 hover:bg-zinc-50/50 transition-colors">
+                    <TableCell className="pl-8 py-4">
+                      <div className="flex items-center gap-4">
+                        <Avatar className="h-10 w-10 rounded-xl">
+                          <AvatarImage src={user.photoURL || undefined} />
+                          <AvatarFallback className="bg-primary/5 text-primary text-[10px] font-black">
+                            {user.displayName?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm font-black uppercase text-zinc-900">{user.displayName}</p>
+                            {user.email === 'gackstoneb@gmail.com' && (
+                              <span className="text-[9px] bg-purple-100 text-purple-900 font-extrabold px-1.5 py-0.5 rounded">ROOT</span>
+                            )}
+                          </div>
+                          <p className="text-[9px] font-bold text-zinc-400 uppercase">{user.email}</p>
+                        </div>
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="inline-flex items-center gap-1.5">
-                      <Badge variant="outline" className="text-[9px] font-black uppercase border-zinc-200">
-                        {user.isSuperAdmin ? 'SUPER ADMIN' : user.role}
-                      </Badge>
-                      {user.disabled && (
-                        <Badge variant="destructive" className="text-[8px] font-black uppercase">
-                          Deactivated
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {isSuper ? (
+                        <Badge className="bg-purple-100 text-purple-900 border-purple-300 text-[9px] font-black uppercase">
+                          SUPER ADMIN
+                        </Badge>
+                      ) : isAdmin ? (
+                        <Badge className="bg-blue-100 text-blue-900 border-blue-300 text-[9px] font-black uppercase">
+                          ADMIN
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-[9px] font-black uppercase border-zinc-200">
+                          {user.role}
                         </Badge>
                       )}
-                      {user.hasPin && (
-                        <Badge variant="secondary" className="text-[8px] font-black uppercase">
-                          PIN
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-black">KES {(user.baseSalary || 0).toLocaleString()}</TableCell>
-                  <TableCell className="text-right pr-8">
-                    <Button
-                      aria-label={`Edit ${user.displayName}`}
-                      onClick={() => openEdit(user)}
-                      variant="ghost"
-                      size="icon"
-                      className="h-9 w-9 text-zinc-400 hover:text-zinc-900"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="inline-flex items-center gap-1.5">
+                        {isSuspended ? (
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-300 text-[8px] font-black uppercase">
+                            SUSPENDED
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-emerald-100 text-emerald-900 border-emerald-300 text-[8px] font-black uppercase">
+                            ACTIVE
+                          </Badge>
+                        )}
+                        {user.hasPin && (
+                          <Badge variant="secondary" className="text-[8px] font-black uppercase">
+                            PIN
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-black">KES {(user.baseSalary || 0).toLocaleString()}</TableCell>
+                    <TableCell className="text-right pr-8">
+                      <Button
+                        aria-label={`Edit ${user.displayName}`}
+                        onClick={() => openEdit(user)}
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9 text-zinc-400 hover:text-zinc-900"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
@@ -501,17 +592,46 @@ export default function StaffDirectory() {
               Customers
             </TabsTrigger>
           </TabsList>
-          <div className="relative flex-1">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-            <Input
-              placeholder="Search records..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-11 h-12 bg-zinc-50 border-none rounded-xl font-bold w-full"
-            />
+          <div className="flex flex-col sm:flex-row gap-2 flex-1">
+            <div className="relative flex-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+              <Input
+                placeholder="Search records..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-11 h-12 bg-zinc-50 border-none rounded-xl font-bold w-full"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); setCurrentPage(1); }}>
+                <SelectTrigger className="h-12 w-36 bg-zinc-50 border-none rounded-xl font-bold text-[10px] uppercase">
+                  <SelectValue placeholder="All Roles" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="ALL" className="text-[10px] font-black uppercase">All Roles</SelectItem>
+                  {isSuperAdmin && (
+                    <SelectItem value="SUPER_ADMIN" className="text-[10px] font-black uppercase">Super Admin</SelectItem>
+                  )}
+                  {ROLES.map((r) => (
+                    <SelectItem key={r} value={r} className="text-[10px] font-black uppercase">{r}</SelectItem>
+                  ))}
+                  <SelectItem value="CLIENT" className="text-[10px] font-black uppercase">Client</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setCurrentPage(1); }}>
+                <SelectTrigger className="h-12 w-32 bg-zinc-50 border-none rounded-xl font-bold text-[10px] uppercase">
+                  <SelectValue placeholder="All Status" />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="ALL" className="text-[10px] font-black uppercase">All Status</SelectItem>
+                  <SelectItem value="ACTIVE" className="text-[10px] font-black uppercase">Active</SelectItem>
+                  <SelectItem value="SUSPENDED" className="text-[10px] font-black uppercase">Suspended</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 
@@ -586,7 +706,7 @@ export default function StaffDirectory() {
                       <SelectValue placeholder="Select Role" />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl border-none shadow-2xl">
-                      {ROLES.map((r) => (
+                      {(isSuperAdmin ? ALL_STAFF_ROLES : ROLES).map((r) => (
                         <SelectItem key={r} value={r} className="text-[10px] font-black uppercase">
                           {r}
                         </SelectItem>
@@ -727,12 +847,17 @@ export default function StaffDirectory() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1.5">
                   <Label className="text-[9px] font-black uppercase text-zinc-400 px-1">System Role</Label>
-                  <Select value={role} onValueChange={(v: any) => setRole(v)} required>
+                  <Select 
+                    value={role} 
+                    onValueChange={(v: any) => setRole(v)} 
+                    disabled={selectedUser?.email === 'gackstoneb@gmail.com'}
+                    required
+                  >
                     <SelectTrigger className="h-12 bg-zinc-50 border-none rounded-xl font-bold uppercase">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {[...ROLES, 'CLIENT' as UserRole].map((r) => (
+                      {(isSuperAdmin ? [...ALL_STAFF_ROLES, 'CLIENT' as UserRole] : [...ROLES, 'CLIENT' as UserRole]).map((r) => (
                         <SelectItem key={r} value={r} className="text-[10px] font-black uppercase">
                           {r}
                         </SelectItem>
@@ -838,8 +963,8 @@ export default function StaffDirectory() {
               Save Changes
             </Button>
 
-            {/* Admin Security Controls: Password Reset, Deactivate, Delete */}
-            {isSuperAdmin && selectedUser && (
+            {/* Admin Security Controls: Password Reset, Suspend/Reactivate, Delete */}
+            {selectedUser && (
               <div className="pt-6 border-t border-zinc-200 space-y-4">
                 <div className="space-y-2">
                   <Label className="text-[9px] font-black uppercase text-zinc-500 px-1">Reset Account Password</Label>
@@ -863,34 +988,95 @@ export default function StaffDirectory() {
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={isSubmitting}
-                    onClick={() => void handleToggleDeactivate()}
-                    className="flex-1 h-11 rounded-xl font-black uppercase text-[10px] tracking-widest gap-2"
-                  >
-                    {selectedUser.disabled ? (
-                      <>
-                        <UserCheck className="w-4 h-4 text-emerald-600" /> Reactivate Staff
-                      </>
-                    ) : (
-                      <>
-                        <UserMinus className="w-4 h-4 text-amber-600" /> Deactivate Staff
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={isSubmitting}
-                    onClick={() => void handleDeleteStaff()}
-                    className="flex-1 h-11 rounded-xl font-black uppercase text-[10px] tracking-widest gap-2"
-                  >
-                    <Trash2 className="w-4 h-4" /> Delete Account
-                  </Button>
+                {/* Suspension reason input */}
+                <div className="space-y-2 pt-2">
+                  {selectedUser.status !== 'suspended' && !selectedUser.disabled && (
+                    <div className="space-y-1">
+                      <Label className="text-[9px] font-black uppercase text-zinc-500 px-1">Suspension Reason (Optional)</Label>
+                      <Input
+                        value={suspendReason}
+                        onChange={(e) => setSuspendReason(e.target.value)}
+                        placeholder="e.g. Policy violation / pending investigation"
+                        className="h-11 bg-zinc-50 border-zinc-200 rounded-xl font-medium"
+                      />
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap gap-3 pt-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={isSubmitting || selectedUser.email === 'gackstoneb@gmail.com' || selectedUser.uid === profile?.uid}
+                      onClick={() => void handleToggleDeactivate()}
+                      className="flex-1 h-11 rounded-xl font-black uppercase text-[10px] tracking-widest gap-2"
+                    >
+                      {(selectedUser.status === 'suspended' || selectedUser.disabled) ? (
+                        <>
+                          <UserCheck className="w-4 h-4 text-emerald-600" /> Reactivate Account
+                        </>
+                      ) : (
+                        <>
+                          <UserMinus className="w-4 h-4 text-amber-600" /> Suspend Account
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={isSubmitting || selectedUser.email === 'gackstoneb@gmail.com' || selectedUser.email === 'bonfacewana3072@gmail.com' || selectedUser.uid === profile?.uid}
+                      onClick={() => setIsConfirmDeleteOpen(true)}
+                      className="flex-1 h-11 rounded-xl font-black uppercase text-[10px] tracking-widest gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Account
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Two-step delete confirmation panel */}
+                {isConfirmDeleteOpen && (
+                  <div className="p-4 rounded-xl border border-red-200 bg-red-50/50 space-y-3">
+                    <p className="text-xs font-bold text-red-900">
+                      Confirm Deletion of {selectedUser.displayName} ({selectedUser.email})
+                    </p>
+                    <p className="text-[11px] text-red-700">
+                      If this account has historical orders, sessions, or carwash jobs, it will be safely archived (soft-deleted) to preserve financial and audit integrity.
+                    </p>
+                    <div className="space-y-1">
+                      <Label className="text-[9px] font-black uppercase text-red-800">
+                        Type &quot;{selectedUser.email}&quot; to confirm:
+                      </Label>
+                      <Input
+                        value={deleteConfirmEmail}
+                        onChange={(e) => setDeleteConfirmEmail(e.target.value)}
+                        placeholder={selectedUser.email}
+                        className="h-10 bg-white border-red-300 rounded-lg text-xs font-bold"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        disabled={isSubmitting || deleteConfirmEmail.trim().toLowerCase() !== selectedUser.email.toLowerCase()}
+                        onClick={() => void handleDeleteStaff()}
+                        className="h-10 text-[10px] font-black uppercase rounded-lg"
+                      >
+                        {isSubmitting ? <RefreshCcw className="w-3.5 h-3.5 animate-spin mr-1" /> : null}
+                        Confirm Delete
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setIsConfirmDeleteOpen(false);
+                          setDeleteConfirmEmail('');
+                        }}
+                        className="h-10 text-[10px] font-bold uppercase rounded-lg"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </form>

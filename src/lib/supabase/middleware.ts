@@ -70,5 +70,18 @@ export async function updateSupabaseSession(request: NextRequest) {
     return redirect;
   }
 
+  if (user && isProtected(pathname)) {
+    const isBanned = user.banned_until && new Date(user.banned_until) > new Date();
+    if (isBanned) {
+      await supabase.auth.signOut().catch(() => undefined);
+      const url = request.nextUrl.clone();
+      url.pathname = '/login';
+      url.search = '?error=suspended';
+      const redirect = NextResponse.redirect(url);
+      supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+      return redirect;
+    }
+  }
+
   return supabaseResponse;
 }

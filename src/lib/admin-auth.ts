@@ -15,6 +15,7 @@ export const ROOT_ADMIN_EMAILS = [
 ];
 
 export const VALID_STAFF_ROLES = [
+  'SUPER_ADMIN',
   'ADMIN',
   'MANAGER',
   'SUPERVISOR',
@@ -87,10 +88,10 @@ export async function verifyAdminCaller(
     email = String(data.user.email || '').trim().toLowerCase();
   }
 
-  const [{ data: profileRow }, { data: adminRow }] = await Promise.all([
+  const [profileResult, { data: adminRow }] = await Promise.all([
     supaAdmin
       .from('profiles')
-      .select('id, uid, email, role, is_super_admin, disabled')
+      .select('id, uid, email, role, is_super_admin, disabled, status')
       .or(`id.eq.${uid},uid.eq.${uid}`)
       .maybeSingle(),
     email
@@ -98,7 +99,9 @@ export async function verifyAdminCaller(
       : Promise.resolve({ data: null }),
   ]);
 
-  if (profileRow?.disabled === true) {
+  const profileRow = profileResult.data;
+
+  if (profileRow?.disabled === true || profileRow?.status === 'suspended') {
     throw new Error('ACCOUNT_DISABLED');
   }
 
@@ -106,10 +109,11 @@ export async function verifyAdminCaller(
   const isSuperAdmin =
     email === 'gackstoneb@gmail.com' ||
     profileRow?.is_super_admin === true ||
+    role === 'SUPER_ADMIN' ||
     ROOT_ADMIN_EMAILS.includes(email) ||
-    Boolean(adminRow?.email);
+    Boolean(adminRow?.is_root);
 
-  const isAdmin = isSuperAdmin || role === 'ADMIN' || role === 'SUPER_ADMIN';
+  const isAdmin = isSuperAdmin || role === 'ADMIN';
   const isManager = options?.allowManagers && (role === 'MANAGER' || role === 'SUPERVISOR');
 
   if (!isAdmin && !isManager) {
@@ -119,7 +123,7 @@ export async function verifyAdminCaller(
   return {
     uid,
     email,
-    role: isAdmin ? 'ADMIN' : role,
+    role: isSuperAdmin ? 'SUPER_ADMIN' : isAdmin ? 'ADMIN' : role,
     isSuperAdmin,
     app,
     auth,
