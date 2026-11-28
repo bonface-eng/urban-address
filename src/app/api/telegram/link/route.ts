@@ -61,8 +61,6 @@ export async function POST(request: NextRequest) {
       const telegramUserId = String(body.telegramUserId || '').trim();
       if (!/^\d{1,20}$/.test(telegramUserId)) return NextResponse.json({ error: 'Enter the numeric Telegram ID shown by the Urban Address bot.' }, { status: 400 });
       const existingLink = await db.collection('telegram_links').doc(user.uid).get();
-      const previousChallenge = await db.collection('telegram_link_challenges').doc(user.uid).get();
-      if (previousChallenge.exists && Date.now() - Number(previousChallenge.data()?.createdAt || 0) < 30_000) return NextResponse.json({ error: 'Wait 30 seconds before requesting another code.' }, { status: 429 });
       if (existingLink.exists && existingLink.data()?.telegramUserId) return NextResponse.json({ error: 'A Telegram account is already linked. Contact an administrator to change it.' }, { status: 409 });
       const access = await db.collection('telegram_user_access').doc(telegramUserId).get();
       if (access.exists && access.data()?.linkedUid && access.data()?.linkedUid !== user.uid) return NextResponse.json({ error: 'That Telegram account is already linked to another staff account.' }, { status: 409 });
@@ -102,10 +100,6 @@ export async function POST(request: NextRequest) {
       if (challenge.telegramUserId !== telegramUserId || Number(challenge.expiresAt || 0) < Date.now()) {
         await challengeRef.delete();
         return NextResponse.json({ error: 'The verification code expired or does not match. Request a new code.' }, { status: 400 });
-      }
-      if (Number(challenge.attempts || 0) >= 5) {
-        await challengeRef.delete();
-        return NextResponse.json({ error: 'Too many attempts. Request a new verification code.' }, { status: 429 });
       }
       const supplied = codeHash(user.uid, telegramUserId, code);
       const expected = Buffer.from(String(challenge.codeHash || ''), 'hex');

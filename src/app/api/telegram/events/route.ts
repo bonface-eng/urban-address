@@ -68,16 +68,10 @@ export async function POST(request: NextRequest) {
       const email = clean(body.email, 254).toLowerCase();
       if (!email || !email.includes('@')) return NextResponse.json({ ok: true });
       const digest = crypto.createHash('sha256').update(email).digest('hex');
-      const bucket = Math.floor(Date.now() / (10 * 60 * 1000));
-      const throttle = db.collection('telegram_security_throttle').doc(`failed-login-${digest}-${bucket}`);
-      const count = await db.runTransaction(async tx => {
-        const snap = await tx.get(throttle);
-        const next = Number(snap.data()?.count || 0) + 1;
-        tx.set(throttle, { count: next, updatedAt: Date.now() }, { merge: true });
-        return next;
-      });
-      if (count > 3) return NextResponse.json({ ok: true, throttled: true });
-      await sendToManagement(`SECURITY ALERT | Failed sign-in\nRepeated unsuccessful authentication attempt.\nWindow: 10 minutes\nAttempt: ${count}`, `failed-login-${digest}-${bucket}-${count}`);
+      await sendToManagement(
+        `SECURITY ALERT | Failed sign-in\nUnsuccessful authentication attempt.`,
+        `failed-login-${digest}-${Date.now()}`
+      );
       return NextResponse.json({ ok: true });
     }
     const header = request.headers.get('authorization') || '';

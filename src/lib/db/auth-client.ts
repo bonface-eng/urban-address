@@ -211,11 +211,9 @@ export async function signInWithEmailAndPassword(
   if (error || !data.user) {
     const err = new Error(error?.message || 'Invalid email or password.') as Error & { code?: string };
     const msg = (error?.message || '').toLowerCase();
-    err.code = msg.includes('rate limit') || msg.includes('too many')
-      ? 'auth/too-many-requests'
-      : msg.includes('banned') || msg.includes('disabled')
-        ? 'auth/user-disabled'
-        : 'auth/invalid-credential';
+    err.code = msg.includes('banned') || msg.includes('disabled')
+      ? 'auth/user-disabled'
+      : 'auth/invalid-credential';
     throw err;
   }
 
@@ -358,7 +356,10 @@ export async function signOut(auth?: any): Promise<void> {
     ? auth
     : getSupabaseBrowserClient();
   currentCachedUser = null;
-  await client.auth.signOut();
+  await Promise.allSettled([
+    client.auth.signOut(),
+    typeof fetch !== 'undefined' ? fetch('/api/auth/signout', { method: 'POST' }) : Promise.resolve(),
+  ]);
 }
 
 export async function updateProfile(

@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import * as admin from '@/lib/db/admin';
-import { createHash } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { getAdminApp, getDbAdmin } from '@/lib/db/admin';
+import { getAdminApp } from '@/lib/db/admin';
 import { sendTransactionalEmail } from '@/lib/resend';
 import { passwordResetEmail } from '@/lib/email/templates';
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '@/lib/supabase/config';
@@ -18,43 +17,6 @@ function appOrigin(request: NextRequest) {
   return request.nextUrl.origin;
 }
 
-function hash(value: string) {
-  return createHash('sha256').update(value).digest('hex');
-}
-
-async function isRateLimited(email: string, ip: string) {
-  const db = getDbAdmin();
-  const now = Date.now();
-  const windowMs = 15 * 60 * 1000;
-  const emailRef = db.collection('email_rate_limits').doc(hash(`password-reset:email:${email}`));
-  const ipRef = db.collection('email_rate_limits').doc(hash(`password-reset:ip:${ip}`));
-
-  return db.runTransaction(async (transaction) => {
-    const [emailSnap, ipSnap] = await Promise.all([
-      transaction.get(emailRef),
-      transaction.get(ipRef),
-    ]);
-    const emailWindow = Number(emailSnap.get('windowStartedAt') || 0);
-    const ipWindow = Number(ipSnap.get('windowStartedAt') || 0);
-    const emailCount = emailWindow > now - windowMs ? Number(emailSnap.get('count') || 0) : 0;
-    const ipCount = ipWindow > now - windowMs ? Number(ipSnap.get('count') || 0) : 0;
-
-    if (emailCount >= 3 || ipCount >= 10) return true;
-
-    transaction.set(emailRef, {
-      count: emailCount + 1,
-      windowStartedAt: emailCount ? emailWindow : now,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    transaction.set(ipRef, {
-      count: ipCount + 1,
-      windowStartedAt: ipCount ? ipWindow : now,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    }, { merge: true });
-    return false;
-  });
-}
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
@@ -64,11 +26,6 @@ export async function POST(request: NextRequest) {
     }
 
     getAdminApp();
-    const forwardedFor = request.headers.get('x-forwarded-for') || '';
-    const ip = (forwardedFor.split(',')[0] || request.headers.get('x-real-ip') || 'unknown').trim().slice(0, 80);
-    if (await isRateLimited(email, ip)) {
-      return NextResponse.json({ ok: true, message: 'If an account exists for that address, a reset link will be sent.' });
-    }
 
     try {
       const user = await admin.auth().getUserByEmail(email);

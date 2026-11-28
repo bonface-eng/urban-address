@@ -241,10 +241,7 @@ export function TerminalProvider({ children }: { children: React.ReactNode }) {
       await signOut(auth);
       toast({ variant: "destructive", title: "Staff profile unavailable", description: "This account is not configured for staff terminal access." });
       return false;
-    } catch (err: any) {
-      if (err.code === 'auth/quota-exceeded') {
-        toast({ variant: "destructive", title: "Security Rate Limit", description: "Too many login attempts. Please wait or use a different node." });
-      }
+    } catch {
       return false;
     }
   }, [auth, firestore, activeTerminal]);

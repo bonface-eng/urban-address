@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 import { SUPABASE_URL, SUPABASE_ANON_KEY, isSupabaseConfigured } from './config';
+import { getRoleHomeRoute } from '@/lib/role-routing';
 
 /** Staff / authenticated-only areas. Role checks happen in the app shell, RLS and API routes. */
 const PROTECTED_PREFIXES = [
@@ -21,15 +22,26 @@ const PROTECTED_PREFIXES = [
   '/carwash',
   '/staff',
   '/setup-profile',
+  '/client/orders',
+  '/client/profile',
+  '/client/payment',
+  '/client/success',
 ];
+
+const AUTH_ROUTES = ['/login', '/signup'];
 
 function isProtected(pathname: string): boolean {
   return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/'));
 }
 
+function isAuthRoute(pathname: string): boolean {
+  return AUTH_ROUTES.some((p) => pathname === p || pathname.startsWith(p + '/'));
+}
+
 /**
- * Refreshes the Supabase Auth session cookie on every request and redirects
- * signed-out visitors away from protected routes.
+ * Refreshes the Supabase Auth session cookie on every request, redirects
+ * signed-out visitors away from protected routes, and redirects signed-in
+ * users away from /login and /signup.
  */
 export async function updateSupabaseSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -77,6 +89,31 @@ export async function updateSupabaseSession(request: NextRequest) {
       const url = request.nextUrl.clone();
       url.pathname = '/login';
       url.search = '?error=suspended';
+      const redirect = NextResponse.redirect(url);
+      supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c));
+      return redirect;
+    }
+  }
+
+  if (user && isAuthRoute(pathname)) {
+    const isBanned = user.banned_until && new Date(user.banned_until) > new Date();
+    if (!isBanned) {
+      const { data: profileRow } = await supabase
+        .from('profiles')
+        .select('role, is_super_admin, assigned_units')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      const targetPath = getRoleHomeRoute({
+        role: profileRow?.role,
+        email: user.email,
+        isSuperAdmin: profileRow?.is_super_admin === true,
+        assignedUnits: Array.isArray(profileRow?.assigned_units) ? profileRow.assigned_units : undefined,
+      });
+
+      const url = request.nextUrl.clone();
+      url.pathname = targetPath;
+      url.search = '';
       const redirect = NextResponse.redirect(url);
       supabaseResponse.cookies.getAll().forEach((c) => redirect.cookies.set(c));
       return redirect;

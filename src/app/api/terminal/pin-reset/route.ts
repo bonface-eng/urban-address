@@ -52,30 +52,15 @@ export async function POST(request: NextRequest) {
     if (action === 'request') {
       const code = createOtp();
       const now = Date.now();
-      const state = await db.runTransaction(async (tx) => {
-        const snap = await tx.get(otpRef);
-        const previous = snap.data() || {};
-        const hour = Math.floor(now / 3_600_000);
-        if (Number(previous.lastSentAt || 0) && now - Number(previous.lastSentAt) < 60_000) {
-          return 'cooldown' as const;
-        }
-        const hourlyCount = previous.hour === hour ? Number(previous.hourlyCount || 0) : 0;
-        if (hourlyCount >= 5) return 'limited' as const;
-        tx.set(otpRef, {
-          codeHash: hashOtp(targetUid, 'terminal-pin-reset', code),
-          deviceId,
-          createdAt: now,
-          lastSentAt: now,
-          expiresAt: now + 10 * 60_000,
-          attempts: 0,
-          consumedAt: null,
-          hour,
-          hourlyCount: hourlyCount + 1,
-        });
-        return 'sent' as const;
+      await otpRef.set({
+        codeHash: hashOtp(targetUid, 'terminal-pin-reset', code),
+        deviceId,
+        createdAt: now,
+        lastSentAt: now,
+        expiresAt: now + 10 * 60_000,
+        attempts: 0,
+        consumedAt: null,
       });
-      if (state === 'cooldown') return jsonError('Wait 60 seconds before requesting another code.', 429);
-      if (state === 'limited') return jsonError('You have reached the limit of five PIN reset emails this hour.', 429);
 
       const content = customerNotificationEmail({
         email,
@@ -107,7 +92,6 @@ export async function POST(request: NextRequest) {
         const otp = otpSnap.data() || {};
         if (otp.consumedAt) return 'consumed' as const;
         if (Number(otp.expiresAt || 0) <= now) return 'expired' as const;
-        if (Number(otp.attempts || 0) >= 5) return 'locked' as const;
         const expected = hashOtp(targetUid, 'terminal-pin-reset', code);
         if (!safeEqualHex(String(otp.codeHash || ''), expected)) {
           tx.update(otpRef, { attempts: admin.firestore.FieldValue.increment(1), lastAttemptAt: now });
@@ -133,7 +117,6 @@ export async function POST(request: NextRequest) {
       }
       if (state === 'invalid') return jsonError('The email code is incorrect. Check it and try again.', 400);
       if (state === 'expired') return jsonError('The email code has expired. Request a new one.', 410);
-      if (state === 'locked') return jsonError('Too many incorrect codes. Request a new reset email.', 429);
       if (state === 'consumed') return jsonError('This reset code has already been used. Request a new one.', 409);
       return jsonError('The PIN reset request is no longer valid. Request a new code.', 400);
     }
