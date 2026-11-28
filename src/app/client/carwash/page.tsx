@@ -30,6 +30,7 @@ import { Product } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
+import { CarWashCatalog } from '@/components/carwash/car-wash-catalog';
 
 const formatDateStr = (d?: Date, mode: 'ISO' | 'PPP' | 'MMM' = 'ISO') => {
   if (!d) return '';
@@ -258,7 +259,10 @@ export default function CarwashBookingPage() {
         </div>
       </section>
 
-      <section className="max-w-7xl mx-auto px-6 w-full py-20">
+      {/* ── SERVICE CATALOG & PRICING ── */}
+      <CarWashCatalog bookingSectionId="carwash-booking" />
+
+      <section id="carwash-booking" className="max-w-7xl mx-auto px-6 w-full py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-20">
           <div className="lg:col-span-8 space-y-24">
             

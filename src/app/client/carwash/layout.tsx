@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Car Wash & Vehicle Detailing in Nakuru",
+  title: "Car Wash & Vehicle Detailing Catalog & Pricing in Nakuru",
   description:
-    "Explore Urban Auto Express car wash and vehicle detailing services in Nakuru, Kenya. Review available services and arrange your next visit.",
+    "Browse Urban Auto Express car wash, interior detailing, exterior protection, restoration, and engine service prices in KES, and book your visit in Nakuru.",
   alternates: { canonical: "/client/carwash" },
   openGraph: {
-    title: "Car Wash & Vehicle Detailing | Urban Auto Express",
+    title: "Car Wash & Vehicle Detailing Catalog | Urban Auto Express",
     description:
-      "Professional car wash and vehicle detailing services in Nakuru, Kenya.",
+      "Transparent KES pricing for car wash, interior, exterior protection, restoration, and engine detailing services in Nakuru, Kenya.",
     url: "https://urbanautoexpress.com/client/carwash",
     type: "website",
   },
