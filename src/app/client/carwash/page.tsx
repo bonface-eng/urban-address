@@ -26,7 +26,11 @@ import {
 } from "@/components/ui/select";
 import { useDb, useUser } from '@/lib/data';
 import { doc, writeBatch, increment, getDoc } from '@/lib/db';
-import { Product } from '@/lib/types';
+import {
+  CAR_WASH_SERVICES,
+  CarWashService,
+  formatServicePrice,
+} from '@/data/carWashServices';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import Link from 'next/link';
@@ -91,13 +95,10 @@ export default function CarwashBookingPage() {
   const [bookingTime, setBookingTime] = useState<string>('10:00 AM');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [services, setServices] = useState<Product[]>([]);
+  const [services, setServices] = useState<CarWashService[]>(() => CAR_WASH_SERVICES.filter((s) => s.isActive));
   const [loading, setLoading] = useState(true);
   const [servicesError, setServicesError] = useState('');
 
-  // Public service discovery uses the same cached, server-authorized catalogue
-  // as the other public product pages. Booking writes still use the signed-in
-  // customer's Supabase session and existing transaction workflow.
   useEffect(() => {
     const controller = new AbortController();
 
@@ -105,26 +106,19 @@ export default function CarwashBookingPage() {
       setLoading(true);
       setServicesError('');
       try {
-        const params = new URLSearchParams({
-          unit: 'CARWASH',
-          page: '1',
-          pageSize: '96',
-          sort: 'name',
-        });
-        const response = await fetch(`/api/public/catalogue?${params.toString()}`, {
+        const response = await fetch('/api/public/carwash-services', {
           signal: controller.signal,
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) {
           throw new Error(payload.error || 'Carwash services could not be loaded.');
         }
-        if (!controller.signal.aborted) {
-          setServices(Array.isArray(payload.products) ? payload.products as Product[] : []);
+        if (!controller.signal.aborted && Array.isArray(payload.services)) {
+          setServices(payload.services as CarWashService[]);
         }
       } catch (error) {
         if (!controller.signal.aborted) {
           console.error('[PUBLIC_CARWASH_SERVICES_LOAD_FAILED]', error);
-          setServices([]);
           setServicesError(error instanceof Error
             ? error.message
             : 'Carwash services are temporarily unavailable. Please try again shortly.');
@@ -138,14 +132,11 @@ export default function CarwashBookingPage() {
     return () => controller.abort();
   }, []);
 
-  // Never offer archived or malformed service records to customers.
   const activeServices = useMemo(() => (
     (services || []).filter(service =>
-      service.archived !== true &&
+      service.isActive !== false &&
       typeof service.id === 'string' &&
-      service.id.length > 0 &&
-      Number.isFinite(Number(service.price)) &&
-      Number(service.price) >= 0
+      service.id.length > 0
     )
   ), [services]);
 
@@ -153,8 +144,19 @@ export default function CarwashBookingPage() {
     return activeServices.find(service => service.id === selectedServiceId);
   }, [activeServices, selectedServiceId]);
 
+  const getServiceBasePrice = (service?: CarWashService): number => {
+    if (!service) return 0;
+    if (typeof service.price === 'number') return service.price;
+    if (typeof service.priceFrom === 'number') return service.priceFrom;
+    if (service.tiers && service.tiers.length > 0) {
+      return Math.min(...service.tiers.map((t) => t.price));
+    }
+    return 0;
+  };
+
   const valetPrice = VALET_OPTIONS.find(o => o.id === valetType)?.price || 0;
-  const total = (activeServiceData?.price || 0) + valetPrice;
+  const activeServicePrice = getServiceBasePrice(activeServiceData);
+  const total = activeServicePrice + valetPrice;
 
   const handleLocationPicked = (lat: number, lng: number, addr: string) => {
     setCoordinates({ lat, lng });
@@ -168,7 +170,7 @@ export default function CarwashBookingPage() {
       return;
     }
 
-    if (!firestore || !activeServiceData || activeServiceData.archived || !Number.isFinite(activeServiceData.price) || activeServiceData.price < 0 || !selectedServiceId || !plateNumber.trim() || !bookingDate || !bookingTime) {
+    if (!firestore || !activeServiceData || activeServiceData.isActive === false || !Number.isFinite(activeServicePrice) || activeServicePrice < 0 || !selectedServiceId || !plateNumber.trim() || !bookingDate || !bookingTime) {
       toast({ variant: "destructive", title: "Missing Detail", description: "Please complete all fields." });
       return;
     }
@@ -199,7 +201,7 @@ export default function CarwashBookingPage() {
         timestamp: Date.now(),
         scheduledDate: formatDateStr(bookingDate, 'ISO'),
         scheduledTime: bookingTime,
-        items: [{ productId: activeServiceData!.id!, name: activeServiceData!.name, price: activeServiceData!.price, quantity: 1 }]
+        items: [{ productId: activeServiceData!.id!, name: activeServiceData!.name, price: activeServicePrice, quantity: 1 }]
       };
 
       const fleetRef = doc(firestore!, 'users', user.uid, 'fleet', normalizedPlate);
@@ -211,7 +213,7 @@ export default function CarwashBookingPage() {
         vehicleColor: vehicleColor,
         service: activeServiceData!.name,
         price: total,
-        commission: activeServiceData!.price * 0.3,
+        commission: activeServicePrice * ((activeServiceData!.commission ?? 30) / 100),
         status: 'QUEUED' as const,
         attendantId: 'Unassigned',
         timestamp: Date.now(),
@@ -260,7 +262,7 @@ export default function CarwashBookingPage() {
       </section>
 
       {/* ── SERVICE CATALOG & PRICING ── */}
-      <CarWashCatalog bookingSectionId="carwash-booking" />
+      <CarWashCatalog bookingSectionId="carwash-booking" services={activeServices} />
 
       <section id="carwash-booking" className="max-w-7xl mx-auto px-6 w-full py-20">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-20">
@@ -288,7 +290,7 @@ export default function CarwashBookingPage() {
                         <SelectItem key={service.id} value={service.id!} className="font-black text-[10px] uppercase py-4">
                           <div className="flex items-center justify-between gap-12 w-full min-w-[280px]">
                             <span className="truncate">{service.name}</span>
-                            <span className="text-primary ml-auto whitespace-nowrap">KES {service.price.toLocaleString()}</span>
+                            <span className="text-primary ml-auto whitespace-nowrap">{formatServicePrice(service)}</span>
                           </div>
                         </SelectItem>
                       ))}

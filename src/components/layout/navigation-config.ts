@@ -28,6 +28,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   Store,
   Truck,
   UserCircle,
@@ -79,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: 'Inventory & Service',
     items: [
       { icon: Package, label: 'Inventory', href: '/inventory' },
+      { icon: Sparkles, label: 'Car Wash Services', href: '/admin/carwash-services', superOnly: true },
       { icon: Truck, label: 'Suppliers', href: '/suppliers' },
       { icon: Car, label: 'Carwash Service Queue', href: '/carwash', unit: 'CARWASH' },
       { icon: Activity, label: 'Attendant Performance', href: '/attendants', unit: 'CARWASH' },
