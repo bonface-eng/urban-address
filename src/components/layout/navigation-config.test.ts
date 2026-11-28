@@ -14,7 +14,7 @@ describe('shared navigation', () => {
       '/admin/intelligence', '/reports/fraud', '/admin/database',
       '/employees', '/attendants', '/admin/payroll',
       '/sales-history', '/finance', '/reports', '/customers',
-      '/admin/loyalty', '/inventory', '/suppliers', '/carwash',
+      '/admin/loyalty', '/inventory', '/admin/carwash-services', '/suppliers', '/carwash',
       '/admin', '/admin/branches', '/admin/digital-menu',
       '/admin/app-manager', '/admin/assets', '/admin/live-audio',
       '/admin/support', '/admin/documents', '/admin/help',
@@ -35,6 +35,7 @@ describe('shared navigation', () => {
     const destinations = groups.flatMap(group => group.items.map(item => item.href));
     expect(destinations).toContain('/store');
     expect(destinations).not.toContain('/admin/assets');
+    expect(destinations).not.toContain('/admin/carwash-services');
     expect(destinations).not.toContain('/lounge');
     expect(destinations).toContain('/dashboard');
   });

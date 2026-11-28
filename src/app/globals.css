@@ -515,46 +515,6 @@
     gap: .75rem !important;
   }
 
-  #app-main-content .ua-staff-pos > :first-child > header > div:first-child {
-    flex-wrap: wrap;
-    align-items: flex-start;
-    gap: .625rem;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:first-child > div:last-child {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:first-child > div:last-child > button {
-    min-height: 2.75rem;
-    padding-inline: .75rem;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:first-child > div:last-child > div {
-    flex: 1;
-    justify-content: center;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:last-child {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: .625rem;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:last-child > div {
-    min-width: 0;
-    max-width: none;
-    width: 100%;
-  }
-
-  #app-main-content .ua-staff-pos > :first-child > header > div:last-child input,
-  #app-main-content .ua-staff-pos > :first-child > header > div:last-child [role="combobox"] {
-    min-height: 2.75rem;
-    height: 2.75rem;
-    font-size: 14px;
-  }
-
   #app-main-content .ua-staff-pos .ua-staff-cart {
     position: fixed !important;
     inset: 0 !important;

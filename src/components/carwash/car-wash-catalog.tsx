@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowDown,
@@ -36,10 +36,46 @@ const CATEGORY_ICONS: Record<CarWashCategory, React.ComponentType<{ className?: 
 
 interface CarWashCatalogProps {
   bookingSectionId?: string;
+  services?: CarWashService[];
 }
 
-export function CarWashCatalog({ bookingSectionId = 'carwash-booking' }: CarWashCatalogProps) {
+export function CarWashCatalog({
+  bookingSectionId = 'carwash-booking',
+  services: providedServices,
+}: CarWashCatalogProps) {
   const [selectedCategory, setSelectedCategory] = useState<CarWashCategory | 'All'>('All');
+  const [liveServices, setLiveServices] = useState<CarWashService[]>(
+    () => (providedServices && providedServices.length > 0 ? providedServices : CAR_WASH_SERVICES.filter((s) => s.isActive))
+  );
+
+  useEffect(() => {
+    if (providedServices) {
+      setLiveServices(providedServices.filter((s) => s.isActive !== false));
+      return;
+    }
+
+    const controller = new AbortController();
+    fetch('/api/public/carwash-services', { signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((payload) => {
+        if (!controller.signal.aborted && Array.isArray(payload?.services)) {
+          setLiveServices((payload.services as CarWashService[]).filter((s) => s.isActive !== false));
+        }
+      })
+      .catch(() => {
+        // Retain fallback services when offline or during static render.
+      });
+
+    return () => controller.abort();
+  }, [providedServices]);
+
+  const activeServices = useMemo(
+    () =>
+      [...liveServices]
+        .filter((s) => s.isActive !== false)
+        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.name.localeCompare(b.name)),
+    [liveServices]
+  );
 
   const groupedCategories = useMemo(() => {
     const categoriesToShow =
@@ -50,10 +86,10 @@ export function CarWashCatalog({ bookingSectionId = 'carwash-booking' }: CarWash
     return categoriesToShow
       .map((category) => ({
         category,
-        services: CAR_WASH_SERVICES.filter((service) => service.category === category),
+        services: activeServices.filter((service) => service.category === category),
       }))
       .filter((group) => group.services.length > 0);
-  }, [selectedCategory]);
+  }, [selectedCategory, activeServices]);
 
   const scrollToBooking = () => {
     const target = document.getElementById(bookingSectionId);
@@ -136,10 +172,10 @@ export function CarWashCatalog({ bookingSectionId = 'carwash-booking' }: CarWash
                 : 'bg-zinc-100 text-zinc-700 hover:bg-zinc-200'
             )}
           >
-            All Services ({CAR_WASH_SERVICES.length})
+            All Services ({activeServices.length})
           </button>
           {CAR_WASH_CATEGORIES.map((category) => {
-            const count = CAR_WASH_SERVICES.filter((s) => s.category === category).length;
+            const count = activeServices.filter((s) => s.category === category).length;
             const isActive = selectedCategory === category;
             return (
               <button
